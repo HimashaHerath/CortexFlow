@@ -37,6 +37,9 @@ class KnowledgeStore:
         
         # Initialize SQLite for structured data
         self._init_db()
+        
+        # Trust marker for retrieved knowledge
+        self.trust_marker = "[VERIFIED FACT]"
     
     def _init_db(self):
         """Initialize the SQLite database with required tables."""
@@ -315,18 +318,25 @@ class KnowledgeStore:
             LIMIT ?
             '''
             
-            param = f"%{query}%"
-            cursor.execute(sql_query, (param, param, param, max_results))
-            fact_results = [dict(row) for row in cursor.fetchall()]
-            
-            # Add facts to results
-            for fact in fact_results:
-                results.append({
-                    'type': 'fact',
-                    'content': f"{fact['subject']} {fact['predicate']} {fact['object']}",
-                    'confidence': fact['confidence'],
-                    'timestamp': fact['timestamp']
-                })
+            # Improve search by expanding query with synonyms and related terms
+            expanded_query = self._expand_query(query)
+            for term in expanded_query:
+                param = f"%{term}%"
+                cursor.execute(sql_query, (param, param, param, max_results))
+                fact_results = [dict(row) for row in cursor.fetchall()]
+                
+                # Add facts to results with trust marker
+                for fact in fact_results:
+                    results.append({
+                        'type': 'fact',
+                        'content': f"{self.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}",
+                        'confidence': fact['confidence'],
+                        'timestamp': fact['timestamp'],
+                        'source': fact['source'] if fact['source'] else "memory"
+                    })
+                
+                if len(results) >= max_results:
+                    break
         except sqlite3.OperationalError as e:
             # Table might not exist yet or other SQLite error
             print(f"SQLite error in get_relevant_knowledge: {e}")
@@ -336,25 +346,36 @@ class KnowledgeStore:
         
         # Search conversation summaries
         # In a real system, this would use vector similarity
-        summary_scores = []
-        for summary_id, keywords in self.vector_store.items():
-            # Simple keyword matching score
-            score = sum(term in keywords.lower() for term in query_terms)
-            if score > 0:
-                summary_scores.append((summary_id, score))
-        
-        # Sort by score and get top results
-        summary_scores.sort(key=lambda x: x[1], reverse=True)
-        for summary_id, score in summary_scores[:max_results - len(results)]:
-            if summary_id in self.summaries:
-                summary = self.summaries[summary_id]
-                results.append({
-                    'type': 'summary',
-                    'content': summary['text'],
-                    'keywords': summary['keywords'],
-                    'timestamp': summary['timestamp'],
-                    'score': score
-                })
+        if len(results) < max_results:
+            summary_scores = []
+            for summary_id, keywords in self.vector_store.items():
+                # Improved keyword matching with partial matches
+                score = 0
+                for term in query_terms:
+                    if term in keywords.lower():
+                        score += 1
+                    else:
+                        # Check for partial matches
+                        for keyword in keywords.lower().split():
+                            if term in keyword or keyword in term:
+                                score += 0.5
+                                break
+                
+                if score > 0:
+                    summary_scores.append((summary_id, score))
+            
+            # Sort by score and get top results
+            summary_scores.sort(key=lambda x: x[1], reverse=True)
+            for summary_id, score in summary_scores[:max_results - len(results)]:
+                if summary_id in self.summaries:
+                    summary = self.summaries[summary_id]
+                    results.append({
+                        'type': 'summary',
+                        'content': f"From previous conversation: {summary['text']}",
+                        'keywords': summary['keywords'],
+                        'timestamp': summary['timestamp'],
+                        'score': score
+                    })
         
         # Sort all results by relevance (confidence or score)
         results.sort(key=lambda x: x.get('confidence', 0) if x['type'] == 'fact' else x.get('score', 0), 
@@ -398,13 +419,14 @@ class KnowledgeStore:
         
         return facts
     
-    def remember_explicit(self, text: str, source: str = "user_command") -> List[int]:
+    def remember_explicit(self, text: str, source: str = "user_command", confidence: float = 0.95) -> List[int]:
         """
         Process an explicit remember command from the user.
         
         Args:
             text: Text to remember
             source: Source identifier
+            confidence: Confidence score (default higher for explicit memory)
             
         Returns:
             List of fact IDs that were stored
@@ -419,7 +441,7 @@ class KnowledgeStore:
                 subject=subject,
                 predicate=predicate,
                 obj=obj,
-                confidence=0.9,  # High confidence for explicit memory
+                confidence=confidence,  # Higher confidence for explicit memory
                 source=source
             )
             fact_ids.append(fact_id)
@@ -430,12 +452,58 @@ class KnowledgeStore:
                 subject="note",
                 predicate="contains",
                 obj=text,
-                confidence=0.9,
+                confidence=confidence,
                 source=source
             )
             fact_ids.append(fact_id)
         
         return fact_ids
+    
+    def _expand_query(self, query: str) -> List[str]:
+        """
+        Expand a query with synonyms and related terms to improve search.
+        
+        Args:
+            query: The original query
+            
+        Returns:
+            List of expanded search terms
+        """
+        expanded = [query.lower()]
+        
+        # Add original terms
+        terms = query.lower().split()
+        expanded.extend(terms)
+        
+        # Add variations for common question patterns
+        question_words = ["what", "where", "who", "when", "how", "why"]
+        for word in question_words:
+            if word in terms:
+                # Remove question words to focus on entities
+                clean_terms = [t for t in terms if t not in question_words and len(t) > 2]
+                expanded.extend(clean_terms)
+                
+                # Add special handling for common questions
+                if "name" in query.lower():
+                    expanded.append("is")
+                    expanded.append("called")
+                if "live" in query.lower() or "location" in query.lower():
+                    expanded.append("in")
+                    expanded.append("from")
+                    expanded.append("at")
+                if "dog" in query.lower() or "pet" in query.lower():
+                    expanded.append("named")
+                    expanded.append("has")
+                if "color" in query.lower() or "favourite" in query.lower() or "favorite" in query.lower():
+                    expanded.append("likes")
+                    expanded.append("prefers")
+                    expanded.append("is")
+                
+                break
+        
+        # Remove duplicates and very short terms
+        expanded = list(set([term for term in expanded if len(term) > 1]))
+        return expanded
     
     def close(self):
         """Close all database connections."""

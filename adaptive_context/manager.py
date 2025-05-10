@@ -56,6 +56,9 @@ class AdaptiveContextManager:
         self.token_counting_method = "basic"  # Could be "basic", "ollama", "tiktoken"
         self.session_start_time = time.time()
         
+        # Maximum tokens for a single segment to handle message chunking
+        self.max_segment_tokens = int(self.config.active_tier_tokens * 0.7)  # 70% of active tier
+        
         logger.info("AdaptiveContextManager initialized successfully")
     
     def _count_tokens(self, text: str) -> int:
@@ -89,6 +92,133 @@ class AdaptiveContextManager:
         # Default basic counting
         return len(text.split())
     
+    def _chunk_large_message(self, content: str, segment_type: str, metadata: Dict[str, Any]) -> List[ContextSegment]:
+        """
+        Chunk large messages into smaller segments to fit in memory tiers.
+        
+        Args:
+            content: Message content
+            segment_type: Type of message
+            metadata: Metadata for the message
+            
+        Returns:
+            List of context segments
+        """
+        # If content is small enough, return as a single segment
+        token_count = self._count_tokens(content)
+        if token_count <= self.max_segment_tokens:
+            segment = ContextSegment(
+                content=content,
+                importance=0.0,  # Will be set by classifier
+                timestamp=time.time(),
+                token_count=token_count,
+                segment_type=segment_type,
+                metadata=metadata or {}
+            )
+            return [segment]
+        
+        # Otherwise, split the content
+        chunks = []
+        sentences = content.split(". ")
+        current_chunk = ""
+        current_tokens = 0
+        
+        for i, sentence in enumerate(sentences):
+            # Add period back except for the last sentence
+            if i < len(sentences) - 1:
+                sentence += "."
+            
+            sentence_tokens = self._count_tokens(sentence)
+            
+            # If a single sentence is too large, split by spaces
+            if sentence_tokens > self.max_segment_tokens:
+                # Handle this large sentence separately
+                if current_chunk:
+                    # Store the current accumulated chunk
+                    chunk_tokens = self._count_tokens(current_chunk)
+                    chunk_segment = ContextSegment(
+                        content=current_chunk,
+                        importance=0.0,  # Will be set by classifier
+                        timestamp=time.time(),
+                        token_count=chunk_tokens,
+                        segment_type=segment_type,
+                        metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
+                    )
+                    chunks.append(chunk_segment)
+                    current_chunk = ""
+                    current_tokens = 0
+                
+                # Split the long sentence
+                words = sentence.split(" ")
+                sub_chunk = ""
+                sub_tokens = 0
+                
+                for word in words:
+                    word_tokens = self._count_tokens(word + " ")
+                    if sub_tokens + word_tokens > self.max_segment_tokens:
+                        if sub_chunk:
+                            sub_segment = ContextSegment(
+                                content=sub_chunk,
+                                importance=0.0,  # Will be set by classifier
+                                timestamp=time.time(),
+                                token_count=sub_tokens,
+                                segment_type=segment_type,
+                                metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
+                            )
+                            chunks.append(sub_segment)
+                        sub_chunk = word + " "
+                        sub_tokens = word_tokens
+                    else:
+                        sub_chunk += word + " "
+                        sub_tokens += word_tokens
+                
+                # Add the remaining sub-chunk
+                if sub_chunk:
+                    sub_segment = ContextSegment(
+                        content=sub_chunk,
+                        importance=0.0,  # Will be set by classifier
+                        timestamp=time.time(),
+                        token_count=sub_tokens,
+                        segment_type=segment_type,
+                        metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
+                    )
+                    chunks.append(sub_segment)
+            
+            # If adding this sentence would exceed the limit
+            elif current_tokens + sentence_tokens > self.max_segment_tokens:
+                # Store the current chunk
+                chunk_segment = ContextSegment(
+                    content=current_chunk,
+                    importance=0.0,  # Will be set by classifier
+                    timestamp=time.time(),
+                    token_count=current_tokens,
+                    segment_type=segment_type,
+                    metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
+                )
+                chunks.append(chunk_segment)
+                
+                # Start a new chunk with this sentence
+                current_chunk = sentence + " "
+                current_tokens = sentence_tokens
+            else:
+                # Add sentence to the current chunk
+                current_chunk += sentence + " "
+                current_tokens += sentence_tokens
+        
+        # Add the last chunk if there's anything left
+        if current_chunk:
+            chunk_segment = ContextSegment(
+                content=current_chunk,
+                importance=0.0,  # Will be set by classifier
+                timestamp=time.time(),
+                token_count=current_tokens,
+                segment_type=segment_type,
+                metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
+            )
+            chunks.append(chunk_segment)
+        
+        return chunks
+    
     def add_message(self, content: str, segment_type: str = "user", metadata: Dict[str, Any] = None) -> bool:
         """
         Add a new message to the context.
@@ -104,52 +234,56 @@ class AdaptiveContextManager:
         if not content:
             return False
             
-        # Count tokens
-        token_count = self._count_tokens(content)
+        # Handle large messages by chunking
+        segments = self._chunk_large_message(content, segment_type, metadata)
         
-        # Create context segment
-        segment = ContextSegment(
-            content=content,
-            importance=0.0,  # Will be set by classifier
-            timestamp=time.time(),
-            token_count=token_count,
-            segment_type=segment_type,
-            metadata=metadata or {}
-        )
+        # Track if all segments were added successfully
+        all_added = True
+        added_count = 0
         
-        # Get current context for importance classification
-        current_context = self._get_recent_context()
-        
-        # Classify importance
-        importance = self.importance_classifier.classify(segment, current_context)
-        segment.importance = importance
-        
-        logger.info(f"Adding {segment_type} message with {token_count} tokens and importance {importance:.2f}")
-        
-        # Try to add to active tier first
-        if self.active_tier.add_segment(segment):
-            self.total_tokens += token_count
-            logger.debug(f"Added to active tier, now at {self.active_tier.current_token_count}/{self.active_tier.max_tokens} tokens")
+        for segment in segments:
+            # Get current context for importance classification
+            current_context = self._get_recent_context()
             
-            # Check if we need to manage tiers after adding
-            if self.active_tier.fullness_ratio > self.config.compression_threshold:
-                logger.info(f"Active tier exceeds threshold ({self.active_tier.fullness_ratio:.2f}), managing tiers")
+            # Classify importance
+            importance = self.importance_classifier.classify(segment, current_context)
+            
+            # Boost importance for certain message types
+            if segment_type == "system":
+                importance = min(10.0, importance * 1.2)  # System messages are more important
+            elif segment_type == "user":
+                importance = min(10.0, importance * 1.1)  # User messages slightly more important
+            
+            segment.importance = importance
+            
+            logger.info(f"Adding {segment_type} message with {segment.token_count} tokens and importance {importance:.2f}")
+            
+            # Try to add to active tier first
+            if self.active_tier.add_segment(segment):
+                self.total_tokens += segment.token_count
+                added_count += 1
+                logger.debug(f"Added to active tier, now at {self.active_tier.current_token_count}/{self.active_tier.max_tokens} tokens")
+                
+                # Check if we need to manage tiers after adding
+                if self.active_tier.fullness_ratio > self.config.compression_threshold:
+                    logger.info(f"Active tier exceeds threshold ({self.active_tier.fullness_ratio:.2f}), managing tiers")
+                    self._manage_tiers()
+                    
+            else:
+                # If active tier is full, we need to make room
+                logger.info("Active tier full, making room")
                 self._manage_tiers()
                 
-            return True
+                # Try again after managing tiers
+                if self.active_tier.add_segment(segment):
+                    self.total_tokens += segment.token_count
+                    added_count += 1
+                else:
+                    # If still can't add, segment is too large
+                    logger.warning(f"Message too large ({segment.token_count} tokens) to add to context")
+                    all_added = False
         
-        # If active tier is full, we need to make room
-        logger.info("Active tier full, making room")
-        self._manage_tiers()
-        
-        # Try again after managing tiers
-        if self.active_tier.add_segment(segment):
-            self.total_tokens += token_count
-            return True
-            
-        # If still can't add, segment is too large
-        logger.warning(f"Message too large ({token_count} tokens) to add to context")
-        return False
+        return added_count > 0  # Success if at least one segment was added
     
     def _manage_tiers(self):
         """
@@ -164,7 +298,12 @@ class AdaptiveContextManager:
             active_segments = self.active_tier.segments.copy()
             
             # Sort by importance and age (less important and older first)
-            active_segments.sort(key=lambda s: (s.importance, -s.age))
+            # Give priority to non-user/system segments for moving down
+            active_segments.sort(key=lambda s: (
+                2.0 if s.segment_type in ["user", "system"] else 1.0,  # User and system segments stay longer
+                s.importance,
+                -s.age
+            ))
             
             # Move segments until below threshold or working tier is full
             segments_to_move = []
@@ -342,11 +481,20 @@ class AdaptiveContextManager:
                 relevant_knowledge = self.knowledge_store.get_relevant_knowledge(recent_query, max_results=3)
                 
                 if relevant_knowledge:
-                    knowledge_text = "\n\n[Relevant Knowledge]:\n"
+                    knowledge_text = "\n\n[TRUSTED MEMORY - AI MUST USE THIS INFORMATION AS FACTUAL]:\n"
                     for item in relevant_knowledge:
                         knowledge_text += f"- {item['content']}\n"
                     
-                    full_context += knowledge_text
+                    # Place trusted knowledge near the beginning for higher importance
+                    full_context = knowledge_text + "\n" + full_context
+        
+        # Add system guidance for handling memory
+        memory_guidance = (
+            "\n\n[SYSTEM REMINDER: Any information marked with [VERIFIED FACT] is confirmed true information "
+            "from persistent memory that you should treat as completely factual. "
+            "Use it confidently in your responses without hesitation or disclaimers.]\n"
+        )
+        full_context = memory_guidance + full_context
         
         return full_context
     
@@ -419,7 +567,8 @@ class AdaptiveContextManager:
             True if successfully stored
         """
         try:
-            fact_ids = self.knowledge_store.remember_explicit(text)
+            # Use higher confidence (0.95) for explicit memory
+            fact_ids = self.knowledge_store.remember_explicit(text, confidence=0.95)
             logger.info(f"Explicitly stored {len(fact_ids)} facts")
             return len(fact_ids) > 0
         except Exception as e:
