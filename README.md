@@ -159,6 +159,36 @@ Test the Dynamic Memory Weighting functionality:
 python dynamic_weighting_test.py --model llama3.2 --plot
 ```
 
+### Unit Testing
+
+The project includes comprehensive unit tests using pytest:
+
+```bash
+# Install pytest and pytest-cov if not already installed
+pip install pytest pytest-cov
+
+# Run all unit tests
+pytest tests/
+
+# Generate test coverage report
+pytest --cov=adaptive_context tests/
+
+# Generate HTML coverage report
+pytest --cov=adaptive_context --cov-report=html tests/
+```
+
+For more information on running tests, see [tests/README.md](tests/README.md).
+
+## Documentation
+
+Comprehensive API documentation is available in the `docs/api/` directory:
+
+- [API Reference](docs/api/index.md) - Complete API documentation
+- [Dynamic Weighting](docs/dynamic_weighting.md) - Documentation for the dynamic weighting feature
+- [Chain of Agents](docs/chain_of_agents.md) - Documentation for the Chain of Agents framework
+- [Self-Reflection](docs/self_reflection.md) - Documentation for the Self-Reflection feature
+- [Research Improvements](docs/research_improvements.md) - Research-based improvements implemented and planned
+
 ## Core Components
 
 ### Memory Manager
