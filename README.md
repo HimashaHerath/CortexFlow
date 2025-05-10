@@ -516,3 +516,41 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Benchmarking Framework
+
+AdaptiveContext includes a comprehensive benchmarking framework to evaluate and compare its performance against other RAG and context management systems.
+
+### Running Benchmarks
+
+To run the benchmarks, use the following commands:
+
+```bash
+# Install benchmark requirements
+pip install -r benchmark/requirements.txt
+
+# Run a benchmark against a specific dataset
+python -m benchmark.run_benchmark --systems adaptivecontext --dataset hotpotqa
+
+# Run benchmarks against multiple systems
+python -m benchmark.run_benchmark --systems adaptivecontext,llamaindex,langchain --dataset complex
+
+# Run all benchmarks
+python -m benchmark.run_benchmark --all-systems --visualize
+```
+
+### Benchmark Features
+
+The benchmark framework evaluates systems across multiple dimensions:
+
+1. **Retrieval Quality** - How accurately the system can retrieve and use relevant information
+2. **Memory Efficiency** - How efficiently the system manages token usage and context
+3. **Query Complexity** - How well the system handles multi-hop and relationship questions
+
+### Adding New Systems
+
+To add a new system for comparison:
+
+1. Create a new adapter in `benchmark/adapters/`
+2. Implement the `BenchmarkSystemAdapter` interface
+3. Register the adapter in `benchmark/registry.py`
