@@ -36,6 +36,15 @@ except ImportError:
     logger = logging.getLogger('adaptive_context')
     logger.warning("reflection module not found. Self-Reflection functionality will be disabled.")
 
+# Add import for Dynamic Weighting
+try:
+    from adaptive_context.dynamic_weighting import DynamicWeightingEngine
+    DYNAMIC_WEIGHTING_ENABLED = True
+except ImportError:
+    DYNAMIC_WEIGHTING_ENABLED = False
+    logger = logging.getLogger('adaptive_context')
+    logger.warning("dynamic_weighting module not found. Dynamic Weighting functionality will be disabled.")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -106,6 +115,21 @@ class AdaptiveContextManager:
                     logger.info("Self-Reflection Engine initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize Self-Reflection Engine: {e}")
+                    
+            # Initialize Dynamic Weighting Engine if enabled
+            self.weighting_engine = None
+            if hasattr(self.config, "use_dynamic_weighting") and self.config.use_dynamic_weighting and DYNAMIC_WEIGHTING_ENABLED:
+                try:
+                    self.weighting_engine = DynamicWeightingEngine(self.config)
+                    logger.info("Dynamic Weighting Engine initialized successfully")
+                    
+                    # Apply initial dynamic weighting if enabled
+                    if self.weighting_engine:
+                        initial_limits = self.weighting_engine.update_tier_allocations()
+                        # Update memory tier limits - will be implemented in the memory module
+                        self._update_memory_tier_limits(initial_limits)
+                except Exception as e:
+                    logger.error(f"Failed to initialize Dynamic Weighting Engine: {e}")
                 
             logger.info("AdaptiveContextManager initialized")
             
@@ -113,6 +137,27 @@ class AdaptiveContextManager:
             logger.error(f"Error initializing AdaptiveContextManager: {e}")
             logger.error(traceback.format_exc())
             raise
+    
+    def _update_memory_tier_limits(self, new_limits: Dict[str, int]) -> None:
+        """
+        Update memory tier token limits based on dynamic weighting.
+        
+        Args:
+            new_limits: Dictionary with new token limits for each tier
+        """
+        if not hasattr(self.memory, "update_tier_limits"):
+            logger.warning("Memory module doesn't support dynamic tier limit updates")
+            return
+        
+        try:
+            self.memory.update_tier_limits(
+                active_limit=new_limits.get("active", self.config.active_token_limit),
+                working_limit=new_limits.get("working", self.config.working_token_limit),
+                archive_limit=new_limits.get("archive", self.config.archive_token_limit)
+            )
+            logger.info(f"Updated memory tier limits: {new_limits}")
+        except Exception as e:
+            logger.error(f"Error updating memory tier limits: {e}")
     
     def add_message(self, role: str, content: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -137,6 +182,21 @@ class AdaptiveContextManager:
                 logger.debug(f"Message classified as: {result}")
             except Exception as e:
                 logger.error(f"Error classifying message: {e}")
+                
+        # Apply dynamic weighting for user queries
+        if role == "user" and self.weighting_engine and self.config.use_dynamic_weighting:
+            try:
+                # Get recent context for document type analysis
+                context_messages = self.memory.get_context_messages()
+                context_content = "\n".join([m.get("content", "") for m in context_messages[-5:]])
+                
+                # Process query and update memory tier allocation
+                new_limits = self.weighting_engine.process_query(content, context_content)
+                
+                # Update memory tier limits
+                self._update_memory_tier_limits(new_limits)
+            except Exception as e:
+                logger.error(f"Error in dynamic weighting: {e}")
                 
         return message
     
@@ -177,6 +237,56 @@ class AdaptiveContextManager:
             context["knowledge"] = knowledge_items
         
         return context
+    
+    def get_dynamic_weighting_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the dynamic weighting engine.
+        
+        Returns:
+            Dictionary with dynamic weighting statistics or None if not enabled
+        """
+        if not self.weighting_engine or not self.config.use_dynamic_weighting:
+            return {"enabled": False}
+            
+        try:
+            stats = self.weighting_engine.get_stats()
+            stats["enabled"] = True
+            return stats
+        except Exception as e:
+            logger.error(f"Error getting dynamic weighting stats: {e}")
+            return {"enabled": True, "error": str(e)}
+    
+    def reset_dynamic_weighting(self) -> None:
+        """Reset dynamic weighting to default values."""
+        if not self.weighting_engine or not self.config.use_dynamic_weighting:
+            return
+            
+        try:
+            self.weighting_engine.reset_to_defaults()
+            new_limits = self.weighting_engine.current_tier_limits
+            self._update_memory_tier_limits(new_limits)
+            logger.info("Reset dynamic weighting to default values")
+        except Exception as e:
+            logger.error(f"Error resetting dynamic weighting: {e}")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the AdaptiveContextManager.
+        
+        Returns:
+            Dictionary with statistics
+        """
+        stats = {}
+        
+        # Include memory stats
+        if hasattr(self.memory, "get_stats"):
+            stats["memory"] = self.memory.get_stats()
+            
+        # Include dynamic weighting stats if enabled
+        if self.config.use_dynamic_weighting and self.weighting_engine:
+            stats["dynamic_weighting"] = self.get_dynamic_weighting_stats()
+            
+        return stats
     
     def generate_response(self, prompt: str = None, model: str = None) -> str:
         """
@@ -362,6 +472,10 @@ class AdaptiveContextManager:
     def clear_memory(self) -> None:
         """Clear the conversation memory."""
         self.memory.clear()
+        
+        # Reset dynamic weighting to defaults if enabled
+        if self.config.use_dynamic_weighting and self.weighting_engine:
+            self.reset_dynamic_weighting()
     
     def close(self) -> None:
         """Clean up resources."""

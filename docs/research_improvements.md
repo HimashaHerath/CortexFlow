@@ -73,6 +73,24 @@ This document tracks research-based improvements for the AdaptiveContext system,
 - Reduced hallucinations and unsupported claims
 - More reliable answers with factual grounding
 
+### ✅ Dynamic Weighting for Memory Tiers
+**Source:** Research on adaptive memory management and context optimization
+
+**Implementation:**
+- Dynamic token allocation between memory tiers based on:
+  - Query complexity (detected via linguistic features)
+  - Document type (code, text, data, mixed)
+  - Historical query patterns
+- Learning rate for gradual adaptation to usage patterns
+- Automatic adjustment of tier sizes based on observed needs
+- Configurable default ratios and minimum tier sizes
+
+**Benefits:**
+- More efficient token usage
+- Better adaptation to different conversation types
+- Improved memory management for varied tasks
+- Optimized context retention for specific query patterns
+
 ## Potential Future Improvements 🔲
 
 ### 🔲 Augmented Fine-Tuning
@@ -87,19 +105,6 @@ This document tracks research-based improvements for the AdaptiveContext system,
 - Improved generalization capabilities
 - Better logical deduction and inference
 - Enhanced understanding of relationships between facts
-
-### 🔲 Dynamic Weighting for Memory Tiers
-**Potential Implementation:**
-- Implement dynamic token allocation between tiers based on:
-  - Query complexity (detected via linguistic features)
-  - Document type (code vs. natural language)
-  - Historical query patterns
-- Adjust compression thresholds dynamically
-
-**Expected Benefits:**
-- More efficient token usage
-- Better adaptation to different conversation types
-- Improved memory management for varied tasks
 
 ### 🔲 Task-Specific Memory Optimization
 **Potential Implementation:**
@@ -149,9 +154,9 @@ This document tracks research-based improvements for the AdaptiveContext system,
 ## Implementation Priorities
 
 1. **Augmented Fine-Tuning** - For improved generalization capabilities
-2. **Dynamic Weighting for Memory Tiers** - For more efficient token usage
+2. **Task-Specific Memory Optimization** - For better performance in specialized scenarios
 3. **Enhanced Graph-based Knowledge Representation** - For more sophisticated relationship modeling
-4. **Task-Specific Memory Optimization** - For better performance in specialized scenarios
+4. **Multi-Modal Knowledge Storage and Retrieval** - For better handling of diverse content types
 
 ## References
 

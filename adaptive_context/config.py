@@ -37,6 +37,16 @@ class AdaptiveContextConfig:
     reflection_relevance_threshold: float = 0.6  # Minimum relevance score for knowledge items
     reflection_confidence_threshold: float = 0.7  # Minimum confidence for consistency checks
     
+    # Dynamic Memory Weighting settings
+    use_dynamic_weighting: bool = False
+    dynamic_weighting_learning_rate: float = 0.1  # Learning rate for weight adjustments
+    dynamic_weighting_min_tier_size: int = 1000  # Minimum token size for any tier
+    dynamic_weighting_default_ratios: Dict[str, float] = field(default_factory=lambda: {
+        "active": 0.25,
+        "working": 0.35,
+        "archive": 0.40
+    })
+    
     # LLM Integration
     default_model: str = "gemma3:1b"
     ollama_host: str = "http://localhost:11434"
@@ -100,6 +110,23 @@ class AdaptiveContextConfig:
             
         if not hasattr(self, 'reflection_confidence_threshold'):
             self.reflection_confidence_threshold = 0.7
+            
+        # Dynamic Weighting backward compatibility
+        if not hasattr(self, 'use_dynamic_weighting'):
+            self.use_dynamic_weighting = False
+            
+        if not hasattr(self, 'dynamic_weighting_learning_rate'):
+            self.dynamic_weighting_learning_rate = 0.1
+            
+        if not hasattr(self, 'dynamic_weighting_min_tier_size'):
+            self.dynamic_weighting_min_tier_size = 1000
+            
+        if not hasattr(self, 'dynamic_weighting_default_ratios'):
+            self.dynamic_weighting_default_ratios = {
+                "active": 0.25,
+                "working": 0.35,
+                "archive": 0.40
+            }
     
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'AdaptiveContextConfig':
@@ -141,6 +168,10 @@ class AdaptiveContextConfig:
             "use_self_reflection": self.use_self_reflection,
             "reflection_relevance_threshold": self.reflection_relevance_threshold,
             "reflection_confidence_threshold": self.reflection_confidence_threshold,
+            "use_dynamic_weighting": self.use_dynamic_weighting,
+            "dynamic_weighting_learning_rate": self.dynamic_weighting_learning_rate,
+            "dynamic_weighting_min_tier_size": self.dynamic_weighting_min_tier_size,
+            "dynamic_weighting_default_ratios": self.dynamic_weighting_default_ratios,
             "default_model": self.default_model,
             "ollama_host": self.ollama_host,
             "conversation_style": self.conversation_style,

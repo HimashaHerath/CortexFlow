@@ -112,6 +112,26 @@ class MemoryTier:
         return min(range(len(self.segments)), 
                    key=lambda i: (self.segments[i].importance, -self.segments[i].age))
     
+    def update_token_limit(self, new_limit: int) -> bool:
+        """
+        Update the token limit for this tier.
+        
+        Args:
+            new_limit: New token limit
+            
+        Returns:
+            True if update was successful, False if not
+        """
+        # Don't allow reducing below current usage or below minimum (1000 tokens)
+        if new_limit < self.current_token_count or new_limit < 1000:
+            logger.warning(f"Cannot update {self.name} tier limit to {new_limit} tokens "
+                          f"(current usage: {self.current_token_count})")
+            return False
+            
+        logger.debug(f"Updating {self.name} tier limit from {self.max_tokens} to {new_limit} tokens")
+        self.max_tokens = new_limit
+        return True
+    
     @property
     def is_full(self) -> bool:
         """Returns True if tier is at or near capacity."""
@@ -203,9 +223,80 @@ class ConversationMemory:
         """
         self.config = config
         self.active_token_limit = config.active_token_limit if hasattr(config, 'active_token_limit') else 4096
+        self.working_token_limit = config.working_token_limit if hasattr(config, 'working_token_limit') else 8192
+        self.archive_token_limit = config.archive_token_limit if hasattr(config, 'archive_token_limit') else 16384
+        
+        # Initialize memory tiers
+        self.active_tier = ActiveTier(self.active_token_limit)
+        self.working_tier = WorkingTier(self.working_token_limit)
+        self.archive_tier = ArchiveTier(self.archive_token_limit)
+        
+        # Track memory statistics
+        self.tier_stats = {
+            "active": {
+                "original_limit": self.active_token_limit,
+                "current_limit": self.active_token_limit,
+                "usage_history": []
+            },
+            "working": {
+                "original_limit": self.working_token_limit,
+                "current_limit": self.working_token_limit,
+                "usage_history": []
+            },
+            "archive": {
+                "original_limit": self.archive_token_limit,
+                "current_limit": self.archive_token_limit,
+                "usage_history": []
+            }
+        }
+        
+        # Initialize message storage
         self.messages = []
         self.next_message_id = 1
         
+    def update_tier_limits(self, active_limit: int = None, working_limit: int = None, archive_limit: int = None) -> bool:
+        """
+        Update the token limits for memory tiers.
+        
+        Args:
+            active_limit: New token limit for active tier
+            working_limit: New token limit for working tier
+            archive_limit: New token limit for archive tier
+            
+        Returns:
+            True if all updates were successful, False otherwise
+        """
+        success = True
+        
+        # Update active tier if specified
+        if active_limit is not None:
+            active_success = self.active_tier.update_token_limit(active_limit)
+            if active_success:
+                self.active_token_limit = active_limit
+                self.tier_stats["active"]["current_limit"] = active_limit
+            success = success and active_success
+            
+        # Update working tier if specified
+        if working_limit is not None:
+            working_success = self.working_tier.update_token_limit(working_limit)
+            if working_success:
+                self.working_token_limit = working_limit
+                self.tier_stats["working"]["current_limit"] = working_limit
+            success = success and working_success
+            
+        # Update archive tier if specified
+        if archive_limit is not None:
+            archive_success = self.archive_tier.update_token_limit(archive_limit)
+            if archive_success:
+                self.archive_token_limit = archive_limit
+                self.tier_stats["archive"]["current_limit"] = archive_limit
+            success = success and archive_success
+            
+        # Update tier usage history
+        self._update_tier_usage_stats()
+            
+        return success
+    
     def add_message(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Add a new message to the conversation memory.
@@ -248,117 +339,209 @@ class ConversationMemory:
         """Trim old messages to maintain reasonable memory size."""
         # Keep all system messages and last 50 messages
         system_messages = [m for m in self.messages if m["role"] == "system"]
-        non_system = [m for m in self.messages if m["role"] != "system"]
+        recent_messages = self.messages[-50:]
         
-        # Keep most recent messages
-        recent = non_system[-50:] if len(non_system) > 50 else non_system
+        # Combine and deduplicate
+        kept_ids = set(m["id"] for m in system_messages + recent_messages)
+        self.messages = [m for m in self.messages if m["id"] in kept_ids]
         
-        # Update messages list
-        self.messages = system_messages + recent
-        logger.debug(f"Trimmed messages to {len(self.messages)} total")
+        logger.debug(f"Trimmed messages to {len(self.messages)} entries")
     
     def get_context_messages(self) -> List[Dict[str, Any]]:
         """
-        Get formatted messages for the context.
+        Get messages for context window.
         
         Returns:
-            List of formatted messages for LLM context
+            List of messages with role and content
         """
-        # Format messages for LLM
-        formatted = []
+        # Convert to format expected by LLM APIs
+        formatted_messages = []
         for message in self.messages:
-            formatted.append({
+            formatted = {
                 "role": message["role"],
                 "content": message["content"]
-            })
+            }
+            formatted_messages.append(formatted)
             
-        return formatted
+        return formatted_messages
     
     def get_messages_by_role(self, role: str) -> List[Dict[str, Any]]:
         """
-        Get messages with a specific role.
+        Get messages with specified role.
         
         Args:
             role: Role to filter by
             
         Returns:
-            List of messages with the specified role
+            List of messages with matching role
         """
         return [m for m in self.messages if m["role"] == role]
     
     def get_last_message(self) -> Optional[Dict[str, Any]]:
         """
-        Get the last message in the conversation.
+        Get the most recent message.
         
         Returns:
-            Last message or None if no messages
+            Most recent message or None if no messages exist
         """
         return self.messages[-1] if self.messages else None
     
     def get_conversation_summary(self) -> str:
         """
-        Get a simple summary of the conversation.
+        Get a summary of the conversation.
         
         Returns:
-            String summary of conversation
+            String summary
         """
         if not self.messages:
-            return "No conversation history"
+            return "No conversation history."
             
-        # Count messages by role
-        roles = {}
-        for message in self.messages:
-            role = message["role"]
-            if role in roles:
-                roles[role] += 1
-            else:
-                roles[role] = 1
-                
-        # Get first and last timestamps
-        start_time = time.strftime("%Y-%m-%d %H:%M", time.localtime(self.messages[0]["timestamp"]))
-        end_time = time.strftime("%Y-%m-%d %H:%M", time.localtime(self.messages[-1]["timestamp"]))
+        user_messages = self.get_messages_by_role("user")
+        assistant_messages = self.get_messages_by_role("assistant")
         
-        # Build summary
-        summary = f"Conversation from {start_time} to {end_time}\n"
-        summary += f"Total messages: {len(self.messages)}\n"
+        summary_lines = [
+            f"Conversation with {len(self.messages)} messages",
+            f"- User messages: {len(user_messages)}",
+            f"- Assistant messages: {len(assistant_messages)}",
+        ]
         
-        for role, count in roles.items():
-            summary += f"- {role}: {count} messages\n"
+        # Add first and last message summaries
+        if self.messages:
+            first_msg = self.messages[0]
+            summary_lines.append(f"- First message ({first_msg['role']}): {first_msg['content'][:50]}...")
             
-        return summary
+            last_msg = self.messages[-1]
+            summary_lines.append(f"- Latest message ({last_msg['role']}): {last_msg['content'][:50]}...")
+            
+        return "\n".join(summary_lines)
+    
+    def _update_tier_usage_stats(self):
+        """Update tier usage statistics for tracking."""
+        timestamp = time.time()
+        
+        # Update active tier stats
+        self.tier_stats["active"]["usage_history"].append({
+            "timestamp": timestamp,
+            "tokens_used": self.active_tier.current_token_count,
+            "fullness_ratio": self.active_tier.fullness_ratio
+        })
+        
+        # Update working tier stats
+        self.tier_stats["working"]["usage_history"].append({
+            "timestamp": timestamp,
+            "tokens_used": self.working_tier.current_token_count,
+            "fullness_ratio": self.working_tier.fullness_ratio
+        })
+        
+        # Update archive tier stats
+        self.tier_stats["archive"]["usage_history"].append({
+            "timestamp": timestamp,
+            "tokens_used": self.archive_tier.current_token_count,
+            "fullness_ratio": self.archive_tier.fullness_ratio
+        })
+        
+        # Keep history size manageable
+        for tier in self.tier_stats:
+            if len(self.tier_stats[tier]["usage_history"]) > 50:
+                self.tier_stats[tier]["usage_history"] = self.tier_stats[tier]["usage_history"][-50:]
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Get memory statistics.
+        
+        Returns:
+            Dictionary with memory usage statistics
+        """
+        # Update stats before returning
+        self._update_tier_usage_stats()
+        
+        return {
+            "message_count": len(self.messages),
+            "tiers": {
+                "active": {
+                    "limit": self.active_token_limit,
+                    "used": self.active_tier.current_token_count,
+                    "fullness": self.active_tier.fullness_ratio,
+                    "segment_count": len(self.active_tier.segments)
+                },
+                "working": {
+                    "limit": self.working_token_limit,
+                    "used": self.working_tier.current_token_count,
+                    "fullness": self.working_tier.fullness_ratio,
+                    "segment_count": len(self.working_tier.segments)
+                },
+                "archive": {
+                    "limit": self.archive_token_limit,
+                    "used": self.archive_tier.current_token_count,
+                    "fullness": self.archive_tier.fullness_ratio,
+                    "segment_count": len(self.archive_tier.segments)
+                }
+            },
+            "tier_stats": self.tier_stats
+        }
     
     def clear_memory(self):
         """Clear all conversation memory."""
-        # Keep system messages
-        system_messages = [m for m in self.messages if m["role"] == "system"]
-        self.messages = system_messages
-        logger.info(f"Memory cleared, kept {len(system_messages)} system messages")
+        self.messages = []
         
+        # Clear memory tiers
+        self.active_tier = ActiveTier(self.active_token_limit)
+        self.working_tier = WorkingTier(self.working_token_limit) 
+        self.archive_tier = ArchiveTier(self.archive_token_limit)
+        
+        # Reset message ID counter
+        self.next_message_id = 1
+        
+        # Update stats
+        self._update_tier_usage_stats()
+        
+        logger.info("Conversation memory cleared")
+    
     def to_dict(self) -> Dict[str, Any]:
         """
-        Convert memory to dictionary for serialization.
+        Convert memory to serializable dictionary.
         
         Returns:
-            Dictionary representation of memory
+            Memory as dictionary
         """
         return {
             "messages": self.messages,
+            "tiers": {
+                "active_limit": self.active_token_limit,
+                "working_limit": self.working_token_limit,
+                "archive_limit": self.archive_token_limit
+            },
             "next_message_id": self.next_message_id
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any], config: AdaptiveContextConfig) -> 'ConversationMemory':
         """
-        Create memory from dictionary.
+        Create from serialized dictionary.
         
         Args:
-            data: Dictionary data
+            data: Dictionary with memory data
             config: Configuration
             
         Returns:
-            ConversationMemory instance
+            New ConversationMemory instance
         """
         memory = cls(config)
+        
+        # Restore messages
         memory.messages = data.get("messages", [])
         memory.next_message_id = data.get("next_message_id", 1)
+        
+        # Restore tier limits if available
+        tiers = data.get("tiers", {})
+        if tiers:
+            memory.active_token_limit = tiers.get("active_limit", config.active_token_limit)
+            memory.working_token_limit = tiers.get("working_limit", config.working_token_limit)
+            memory.archive_token_limit = tiers.get("archive_limit", config.archive_token_limit)
+            
+            # Recreate tiers with restored limits
+            memory.active_tier = ActiveTier(memory.active_token_limit)
+            memory.working_tier = WorkingTier(memory.working_token_limit)
+            memory.archive_tier = ArchiveTier(memory.archive_token_limit)
+        
         return memory 

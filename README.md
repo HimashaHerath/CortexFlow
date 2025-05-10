@@ -17,6 +17,7 @@ AdaptiveContext dynamically manages context information, retaining important ele
 - Importance-based information retention using rule-based, ML, and LLM classification
 - Progressive context compression with extractive and abstractive summarization
 - Knowledge store for long-term information persistence
+- **Dynamic memory tier weighting** for adaptive token allocation based on query complexity and content type
 - **Vector-based knowledge retrieval** for semantic search of stored knowledge
 - **Advanced retrieval techniques**:
   - **Hybrid search** combining vector similarity with BM25 keyword scoring
@@ -152,6 +153,12 @@ Test the Self-Reflection functionality:
 python self_reflection_test.py --model llama3.2
 ```
 
+Test the Dynamic Memory Weighting functionality:
+
+```bash
+python dynamic_weighting_test.py --model llama3.2 --plot
+```
+
 ## Core Components
 
 ### Memory Manager
@@ -265,6 +272,47 @@ response = manager.generate_response()  # Response is verified and corrected if 
 
 For more details on Self-Reflection, see [docs/self_reflection.md](docs/self_reflection.md).
 
+### Dynamic Memory Tier Weighting
+
+Implements adaptive token allocation between memory tiers based on conversation characteristics:
+1. **Query Complexity Analysis**: Evaluates the complexity of user queries using linguistic features
+2. **Document Type Detection**: Identifies the type of content in the conversation (code, text, data, mixed)
+3. **Historical Pattern Analysis**: Monitors query complexity patterns over time
+4. **Adaptive Token Allocation**: Dynamically adjusts token limits for each memory tier
+
+The Dynamic Weighting mechanism is particularly effective for:
+- Optimizing token usage across different conversation types
+- Adapting to changing complexity levels during a conversation
+- Providing more memory resources to tiers that need them most
+- Automatically adjusting to user interaction patterns
+
+To use the Dynamic Weighting functionality:
+```python
+# Enable Dynamic Weighting in your configuration
+config = AdaptiveContextConfig(
+    use_dynamic_weighting=True,
+    dynamic_weighting_learning_rate=0.1,  # Learning rate for weight adjustments
+    dynamic_weighting_min_tier_size=1000,  # Minimum token size for any tier
+    # ... other config options
+)
+
+# Create the manager with this configuration
+manager = AdaptiveContextManager(config)
+
+# Regular usage - Dynamic Weighting is automatically applied
+manager.add_message("user", "What is X?")
+response = manager.generate_response()  # Memory tiers are dynamically adjusted
+
+# Get statistics about dynamic weighting
+stats = manager.get_dynamic_weighting_stats()
+print(stats)
+
+# Reset to default weights if needed
+manager.reset_dynamic_weighting()
+```
+
+For more details on Dynamic Weighting, see [docs/dynamic_weighting.md](docs/dynamic_weighting.md).
+
 ## Configuration Options
 
 AdaptiveContext is highly configurable. Key configuration options include:
@@ -317,6 +365,21 @@ config = AdaptiveContextConfig(
     use_chain_of_agents=True,      # Enable Chain of Agents framework
     chain_complexity_threshold=5,  # Minimum query complexity for CoA
     chain_agent_count=3,           # Number of agents in the chain
+    
+    # Self-Reflection settings
+    use_self_reflection=True,      # Enable Self-Reflection functionality
+    reflection_relevance_threshold=0.6,  # Minimum score for knowledge relevance
+    reflection_confidence_threshold=0.7,  # Minimum confidence for consistency
+    
+    # Dynamic Weighting settings
+    use_dynamic_weighting=True,    # Enable Dynamic Memory Tier Weighting
+    dynamic_weighting_learning_rate=0.1,  # Learning rate for weight adjustments
+    dynamic_weighting_min_tier_size=1000,  # Minimum token size for any tier
+    dynamic_weighting_default_ratios={     # Default tier ratios
+        "active": 0.25,
+        "working": 0.35,
+        "archive": 0.40
+    }
 )
 ```
 
@@ -329,6 +392,7 @@ config = AdaptiveContextConfig(
 5. Very important facts are extracted to the knowledge store for permanent retention
 6. When relevant, knowledge is retrieved using advanced hybrid search techniques and added to the context
 7. For complex queries, GraphRAG builds and traverses a knowledge graph to find relationships between entities
+8. Memory tier token limits are dynamically adjusted based on query complexity and content type
 
 This approach optimizes token usage while maintaining contextual understanding across long conversations.
 
@@ -379,13 +443,18 @@ adaptivecontext/
 │   ├── compressor.py      # Context compression
 │   ├── knowledge.py       # Knowledge store
 │   ├── config.py          # Configuration
-│   └── graph_store.py     # Knowledge graph store
+│   ├── graph_store.py     # Knowledge graph store
+│   ├── agent_chain.py     # Chain of Agents implementation
+│   ├── reflection.py      # Self-Reflection implementation
+│   └── dynamic_weighting.py # Dynamic Memory Weighting implementation
 ├── examples/              # Example scripts
 │   └── chat_example.py    # Interactive chat example
 ├── tests/                 # Test scripts
 │   ├── test.py            # Basic functionality tests
 │   └── ollama_test.py     # Ollama integration tests
 ├── graph_rag_benchmark.py # GraphRAG evaluation benchmark
+├── self_reflection_test.py # Self-Reflection test script
+├── dynamic_weighting_test.py # Dynamic Weighting test script
 ├── metrics_utils.py       # Utilities for benchmark metrics
 ├── requirements.txt       # Dependencies
 ├── LICENSE                # MIT License
