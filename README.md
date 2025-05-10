@@ -248,9 +248,83 @@ This approach optimizes token usage while maintaining contextual understanding a
 Test the GraphRAG knowledge graph functionality:
 
 ```bash
-python graph_rag_test.py
+python graph_rag_benchmark.py
 ```
+
+This benchmark evaluates the GraphRAG functionality with various types of queries:
+- Single-hop queries: Direct entity-relation lookups
+- Multi-hop queries: Queries requiring traversal across multiple relationships
+- Counterfactual queries: Queries that test negative examples
+
+Command line options:
+```bash
+python graph_rag_benchmark.py --help
+
+# Options:
+# --model MODEL           Ollama model to use (default: gemma3:1b)
+# --graph-weight WEIGHT   Weight for graph-based results (default: 0.3)
+# --max-hops HOPS         Maximum path length for graph traversal (default: 3)
+# --db-path PATH          Database path (default: benchmark_graph_rag.db)
+# --keep-db               Keep existing database
+# --reload-knowledge      Force reload knowledge even if DB exists
+# --output FILE           Output file for benchmark results (JSON)
+# --verbose               Verbose output
+# --plot                  Generate plots
+# --evaluate-llm          Evaluate LLM answer accuracy
+```
+
+Example: Run the benchmark with verbose output and keep the database:
+```bash
+python graph_rag_benchmark.py --verbose --keep-db
+```
+
+## Project Structure
+
+```
+adaptivecontext/
+├── adaptive_context/      # Main package
+│   ├── __init__.py        # Package initialization
+│   ├── manager.py         # AdaptiveContextManager
+│   ├── memory.py          # Memory tiers implementation
+│   ├── classifier.py      # Importance classification
+│   ├── compressor.py      # Context compression
+│   ├── knowledge.py       # Knowledge store
+│   ├── config.py          # Configuration
+│   └── graph_store.py     # Knowledge graph store
+├── examples/              # Example scripts
+│   └── chat_example.py    # Interactive chat example
+├── tests/                 # Test scripts
+│   ├── test.py            # Basic functionality tests
+│   └── ollama_test.py     # Ollama integration tests
+├── graph_rag_benchmark.py # GraphRAG evaluation benchmark
+├── metrics_utils.py       # Utilities for benchmark metrics
+├── requirements.txt       # Dependencies
+├── LICENSE                # MIT License
+└── README.md              # This file
+```
+
+## GraphRAG Architecture
+
+The GraphRAG system combines traditional retrieval-augmented generation with knowledge graph capabilities:
+
+1. **Entity Extraction**: Identifies entities in text using SpaCy NER, noun phrase extraction, and proper noun detection
+2. **Relation Extraction**: Extracts relationships between entities using dependency parsing
+3. **Knowledge Graph**: Builds a graph database using SQLite and NetworkX
+4. **Graph Queries**:
+   - Entity-based retrieval: Finds facts about specific entities
+   - Path queries: Finds connections between entities
+   - Subgraph extraction: Builds knowledge subgraphs for complex queries
+5. **Integration with Vector Retrieval**: Combines graph-based and vector-based retrieval results
+
+The GraphRAG approach is particularly effective for:
+- Questions about relationships between entities
+- Multi-hop reasoning (e.g., "What connects X and Y?")
+- Complex queries that traditional vector retrieval struggles with
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
