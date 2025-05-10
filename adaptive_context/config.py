@@ -32,6 +32,11 @@ class AdaptiveContextConfig:
     chain_complexity_threshold: int = 5  # Minimum number of words to trigger CoA
     chain_agent_count: int = 3  # Number of agents in the chain
     
+    # Self-Reflection settings
+    use_self_reflection: bool = False
+    reflection_relevance_threshold: float = 0.6  # Minimum relevance score for knowledge items
+    reflection_confidence_threshold: float = 0.7  # Minimum confidence for consistency checks
+    
     # LLM Integration
     default_model: str = "gemma3:1b"
     ollama_host: str = "http://localhost:11434"
@@ -85,6 +90,16 @@ class AdaptiveContextConfig:
             
         if not hasattr(self, 'chain_agent_count'):
             self.chain_agent_count = 3
+            
+        # Self-Reflection backward compatibility
+        if not hasattr(self, 'use_self_reflection'):
+            self.use_self_reflection = False
+            
+        if not hasattr(self, 'reflection_relevance_threshold'):
+            self.reflection_relevance_threshold = 0.6
+            
+        if not hasattr(self, 'reflection_confidence_threshold'):
+            self.reflection_confidence_threshold = 0.7
     
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'AdaptiveContextConfig':
@@ -123,6 +138,9 @@ class AdaptiveContextConfig:
             "use_chain_of_agents": self.use_chain_of_agents,
             "chain_complexity_threshold": self.chain_complexity_threshold,
             "chain_agent_count": self.chain_agent_count,
+            "use_self_reflection": self.use_self_reflection,
+            "reflection_relevance_threshold": self.reflection_relevance_threshold,
+            "reflection_confidence_threshold": self.reflection_confidence_threshold,
             "default_model": self.default_model,
             "ollama_host": self.ollama_host,
             "conversation_style": self.conversation_style,

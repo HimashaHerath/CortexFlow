@@ -24,7 +24,17 @@ try:
     AGENT_CHAIN_ENABLED = True
 except ImportError:
     AGENT_CHAIN_ENABLED = False
+    logger = logging.getLogger('adaptive_context')
     logger.warning("agent_chain module not found. Chain of Agents functionality will be disabled.")
+
+# Add import for Self-Reflection
+try:
+    from adaptive_context.reflection import ReflectionEngine
+    REFLECTION_ENABLED = True
+except ImportError:
+    REFLECTION_ENABLED = False
+    logger = logging.getLogger('adaptive_context')
+    logger.warning("reflection module not found. Self-Reflection functionality will be disabled.")
 
 # Configure logging
 logging.basicConfig(
@@ -87,6 +97,15 @@ class AdaptiveContextManager:
                     logger.info("Chain of Agents initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize Chain of Agents: {e}")
+            
+            # Initialize Reflection Engine if enabled
+            self.reflection_engine = None
+            if hasattr(self.config, "use_self_reflection") and self.config.use_self_reflection and REFLECTION_ENABLED:
+                try:
+                    self.reflection_engine = ReflectionEngine(self.config, self.knowledge_store)
+                    logger.info("Self-Reflection Engine initialized successfully")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Self-Reflection Engine: {e}")
                 
             logger.info("AdaptiveContextManager initialized")
             
@@ -143,6 +162,18 @@ class AdaptiveContextManager:
             
             # Retrieve relevant knowledge for the user's message
             knowledge_items = self.knowledge_store.get_relevant_knowledge(last_user_message)
+            
+            # Apply self-reflection to verify knowledge relevance if enabled
+            if self.reflection_engine and hasattr(self.config, "use_self_reflection") and self.config.use_self_reflection:
+                try:
+                    knowledge_items = self.reflection_engine.verify_knowledge_relevance(
+                        last_user_message, 
+                        knowledge_items
+                    )
+                    logger.info(f"Knowledge relevance verification applied: {len(knowledge_items)} items retained")
+                except Exception as e:
+                    logger.error(f"Error in knowledge relevance verification: {e}")
+                    
             context["knowledge"] = knowledge_items
         
         return context
@@ -209,6 +240,31 @@ class AdaptiveContextManager:
                             generated_text = coa_result.get("answer", "")
                             
                             if generated_text:
+                                # Apply self-reflection if enabled
+                                if (self.reflection_engine and 
+                                    hasattr(self.config, "use_self_reflection") and 
+                                    self.config.use_self_reflection):
+                                    
+                                    try:
+                                        # Check response consistency
+                                        consistency_result = self.reflection_engine.check_response_consistency(
+                                            query,
+                                            generated_text,
+                                            knowledge
+                                        )
+                                        
+                                        # Revise if needed
+                                        if not consistency_result.get("is_consistent", True):
+                                            generated_text = self.reflection_engine.revise_response(
+                                                query,
+                                                generated_text,
+                                                knowledge,
+                                                consistency_result
+                                            )
+                                            logger.info("Response revised through self-reflection")
+                                    except Exception as e:
+                                        logger.error(f"Error in self-reflection: {e}")
+                                
                                 # Add the response to memory
                                 self.add_message("assistant", generated_text)
                                 logger.info(f"Chain of Agents generated response in {coa_result.get('total_processing_time', 0):.2f} seconds")
@@ -238,6 +294,32 @@ class AdaptiveContextManager:
                 result = response.json()
                 generated_text = result["message"]["content"]
                 
+                # Apply self-reflection if enabled
+                if (self.reflection_engine and 
+                    hasattr(self.config, "use_self_reflection") and 
+                    self.config.use_self_reflection and
+                    len(user_messages) > 0):  # Need a user query for reflection
+                    
+                    try:
+                        # Check response consistency
+                        consistency_result = self.reflection_engine.check_response_consistency(
+                            query,
+                            generated_text,
+                            knowledge
+                        )
+                        
+                        # Revise if needed
+                        if not consistency_result.get("is_consistent", True):
+                            generated_text = self.reflection_engine.revise_response(
+                                query,
+                                generated_text,
+                                knowledge,
+                                consistency_result
+                            )
+                            logger.info("Response revised through self-reflection")
+                    except Exception as e:
+                        logger.error(f"Error in self-reflection: {e}")
+                
                 # Add the response to memory
                 self.add_message("assistant", generated_text)
                 
@@ -249,30 +331,28 @@ class AdaptiveContextManager:
                 
         except Exception as e:
             logger.error(f"Error generating response: {e}")
+            logger.error(traceback.format_exc())
             return f"Error generating response: {str(e)}"
     
     def remember_knowledge(self, text: str, source: str = None) -> List[int]:
         """
-        Explicitly remember knowledge from text.
+        Remember knowledge from text.
         
         Args:
             text: Text to remember
-            source: Source of the knowledge
+            source: Optional source information
             
         Returns:
             List of IDs for the stored knowledge
         """
-        # Store the knowledge
-        fact_ids = self.knowledge_store.remember_explicit(text, source=source)
-        
-        return fact_ids
+        return self.knowledge_store.remember_knowledge(text, source)
     
     def get_knowledge(self, query: str) -> List[Dict[str, Any]]:
         """
-        Retrieve knowledge relevant to a query.
+        Get relevant knowledge for a query.
         
         Args:
-            query: Search query
+            query: Query text
             
         Returns:
             List of relevant knowledge items
@@ -280,8 +360,8 @@ class AdaptiveContextManager:
         return self.knowledge_store.get_relevant_knowledge(query)
     
     def clear_memory(self) -> None:
-        """Clear conversation memory."""
-        self.memory.clear_memory()
+        """Clear the conversation memory."""
+        self.memory.clear()
     
     def close(self) -> None:
         """Clean up resources."""
@@ -289,8 +369,8 @@ class AdaptiveContextManager:
             if hasattr(self, 'knowledge_store'):
                 self.knowledge_store.close()
         except Exception as e:
-            logger.error(f"Error closing resources: {e}")
-            
+            logger.error(f"Error closing knowledge store: {e}")
+    
     def __del__(self) -> None:
-        """Destructor to clean up resources."""
+        """Clean up on deletion."""
         self.close() 

@@ -144,6 +144,18 @@ class KnowledgeStore:
                 )
             ''')
             
+            # Create knowledge items table for direct text storage
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS knowledge_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text TEXT NOT NULL,
+                    confidence REAL,
+                    timestamp REAL,
+                    source TEXT,
+                    embedding BLOB
+                )
+            ''')
+            
             # Create indices for faster queries
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_subject ON fact_triples(subject)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_predicate ON fact_triples(predicate)')
@@ -270,6 +282,7 @@ class KnowledgeStore:
         cursor = conn.cursor()
         
         try:
+            # Add fact triples to corpus
             cursor.execute('SELECT id, subject, predicate, object FROM fact_triples')
             facts = cursor.fetchall()
             
@@ -285,35 +298,44 @@ class KnowledgeStore:
                     'text': doc_text, 
                     'subject': fact['subject'],
                     'predicate': fact['predicate'],
-                    'object': fact['object']
+                    'object': fact['object'],
+                    'type': 'fact'
                 }
                 self.doc_to_id_mapping[doc_text] = doc_id
                 doc_id += 1
                 
-            # Also add summaries
-            for summary_id, summary_data in self.summaries.items():
-                doc_text = summary_data.get('text', '')
-                if doc_text:
-                    tokenized_doc = doc_text.lower().split()
-                    self.bm25_corpus.append(tokenized_doc)
-                    self.id_to_doc_mapping[doc_id] = {
-                        'id': summary_id,
-                        'text': doc_text,
-                        'type': 'summary',
-                        'keywords': summary_data.get('keywords', [])
-                    }
-                    self.doc_to_id_mapping[doc_text] = doc_id
-                    doc_id += 1
-        except sqlite3.OperationalError as e:
+            # Add knowledge items to corpus
+            cursor.execute('SELECT id, text FROM knowledge_items')
+            knowledge_items = cursor.fetchall()
+            
+            for item in knowledge_items:
+                # Create document text
+                doc_text = item['text']
+                # Tokenize document
+                tokenized_doc = doc_text.lower().split()
+                
+                self.bm25_corpus.append(tokenized_doc)
+                self.id_to_doc_mapping[doc_id] = {
+                    'id': item['id'],
+                    'text': doc_text,
+                    'type': 'knowledge_item'
+                }
+                self.doc_to_id_mapping[doc_text] = doc_id
+                doc_id += 1
+                
+            # Create BM25 index if corpus is not empty
+            if self.bm25_corpus:
+                import rank_bm25
+                self.bm25_index = rank_bm25.BM25Okapi(self.bm25_corpus)
+                
+        except Exception as e:
             logging.error(f"Error updating BM25 index: {e}")
-        finally:
-            if self.conn is None:
-                conn.close()
-        
-        # Create BM25 index if we have documents
-        if self.bm25_corpus:
-            self.bm25_index = BM25Okapi(self.bm25_corpus)
-            logging.info(f"BM25 index updated with {len(self.bm25_corpus)} documents")
+            
+        if self.conn is None:
+            conn.close()
+            
+        self.bm25_last_update = time.time()
+        logging.debug(f"BM25 index updated with {doc_id} documents")
     
     def store_fact_triple(self, subject: str, predicate: str, obj: str, 
                           confidence: float = 1.0, source: str = None) -> int:
@@ -582,7 +604,9 @@ class KnowledgeStore:
         for i in sorted_indices[:max_results]:
             if i in self.id_to_doc_mapping and bm25_scores[i] > 0:
                 doc = self.id_to_doc_mapping[i]
-                if 'type' in doc and doc['type'] == 'summary':
+                doc_type = doc.get('type', 'fact')
+                
+                if doc_type == 'summary':
                     results.append({
                         'type': 'summary',
                         'content': f"From previous conversation: {doc['text']}",
@@ -590,11 +614,22 @@ class KnowledgeStore:
                         'bm25_score': float(bm25_scores[i]),
                         'id': doc['id']
                     })
+                elif doc_type == 'knowledge_item':
+                    results.append({
+                        'type': 'knowledge_item',
+                        'text': doc['text'],
+                        'score': float(bm25_scores[i]),
+                        'content': doc['text'],
+                        'bm25_score': float(bm25_scores[i]),
+                        'id': doc['id']
+                    })
                 else:
                     results.append({
                         'type': 'fact',
+                        'text': f"{doc['subject']} {doc['predicate']} {doc['object']}",
                         'content': f"{self.trust_marker} {doc['subject']} {doc['predicate']} {doc['object']}",
                         'bm25_score': float(bm25_scores[i]),
+                        'score': float(bm25_scores[i]),
                         'id': doc['id']
                     })
                     
@@ -1153,8 +1188,12 @@ class KnowledgeStore:
             List of (subject, predicate, object) triples
         """
         # Extract graph-based relations if available
-        if hasattr(self, 'graph_store'):
-            return self.graph_store.extract_relations(text)
+        if hasattr(self, 'graph_store') and self.graph_store is not None:
+            try:
+                return self.graph_store.extract_relations(text)
+            except Exception as e:
+                logging.error(f"Error extracting relations from graph store: {e}")
+                # Fall back to simple extraction
         
         # Simple pattern-based extraction fallback
         facts = []
@@ -1217,39 +1256,119 @@ class KnowledgeStore:
                 fact_ids.append(fact_id)
         
         # Process text to build knowledge graph
-        if hasattr(self, 'graph_store'):
-            # Make sure graph_store is initialized
-            if not hasattr(self.graph_store, 'extract_entities'):
-                logging.error("GraphStore is not properly initialized")
-                return fact_ids
+        if hasattr(self, 'graph_store') and self.graph_store is not None:
+            try:
+                # Process text to extract entities and relations
+                relations_added = self.graph_store.process_text_to_graph(text, source=source)
+                logging.debug(f"Added {relations_added} relations to knowledge graph")
                 
-            # Process text to extract entities and relations
-            relations_added = self.graph_store.process_text_to_graph(text, source=source)
-            logging.debug(f"Added {relations_added} relations to knowledge graph")
-            
-            # Manually add the text as a single fact if no relations were extracted
-            if not relations_added and not fact_ids:
-                # Try to extract simple subject-verb-object
-                words = text.split()
-                if len(words) >= 3:
-                    subject = words[0]
-                    predicate = "states"
-                    obj = " ".join(words[1:])
-                    
-                    # Add to graph
-                    success = self.graph_store.add_relation(
-                        source_entity=subject,
-                        relation_type=predicate,
-                        target_entity=obj,
-                        metadata={"source": source} if source else None
-                    )
-                    
-                    if success:
-                        logging.debug(f"Added backup relation: {subject} {predicate} {obj}")
+                # Manually add the text as a single fact if no relations were extracted
+                if not relations_added and not fact_ids:
+                    # Try to extract simple subject-verb-object
+                    words = text.split()
+                    if len(words) >= 3:
+                        subject = words[0]
+                        predicate = "states"
+                        obj = " ".join(words[1:])
+                        
+                        # Add to graph
+                        success = self.graph_store.add_relation(
+                            source_entity=subject,
+                            relation_type=predicate,
+                            target_entity=obj,
+                            metadata={"source": source} if source else None
+                        )
+                        
+                        if success:
+                            logging.debug(f"Added backup relation: {subject} {predicate} {obj}")
+            except Exception as e:
+                logging.error(f"Error processing text for knowledge graph: {e}")
         else:
-            logging.warning("No graph_store available for graph-based storage")
+            logging.debug("No graph_store available for graph-based storage")
+        
+        # If no triples were extracted, store the text as a regular knowledge item
+        if not fact_ids:
+            # Store the text directly
+            try:
+                # Store as a direct knowledge item
+                result = self.store_knowledge_item(text, confidence, source)
+                if result:
+                    fact_ids.append(result)
+            except Exception as e:
+                logging.error(f"Error storing direct knowledge: {e}")
         
         return fact_ids
+        
+    def store_knowledge_item(self, text: str, confidence: float = 0.9, source: str = None) -> int:
+        """
+        Store a piece of text as a knowledge item.
+        
+        Args:
+            text: Text to store
+            confidence: Confidence score
+            source: Source of the knowledge
+            
+        Returns:
+            ID of the stored knowledge item
+        """
+        if self.conn is not None:
+            # Using in-memory database
+            cursor = self.conn.cursor()
+        else:
+            # Using file-based database
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+        
+        # Generate embedding for the text if possible
+        embedding = self._generate_embedding(text)
+        embedding_blob = None
+        
+        if embedding is not None:
+            # Convert embedding to binary blob
+            embedding_blob = embedding.tobytes()
+            
+        try:
+            # Store in database
+            if embedding_blob is not None:
+                cursor.execute(
+                    'INSERT INTO knowledge_items (text, confidence, timestamp, source, embedding) VALUES (?, ?, ?, ?, ?)',
+                    (text, confidence, time.time(), source, embedding_blob)
+                )
+            else:
+                cursor.execute(
+                    'INSERT INTO knowledge_items (text, confidence, timestamp, source) VALUES (?, ?, ?, ?)',
+                    (text, confidence, time.time(), source)
+                )
+                
+            item_id = cursor.lastrowid
+            
+            if self.conn is not None:
+                self.conn.commit()
+            else:
+                conn.commit()
+                conn.close()
+                
+            return item_id
+            
+        except Exception as e:
+            logging.error(f"Error storing knowledge item: {e}")
+            if self.conn is None and 'conn' in locals() and conn:
+                conn.close()
+            return 0
+    
+    def remember_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> List[int]:
+        """
+        Remember knowledge from text.
+        
+        Args:
+            text: Text to remember
+            source: Source of the knowledge
+            confidence: Confidence score for the facts
+            
+        Returns:
+            List of IDs for stored facts
+        """
+        return self.remember_explicit(text, source, confidence)
     
     def _keyword_search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """
@@ -1395,13 +1514,33 @@ class KnowledgeStore:
     
     def close(self):
         """Clean up resources."""
-        if hasattr(self, 'facts'):
-            self.facts.close()
-        if hasattr(self, 'summaries'):
-            self.summaries.close()
-        if hasattr(self, 'graph_store'):
-            self.graph_store.close()
+        try:
+            if hasattr(self, 'facts') and self.facts is not None:
+                self.facts.close()
+        except Exception as e:
+            logging.error(f"Error closing facts: {e}")
+            
+        try:
+            if hasattr(self, 'summaries') and self.summaries is not None:
+                self.summaries.close()
+        except Exception as e:
+            logging.error(f"Error closing summaries: {e}")
+            
+        try:
+            if hasattr(self, 'graph_store') and self.graph_store is not None:
+                self.graph_store.close()
+        except Exception as e:
+            logging.error(f"Error closing graph store: {e}")
+            
+        try:
+            if hasattr(self, 'conn') and self.conn is not None:
+                self.conn.close()
+        except Exception as e:
+            logging.error(f"Error closing database connection: {e}")
     
     def __del__(self):
         """Destructor to clean up resources."""
-        self.close() 
+        try:
+            self.close()
+        except Exception as e:
+            logging.error(f"Error in __del__: {e}") 

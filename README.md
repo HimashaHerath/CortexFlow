@@ -24,6 +24,7 @@ AdaptiveContext dynamically manages context information, retaining important ele
   - **Re-ranking** for improved retrieval precision
   - **GraphRAG** using knowledge graphs for complex multi-hop queries
   - **Chain of Agents** for collaborative multi-agent reasoning over complex queries
+  - **Self-Reflection** for verifying knowledge relevance and response consistency
 - Compatible with all Ollama models (tested with Llama, Mistral, Phi, Gemma variants)
 - Task-aware adaptation for different conversation types
 - Surprise-based retention prioritizes unexpected or important information
@@ -145,6 +146,12 @@ Test the Chain of Agents functionality:
 python coa_test.py --model gemma3:1b
 ```
 
+Test the Self-Reflection functionality:
+
+```bash
+python self_reflection_test.py --model llama3.2
+```
+
 ## Core Components
 
 ### Memory Manager
@@ -224,12 +231,39 @@ manager.add_message("user", "What connection exists between X and Y?")
 response = manager.generate_response()
 ```
 
-The framework automatically determines when to engage the Chain of Agents based on query complexity. For testing and debugging, see the `coa_test.py` script:
-```bash
-python coa_test.py --model llama3.2 --verbose
+### Self-Reflection and Self-Correction
+
+Implements verification and correction mechanisms to improve response accuracy:
+1. **Knowledge Relevance Verification**: Evaluates retrieved knowledge items for relevance to the query
+2. **Response Consistency Checking**: Analyzes responses for factual inconsistencies with the knowledge base
+3. **Automated Response Revision**: Revises responses when inconsistencies are detected
+4. **Confidence Calibration**: Expresses appropriate uncertainty when knowledge is limited or contradictory
+
+The Self-Reflection mechanism is particularly effective for:
+- Handling contradictory information in the knowledge base
+- Preventing hallucinations and unsupported claims
+- Ensuring factual accuracy in responses
+- Resolving ambiguities in retrieved knowledge
+
+To use the Self-Reflection functionality:
+```python
+# Enable Self-Reflection in your configuration
+config = AdaptiveContextConfig(
+    use_self_reflection=True,
+    reflection_relevance_threshold=0.6,  # Minimum score for knowledge relevance
+    reflection_confidence_threshold=0.7,  # Minimum confidence for consistency
+    # ... other config options
+)
+
+# Create the manager with this configuration
+manager = AdaptiveContextManager(config)
+
+# Regular usage - Self-Reflection is automatically applied
+manager.add_message("user", "What is X?")
+response = manager.generate_response()  # Response is verified and corrected if needed
 ```
 
-For planned improvements to the Chain of Agents framework, see [TODO.md](TODO.md).
+For more details on Self-Reflection, see [docs/self_reflection.md](docs/self_reflection.md).
 
 ## Configuration Options
 
