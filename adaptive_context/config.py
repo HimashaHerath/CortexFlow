@@ -27,6 +27,11 @@ class AdaptiveContextConfig:
     max_graph_hops: int = 3
     graph_weight: float = 0.5
     
+    # Chain of Agents settings
+    use_chain_of_agents: bool = False
+    chain_complexity_threshold: int = 5  # Minimum number of words to trigger CoA
+    chain_agent_count: int = 3  # Number of agents in the chain
+    
     # LLM Integration
     default_model: str = "gemma3:1b"
     ollama_host: str = "http://localhost:11434"
@@ -70,6 +75,16 @@ class AdaptiveContextConfig:
             
         if not hasattr(self, 'use_ml_classifier'):
             self.use_ml_classifier = False
+            
+        # Chain of Agents backward compatibility
+        if not hasattr(self, 'use_chain_of_agents'):
+            self.use_chain_of_agents = False
+            
+        if not hasattr(self, 'chain_complexity_threshold'):
+            self.chain_complexity_threshold = 5
+            
+        if not hasattr(self, 'chain_agent_count'):
+            self.chain_agent_count = 3
     
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'AdaptiveContextConfig':
@@ -105,6 +120,9 @@ class AdaptiveContextConfig:
             "enable_multi_hop_queries": self.enable_multi_hop_queries,
             "max_graph_hops": self.max_graph_hops,
             "graph_weight": self.graph_weight,
+            "use_chain_of_agents": self.use_chain_of_agents,
+            "chain_complexity_threshold": self.chain_complexity_threshold,
+            "chain_agent_count": self.chain_agent_count,
             "default_model": self.default_model,
             "ollama_host": self.ollama_host,
             "conversation_style": self.conversation_style,

@@ -23,6 +23,7 @@ AdaptiveContext dynamically manages context information, retaining important ele
   - **Sparse-dense fusion** merging results from different retrieval methods
   - **Re-ranking** for improved retrieval precision
   - **GraphRAG** using knowledge graphs for complex multi-hop queries
+  - **Chain of Agents** for collaborative multi-agent reasoning over complex queries
 - Compatible with all Ollama models (tested with Llama, Mistral, Phi, Gemma variants)
 - Task-aware adaptation for different conversation types
 - Surprise-based retention prioritizes unexpected or important information
@@ -138,6 +139,12 @@ Test advanced retrieval techniques:
 python advanced_retrieval_test.py
 ```
 
+Test the Chain of Agents functionality:
+
+```bash
+python coa_test.py --model gemma3:1b
+```
+
 ## Core Components
 
 ### Memory Manager
@@ -180,6 +187,15 @@ Manages a knowledge graph for complex relational queries:
 3. Enables complex multi-hop queries across documents
 4. Provides path finding between entities to answer complex questions
 5. Integrates with the knowledge store for comprehensive information retrieval
+
+### Chain of Agents Framework
+
+Enables collaborative multi-agent reasoning over complex queries:
+1. Explorer Agent searches broadly for relevant information
+2. Analyzer Agent examines relationships between facts
+3. Synthesizer Agent generates comprehensive answers
+4. Sequential processing allows for complex reasoning chains
+5. Specialized prompt templates guide each agent's focus
 
 ## Configuration Options
 
@@ -227,7 +243,12 @@ config = AdaptiveContextConfig(
     use_graph_rag=True,           # Whether to use knowledge graph for retrieval
     graph_weight=0.3,             # Weight for graph-based results in ranking
     enable_multi_hop_queries=True,  # Enable complex multi-hop queries
-    max_graph_hops=3              # Maximum path length for graph traversal
+    max_graph_hops=3,             # Maximum path length for graph traversal
+    
+    # Chain of Agents settings
+    use_chain_of_agents=True,      # Enable Chain of Agents framework
+    chain_complexity_threshold=5,  # Minimum query complexity for CoA
+    chain_agent_count=3,           # Number of agents in the chain
 )
 ```
 

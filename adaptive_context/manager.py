@@ -18,6 +18,14 @@ from adaptive_context.classifier import ImportanceClassifier, ContentClassifier
 from adaptive_context.compressor import ContextCompressor
 from adaptive_context.knowledge import KnowledgeStore
 
+# Add import for Chain of Agents
+try:
+    from adaptive_context.agent_chain import AgentChainManager
+    AGENT_CHAIN_ENABLED = True
+except ImportError:
+    AGENT_CHAIN_ENABLED = False
+    logger.warning("agent_chain module not found. Chain of Agents functionality will be disabled.")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -70,6 +78,15 @@ class AdaptiveContextManager:
                 self.classifier = ContentClassifier(self.config)
             else:
                 self.classifier = None
+
+            # Initialize Agent Chain Manager if enabled
+            self.agent_chain_manager = None
+            if hasattr(self.config, "use_chain_of_agents") and self.config.use_chain_of_agents and AGENT_CHAIN_ENABLED:
+                try:
+                    self.agent_chain_manager = AgentChainManager(self.config, self.knowledge_store)
+                    logger.info("Chain of Agents initialized successfully")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Chain of Agents: {e}")
                 
             logger.info("AdaptiveContextManager initialized")
             
@@ -166,6 +183,42 @@ class AdaptiveContextManager:
                 # Format as prompt if needed
                 if not messages:
                     prompt = "Hello! How can I assist you today?"
+                    
+                # Get the most recent user query for Chain of Agents processing
+                user_messages = [msg for msg in messages if msg["role"] == "user"]
+                query = user_messages[-1]["content"] if user_messages else ""
+                
+                # Use Chain of Agents for complex queries if enabled
+                if (self.agent_chain_manager is not None and 
+                    hasattr(self.config, "use_chain_of_agents") and 
+                    self.config.use_chain_of_agents):
+                    
+                    try:
+                        # Check if query is complex enough to warrant Chain of Agents
+                        # For now, use a simple length-based heuristic
+                        if len(query.split()) > 5 or "?" in query:
+                            logger.info(f"Processing query with Chain of Agents: {query[:50]}...")
+                            
+                            # Process with Chain of Agents
+                            coa_result = self.agent_chain_manager.process_query(
+                                query=query,
+                                context={"messages": messages, "knowledge": knowledge}
+                            )
+                            
+                            # Get the answer from the Chain of Agents
+                            generated_text = coa_result.get("answer", "")
+                            
+                            if generated_text:
+                                # Add the response to memory
+                                self.add_message("assistant", generated_text)
+                                logger.info(f"Chain of Agents generated response in {coa_result.get('total_processing_time', 0):.2f} seconds")
+                                return generated_text
+                            # If Chain of Agents fails, fall back to standard processing
+                            logger.warning("Chain of Agents failed to generate response, falling back to standard processing")
+                    except Exception as e:
+                        logger.error(f"Error processing with Chain of Agents: {e}")
+                        logger.error(traceback.format_exc())
+                        # Continue with standard processing on error
             else:
                 messages = [{"role": "user", "content": prompt}]
                 
