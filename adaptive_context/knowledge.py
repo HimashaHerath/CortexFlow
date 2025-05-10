@@ -26,6 +26,7 @@ except ImportError:
     logging.warning("rank_bm25 not found. BM25 keyword scoring will be disabled.")
 
 from adaptive_context.config import AdaptiveContextConfig
+from adaptive_context.graph_store import GraphStore
 
 class KnowledgeStore:
     """Persistent storage for important facts and retrievable context."""
@@ -73,6 +74,9 @@ class KnowledgeStore:
         # Initialize SQLite for structured data
         self._init_db()
         
+        # Initialize GraphStore for knowledge graph
+        self.graph_store = GraphStore(config)
+        
         # Trust marker for retrieved knowledge
         self.trust_marker = "[VERIFIED FACT]"
         
@@ -82,6 +86,10 @@ class KnowledgeStore:
         # Re-ranking parameters 
         self.use_reranking = config.use_reranking if hasattr(config, 'use_reranking') else True
         self.rerank_top_k = 20  # Number of initial candidates to re-rank
+        
+        # GraphRAG parameters
+        self.use_graph_rag = config.use_graph_rag if hasattr(config, 'use_graph_rag') else True
+        self.graph_weight = 0.3  # Weight for graph-based results in the final ranking
         
         logging.info(f"Knowledge store initialized with vector retrieval: {VECTOR_ENABLED}, BM25: {BM25_ENABLED}")
     
@@ -686,109 +694,358 @@ class KnowledgeStore:
     
     def _rerank_results(self, query: str, results: List[Dict[str, Any]], max_results: int = 5) -> List[Dict[str, Any]]:
         """
-        Re-rank search results using cross-encoder if available.
+        Re-rank search results for improved relevance.
         
         Args:
-            query: Original query
-            results: List of initial search results
-            max_results: Maximum results to return after re-ranking
+            query: Original search query
+            results: Initial search results
+            max_results: Maximum number of results to return
             
         Returns:
             Re-ranked results
         """
-        # If there are no results or only a few, skip re-ranking
-        if not results or len(results) <= 1 or not VECTOR_ENABLED:
+        if not results or len(results) <= 1:
             return results[:max_results]
             
         try:
-            # Use sentence-transformers for re-ranking
-            pairs = []
-            for result in results:
-                # Remove the trust marker for better matching
-                content = result['content']
-                if content.startswith(self.trust_marker):
-                    content = content[len(self.trust_marker):].strip()
-                pairs.append((query, content))
-                
-            # Calculate cross-encoder scores using cosine similarity of query and content embeddings
-            # In a production system, you would use a proper cross-encoder model here
+            # Generate query embedding
             query_embedding = self._generate_embedding(query)
-            rerank_scores = []
             
-            for i, (_, content) in enumerate(pairs):
-                content_embedding = self._generate_embedding(content)
-                if query_embedding is not None and content_embedding is not None:
-                    # Calculate cosine similarity
-                    sim_score = self._vector_similarity(query_embedding, content_embedding)
-                    rerank_scores.append((i, sim_score))
+            # Extract content texts
+            texts = []
+            for result in results:
+                if 'text' in result:
+                    texts.append(result['text'])
+                elif 'content' in result:
+                    texts.append(result['content'])
                 else:
-                    # Fallback if embedding fails
-                    rerank_scores.append((i, 0.0))
+                    # If no text content found, use a placeholder
+                    texts.append("")
                     
-            # Sort by re-ranking scores
-            rerank_scores.sort(key=lambda x: x[1], reverse=True)
+            # Generate embeddings for all texts
+            text_embeddings = [self._generate_embedding(text) for text in texts]
             
-            # Re-rank results
-            reranked_results = []
-            for i, score in rerank_scores[:max_results]:
-                if i < len(results):
-                    result = results[i].copy()
-                    result['rerank_score'] = score
-                    reranked_results.append(result)
-                    
-            return reranked_results
+            # Calculate similarity scores
+            similarities = []
+            for embed in text_embeddings:
+                if embed is not None and query_embedding is not None:
+                    # Calculate cosine similarity
+                    similarity = self._vector_similarity(query_embedding, embed)
+                    similarities.append(similarity)
+                else:
+                    similarities.append(0.0)
+                
+            # Re-weight scores based on similarity
+            for i, result in enumerate(results):
+                # Get current score or default to 0.5
+                orig_score = result.get("score", 0.5)
+                
+                # Combine with similarity (if available)
+                if i < len(similarities):
+                    sim_score = similarities[i]
+                    # Weighted combination of original score and similarity
+                    new_score = orig_score * 0.7 + sim_score * 0.3
+                    result["score"] = new_score
+                    result["similarity"] = sim_score
+            
+            # Sort by new scores
+            reranked_results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
+            
+            return reranked_results[:max_results]
             
         except Exception as e:
             logging.error(f"Error in re-ranking: {e}")
-            # Fall back to original ranking
+            # Fall back to original results on error
             return results[:max_results]
         
     def get_relevant_knowledge(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """
-        Retrieve knowledge relevant to the query using hybrid search and re-ranking.
+        Get relevant knowledge for a query using hybrid search.
         
         Args:
-            query: The search query
+            query: Search query
             max_results: Maximum number of results to return
             
         Returns:
             List of relevant knowledge items
         """
-        # Initialize BM25 index if not already done
-        if BM25_ENABLED and (self.bm25_index is None):
-            self._update_bm25_index()
-            
-        # Generate embedding for the query
-        query_embedding = self._generate_embedding(query)
+        # Update the BM25 index to ensure it's fresh
+        self._update_bm25_index()
         
-        # Strategy selection based on available components
-        if VECTOR_ENABLED and query_embedding is not None and BM25_ENABLED and self.bm25_index is not None:
-            # Use hybrid search (dense + sparse)
-            logging.info("Using hybrid search (dense vectors + BM25)")
-            results = self._hybrid_search(query, query_embedding, max_results=self.rerank_top_k)
-        elif VECTOR_ENABLED and query_embedding is not None:
-            # Use dense vector search
-            logging.info("Using dense vector search")
-            results = self._dense_vector_search(query_embedding, max_results=self.rerank_top_k)
-        elif BM25_ENABLED and self.bm25_index is not None:
-            # Use BM25 search
-            logging.info("Using BM25 sparse search")
-            results = self._bm25_search(query, max_results=self.rerank_top_k)
-        else:
-            # Fall back to keyword search
-            logging.info("Using basic keyword search")
-            results = self._keyword_search(query, max_results=self.rerank_top_k)
+        results = []
+        
+        # Use vector search if available
+        if VECTOR_ENABLED and self.model is not None:
+            # Generate query embedding
+            query_embedding = self._generate_embedding(query)
             
-        # Apply re-ranking if enabled and there are enough results
-        if self.use_reranking and len(results) > 1:
-            logging.info("Applying re-ranking to search results")
-            results = self._rerank_results(query, results, max_results=max_results)
+            # Use hybrid search (vector + keyword)
+            if BM25_ENABLED and self.bm25_index is not None:
+                results = self._hybrid_search(query, query_embedding, max_results=self.rerank_top_k)
+            else:
+                # Fall back to vector-only search
+                results = self._dense_vector_search(query_embedding, max_results=self.rerank_top_k)
         else:
-            # Just take top results without re-ranking
-            results = results[:max_results]
+            # Fall back to keyword search if vector search is not available
+            if BM25_ENABLED:
+                results = self._bm25_search(query, max_results=self.rerank_top_k)
+            else:
+                # Last resort: simple keyword search
+                results = self._keyword_search(query, max_results=self.rerank_top_k)
+        
+        # Get graph-based results if enabled
+        graph_results = []
+        if self.use_graph_rag:
+            graph_results = self._graph_search(query, max_results=self.rerank_top_k)
+        
+        # Merge results from different retrieval methods
+        combined_results = []
+        
+        # Create a set to track unique items
+        seen_texts = set()
+        
+        # Add standard retrieval results
+        for result in results:
+            text = result.get("text", "")
+            if text and text not in seen_texts:
+                seen_texts.add(text)
+                combined_results.append(result)
+        
+        # Add graph-based results with a factor to boost their scores
+        for result in graph_results:
+            text = result.get("text", "")
+            if text and text not in seen_texts:
+                seen_texts.add(text)
+                # Apply graph weight to score
+                if "score" in result:
+                    result["score"] = result["score"] * (1.0 + self.graph_weight)
+                combined_results.append(result)
+        
+        # Apply re-ranking if enabled
+        if self.use_reranking:
+            combined_results = self._rerank_results(query, combined_results, max_results)
+        else:
+            # Sort by score and limit results
+            combined_results = sorted(combined_results, key=lambda x: x.get("score", 0), reverse=True)[:max_results]
+        
+        # Format results for the context
+        final_results = []
+        for item in combined_results:
+            # Add trust marker if confidence is high
+            if item.get("confidence", 0) > 0.8:
+                text = f"{self.trust_marker} {item.get('text', '')}"
+            else:
+                text = item.get("text", "")
+                
+            # Add provenance if available
+            if "source" in item:
+                text = f"{text} [Source: {item['source']}]"
+                
+            final_results.append({
+                "text": text,
+                "score": item.get("score", 0),
+                "confidence": item.get("confidence", 0.5),
+                "source": item.get("source", "knowledge_store"),
+                "type": item.get("type", "fact")
+            })
             
+        return final_results
+    
+    def _graph_search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get knowledge from graph store relevant to the query.
+        
+        Args:
+            query: Search query
+            max_results: Maximum number of results
+            
+        Returns:
+            List of relevant knowledge items from graph
+        """
+        results = []
+        
+        try:
+            # Extract entities from query
+            entities = self.graph_store.extract_entities(query)
+            
+            # Track entities found in query
+            query_entities = [entity["text"] for entity in entities]
+            
+            # If we have entities in the query
+            if query_entities:
+                # Get subgraph relevant to the query
+                subgraph = self.graph_store.build_knowledge_subgraph(query, max_nodes=30)
+                
+                # For each entity in the query, explore its neighbors
+                for entity_text in query_entities:
+                    neighbors = self.graph_store.get_entity_neighbors(
+                        entity=entity_text,
+                        direction="both",
+                        limit=5
+                    )
+                    
+                    # Convert neighbors to knowledge items
+                    for neighbor in neighbors:
+                        direction = neighbor.get("direction", "")
+                        relation = neighbor.get("relation", "")
+                        entity = neighbor.get("entity", "")
+                        
+                        if direction == "outgoing":
+                            # Entity → Relation → Neighbor
+                            fact_text = f"{entity_text} {relation} {entity}"
+                        else:
+                            # Neighbor → Relation → Entity
+                            fact_text = f"{entity} {relation} {entity_text}"
+                        
+                        results.append({
+                            "text": fact_text,
+                            "score": neighbor.get("weight", 0.5),
+                            "confidence": 0.7,  # Default confidence for graph-based facts
+                            "source": "knowledge_graph",
+                            "type": "graph_fact",
+                            "entity_type": neighbor.get("type")
+                        })
+                
+                # Try to find paths between different entities in the query
+                if len(query_entities) >= 2:
+                    # Check paths between pairs of entities
+                    for i in range(len(query_entities)):
+                        for j in range(i + 1, len(query_entities)):
+                            start_entity = query_entities[i]
+                            end_entity = query_entities[j]
+                            
+                            paths = self.graph_store.path_query(
+                                start_entity=start_entity,
+                                end_entity=end_entity,
+                                max_hops=2  # Limit path length for performance
+                            )
+                            
+                            # Convert paths to knowledge items
+                            for path in paths:
+                                path_text = self._format_path_as_text(path)
+                                if path_text:
+                                    results.append({
+                                        "text": path_text,
+                                        "score": 0.8,  # Paths connecting query entities are highly relevant
+                                        "confidence": 0.75,
+                                        "source": "knowledge_graph",
+                                        "type": "graph_path"
+                                    })
+            
+            # Sort results by score
+            results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)[:max_results]
+            
+        except Exception as e:
+            logging.error(f"Error in graph search: {e}")
+        
         return results
+    
+    def _format_path_as_text(self, path: List[Dict[str, Any]]) -> str:
+        """
+        Format a graph path as readable text.
         
+        Args:
+            path: List of path nodes with their details
+            
+        Returns:
+            Formatted text representation of the path
+        """
+        if not path or len(path) < 2:
+            return ""
+            
+        path_segments = []
+        
+        for i in range(len(path) - 1):
+            current = path[i]
+            next_node = path[i + 1]
+            
+            current_entity = current.get("entity", "")
+            relation = current.get("next_relation", {}).get("type", "is related to")
+            
+            path_segments.append(f"{current_entity} {relation}")
+            
+            # Add the final entity for the last segment
+            if i == len(path) - 2:
+                path_segments.append(next_node.get("entity", ""))
+        
+        return " → ".join(path_segments)
+    
+    def extract_facts_from_text(self, text: str) -> List[Tuple[str, str, str]]:
+        """
+        Extract fact triples from text.
+        
+        Args:
+            text: Input text to extract facts from
+            
+        Returns:
+            List of (subject, predicate, object) triples
+        """
+        # Extract graph-based relations if available
+        if hasattr(self, 'graph_store'):
+            return self.graph_store.extract_relations(text)
+        
+        # Simple pattern-based extraction fallback
+        facts = []
+        
+        # Split text into sentences (simplified)
+        sentences = text.replace("! ", ". ").replace("? ", ". ").split(". ")
+        
+        for sentence in sentences:
+            # Skip short sentences
+            if len(sentence.split()) < 5:
+                continue
+                
+            # Very simple SVO (subject-verb-object) extraction
+            words = sentence.split()
+            for i in range(1, len(words) - 1):
+                # This is a very basic heuristic and not linguistically accurate
+                subject = words[i-1]
+                predicate = words[i]
+                obj = words[i+1]
+                
+                # Skip common words and punctuation
+                if (len(subject) > 3 and len(predicate) > 3 and len(obj) > 3 and
+                    subject not in ["this", "that", "these", "those"] and
+                    obj not in ["this", "that", "these", "those"]):
+                    facts.append((subject, predicate, obj))
+        
+        return facts
+    
+    def remember_explicit(self, text: str, source: str = "user_command", confidence: float = 0.95) -> List[int]:
+        """
+        Explicitly remember important facts from text.
+        
+        Args:
+            text: Text to remember
+            source: Source of the knowledge
+            confidence: Confidence score for the facts
+            
+        Returns:
+            List of IDs for stored facts
+        """
+        fact_ids = []
+        
+        # Extract triples from text
+        triples = self.extract_facts_from_text(text)
+        
+        # Store each triple as a fact
+        for subject, predicate, obj in triples:
+            fact_id = self.store_fact_triple(
+                subject=subject,
+                predicate=predicate,
+                obj=obj,
+                confidence=confidence,
+                source=source
+            )
+            if fact_id > 0:
+                fact_ids.append(fact_id)
+        
+        # Process text to build knowledge graph
+        if hasattr(self, 'graph_store'):
+            self.graph_store.process_text_to_graph(text, source=source)
+        
+        return fact_ids
+    
     def _keyword_search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """
         Basic keyword search as fallback when vector/BM25 is not available.
@@ -884,82 +1141,6 @@ class KnowledgeStore:
                     })
                     
         return results
-
-    def extract_facts_from_text(self, text: str) -> List[Tuple[str, str, str]]:
-        """
-        Extract potential fact triples from text.
-        
-        Args:
-            text: Text to extract facts from
-            
-        Returns:
-            List of (subject, predicate, object) tuples
-        """
-        # In a real implementation, this would use NLP techniques
-        # For now, we'll use some simple pattern matching
-        
-        facts = []
-        
-        # Look for simple patterns like "X is Y"
-        is_pattern = r'([\w\s]+) is ([\w\s]+)'
-        import re
-        is_matches = re.findall(is_pattern, text)
-        for subject, obj in is_matches:
-            subject = subject.strip()
-            obj = obj.strip()
-            if subject and obj:
-                facts.append((subject, "is", obj))
-        
-        # Look for "X has Y"
-        has_pattern = r'([\w\s]+) has ([\w\s]+)'
-        has_matches = re.findall(has_pattern, text)
-        for subject, obj in has_matches:
-            subject = subject.strip()
-            obj = obj.strip()
-            if subject and obj:
-                facts.append((subject, "has", obj))
-        
-        return facts
-    
-    def remember_explicit(self, text: str, source: str = "user_command", confidence: float = 0.95) -> List[int]:
-        """
-        Process an explicit remember command from the user.
-        
-        Args:
-            text: Text to remember
-            source: Source identifier
-            confidence: Confidence score (default higher for explicit memory)
-            
-        Returns:
-            List of fact IDs that were stored
-        """
-        # Extract facts
-        facts = self.extract_facts_from_text(text)
-        
-        # Store with high confidence
-        fact_ids = []
-        for subject, predicate, obj in facts:
-            fact_id = self.store_fact_triple(
-                subject=subject,
-                predicate=predicate,
-                obj=obj,
-                confidence=confidence,  # Higher confidence for explicit memory
-                source=source
-            )
-            fact_ids.append(fact_id)
-        
-        # If no structured facts were found, store as a general note
-        if not facts:
-            fact_id = self.store_fact_triple(
-                subject="note",
-                predicate="contains",
-                obj=text,
-                confidence=confidence,
-                source=source
-            )
-            fact_ids.append(fact_id)
-        
-        return fact_ids
     
     def _expand_query(self, query: str) -> List[str]:
         """
@@ -1008,18 +1189,14 @@ class KnowledgeStore:
         return expanded
     
     def close(self):
-        """Close all database connections."""
-        try:
+        """Clean up resources."""
+        if hasattr(self, 'facts'):
             self.facts.close()
+        if hasattr(self, 'summaries'):
             self.summaries.close()
-            if self.conn is not None:
-                self.conn.close()
-        except Exception as e:
-            logging.error(f"Error closing knowledge store: {e}")
+        if hasattr(self, 'graph_store'):
+            self.graph_store.close()
     
     def __del__(self):
-        """Clean up resources on deletion."""
-        try:
-            self.close()
-        except:
-            pass 
+        """Destructor to clean up resources."""
+        self.close() 

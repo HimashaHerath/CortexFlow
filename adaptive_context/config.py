@@ -1,90 +1,111 @@
 import os
-from typing import Optional
+import logging
+from typing import Dict, Any
 
 class AdaptiveContextConfig:
     """Configuration for the AdaptiveContext system."""
     
-    def __init__(self, 
-                 active_tier_tokens=2000,
-                 working_tier_tokens=4000, 
-                 archive_tier_tokens=6000,
-                 use_ml=False,
-                 use_llm_classification=True,
-                 ml_model_path=None,
-                 rule_weight=0.5,
-                 ml_weight=0.3,
-                 llm_weight=0.7,
-                 max_llm_classification_length=250,
-                 compression_threshold=0.8,
-                 knowledge_store_path=':memory:',
-                 ollama_host='http://localhost:11434',
-                 default_model='llama3',
-                 vector_embedding_model='all-MiniLM-L6-v2',
-                 use_vector_search=True,
-                 use_bm25_search=True,
-                 hybrid_search_alpha=0.7,
-                 use_reranking=True,
-                 rerank_top_k=20):
+    def __init__(self, **kwargs):
         """
-        Initialize AdaptiveContext configuration.
+        Initialize with default configuration.
         
         Args:
-            active_tier_tokens: Maximum tokens in active memory tier
-            working_tier_tokens: Maximum tokens in working memory tier
-            archive_tier_tokens: Maximum tokens in archive memory tier
-            use_ml: Whether to use ML-based importance classifier
-            use_llm_classification: Whether to use LLM for classification
-            ml_model_path: Path to ML classifier model file
-            rule_weight: Weight for rule-based classifier
-            ml_weight: Weight for ML-based classifier
-            llm_weight: Weight for LLM-based classifier
-            max_llm_classification_length: Maximum text length for LLM classification
-            compression_threshold: Tier fullness threshold to trigger compression
-            knowledge_store_path: Path to knowledge store database
-            ollama_host: Ollama API host URL
-            default_model: Default Ollama model to use
-            vector_embedding_model: Model to use for vector embeddings
-            use_vector_search: Whether to use vector-based search
-            use_bm25_search: Whether to use BM25 keyword search
-            hybrid_search_alpha: Weight for vector search in hybrid search (0-1)
-            use_reranking: Whether to use result re-ranking
-            rerank_top_k: Number of candidates to consider for re-ranking
+            **kwargs: Override default configuration with provided values
         """
-        # Memory tier settings
-        self.active_tier_tokens = active_tier_tokens
-        self.working_tier_tokens = working_tier_tokens
-        self.archive_tier_tokens = archive_tier_tokens
+        # Memory tiers configuration (tokens)
+        self.active_tier_tokens = kwargs.get("active_tier_tokens", 4096)
+        self.working_tier_tokens = kwargs.get("working_tier_tokens", 8192)
+        self.archive_tier_tokens = kwargs.get("archive_tier_tokens", 16384)
         
-        # Classification settings
-        self.use_ml = use_ml
-        self.use_llm_classification = use_llm_classification
-        self.ml_model_path = ml_model_path
-        self.rule_weight = rule_weight
-        self.ml_weight = ml_weight
-        self.llm_weight = llm_weight
-        self.max_llm_classification_length = max_llm_classification_length
+        # Importance thresholds (0-1)
+        self.working_importance_threshold = kwargs.get("working_importance_threshold", 0.3)
+        self.archive_importance_threshold = kwargs.get("archive_importance_threshold", 0.1)
         
-        # Compression settings
-        self.compression_threshold = compression_threshold
+        # Token counting method
+        self.token_counting_method = kwargs.get("token_counting_method", "basic")  # "basic", "tiktoken", "ollama"
         
-        # Knowledge store settings
-        self.knowledge_store_path = knowledge_store_path
-        self.vector_embedding_model = vector_embedding_model
-        self.use_vector_search = use_vector_search
+        # Memory compression
+        self.enable_compression = kwargs.get("enable_compression", True)
+        self.compression_threshold = kwargs.get("compression_threshold", 0.8)  # When tier is this full, compress
+        self.compression_target = kwargs.get("compression_target", 0.6)  # Target fullness after compression
+        
+        # Classification parameters
+        self.classifier_model = kwargs.get("classifier_model", "gpt-3.5-turbo")
+        self.classifier_temperature = kwargs.get("classifier_temperature", 0.1)
+        
+        # Vector embeddings
+        self.vector_embedding_model = kwargs.get("vector_embedding_model", "all-MiniLM-L6-v2")
         
         # Ollama settings
-        self.ollama_host = ollama_host
-        self.default_model = default_model
+        self.ollama_host = kwargs.get("ollama_host", "http://localhost:11434")
+        self.default_model = kwargs.get("default_model", "gemma:7b")
         
-        # Advanced retrieval settings
-        self.use_bm25_search = use_bm25_search
-        self.hybrid_search_alpha = hybrid_search_alpha
-        self.use_reranking = use_reranking
-        self.rerank_top_k = rerank_top_k
+        # Persistence paths
+        self.storage_path = kwargs.get("storage_path", os.path.expanduser("~/.adaptive_context"))
+        self.knowledge_store_path = kwargs.get("knowledge_store_path", os.path.join(self.storage_path, "knowledge.db"))
         
-        # Calculate weights for importance scoring
-        self.weights = [self.rule_weight]
-        if self.use_ml:
-            self.weights.append(self.ml_weight)
-        if self.use_llm_classification:
-            self.weights.append(self.llm_weight) 
+        # Enable vector embeddings for retrieval
+        self.use_vector_embeddings = kwargs.get("use_vector_embeddings", True)
+        
+        # Enable result re-ranking
+        self.use_reranking = kwargs.get("use_reranking", True)
+        
+        # GraphRAG configuration
+        self.use_graph_rag = kwargs.get("use_graph_rag", True)
+        self.graph_weight = kwargs.get("graph_weight", 0.3)
+        self.enable_multi_hop_queries = kwargs.get("enable_multi_hop_queries", True)
+        self.max_graph_hops = kwargs.get("max_graph_hops", 3)
+        
+        # Ensure storage directory exists
+        os.makedirs(self.storage_path, exist_ok=True)
+    
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> 'AdaptiveContextConfig':
+        """
+        Create configuration from a dictionary.
+        
+        Args:
+            config_dict: Configuration dictionary
+            
+        Returns:
+            AdaptiveContextConfig instance
+        """
+        return cls(**config_dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert configuration to a dictionary.
+        
+        Returns:
+            Dictionary representation of configuration
+        """
+        return {
+            "active_tier_tokens": self.active_tier_tokens,
+            "working_tier_tokens": self.working_tier_tokens,
+            "archive_tier_tokens": self.archive_tier_tokens,
+            "working_importance_threshold": self.working_importance_threshold,
+            "archive_importance_threshold": self.archive_importance_threshold,
+            "token_counting_method": self.token_counting_method,
+            "enable_compression": self.enable_compression,
+            "compression_threshold": self.compression_threshold,
+            "compression_target": self.compression_target,
+            "classifier_model": self.classifier_model,
+            "classifier_temperature": self.classifier_temperature,
+            "vector_embedding_model": self.vector_embedding_model,
+            "ollama_host": self.ollama_host,
+            "default_model": self.default_model,
+            "storage_path": self.storage_path,
+            "knowledge_store_path": self.knowledge_store_path,
+            "use_vector_embeddings": self.use_vector_embeddings,
+            "use_reranking": self.use_reranking,
+            "use_graph_rag": self.use_graph_rag,
+            "graph_weight": self.graph_weight,
+            "enable_multi_hop_queries": self.enable_multi_hop_queries,
+            "max_graph_hops": self.max_graph_hops
+        }
+    
+    def log_config(self):
+        """Log the current configuration."""
+        logging.info("AdaptiveContext Configuration:")
+        for key, value in self.to_dict().items():
+            logging.info(f"  {key}: {value}") 

@@ -1,6 +1,11 @@
-import re
+import os
+import pickle
 import time
+import logging
+import random
+import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
+import re
 import json
 import requests
 
@@ -8,154 +13,184 @@ from adaptive_context.config import AdaptiveContextConfig
 from adaptive_context.memory import ContextSegment
 
 class RuleBasedClassifier:
-    """Simple rule-based importance classifier."""
+    """
+    Rule-based classifier for message importance.
+    """
     
     def __init__(self):
-        # Patterns indicating important information
+        """Initialize rule-based classifier."""
+        # Patterns that suggest higher importance
         self.important_patterns = [
-            r"\b(remember|note|important|crucial|key|essential|critical|significant)\b",
-            r"\bmy name is\b",
-            r"\b(address|phone|email) is\b",
-            r"\b(don't|do not|never)\b",
-            r"\b(always|must|should|need to)\b",
-            r"\?{1,}$",  # Questions
-            r"^\d+\.",   # Numbered lists
-            r"```[\s\S]*```",  # Code blocks
-            r"\$\$[\s\S]*\$\$"  # Equations
+            r'\b(?:important|critical|urgent|crucial|key|essential|remember|note|significant)\b',
+            r'\b(?:deadline|schedule|appointment|meeting|interview)\b',
+            r'\b(?:password|credential|account|login|security)\b',
+            r'\b(?:address|phone|email|contact)\b',
+            r'(?:\d{1,2}[:./-]\d{1,2}(?:[:./-]\d{2,4})?)',  # Date/time patterns
+            r'(?:\$\d+(?:\.\d{2})?)',  # Money patterns
+            r'(?:https?://\S+)',  # URLs
+            r'(?:\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b)',  # Email
+            r'(?:\b\d{3}[-.]?\d{3}[-.]?\d{4}\b)'  # Phone numbers
         ]
         
-        # Content types with inherent importance
-        self.important_content_types = [
-            "instruction",
-            "question",
-            "code",
-            "equation",
-            "system"
+        # Patterns that suggest lower importance
+        self.unimportant_patterns = [
+            r'\b(?:lol|haha|hmm|oh|ah|um|uh)\b',
+            r'(?:[\U0001F600-\U0001F64F])',  # Emojis
+            r'(?:^(?:ok|okay|sure|yes|no|maybe)$)',  # Single-word responses
         ]
         
-        # Compile patterns for efficiency
-        self.compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in self.important_patterns]
+        # Keywords that influence importance
+        self.importance_keywords = {
+            'high': ['urgent', 'important', 'critical', 'emergency', 'deadline', 'required',
+                   'necessary', 'essential', 'vital', 'crucial', 'key', 'significant',
+                   'remember', 'note', 'attention', 'action', 'decision'],
+            'medium': ['meeting', 'project', 'task', 'update', 'information', 'report', 
+                     'review', 'consider', 'discuss', 'option', 'alternative', 'suggestion'],
+            'low': ['fyi', 'maybe', 'perhaps', 'sometime', 'whenever', 'thought', 
+                  'random', 'just', 'btw', 'by the way', 'off topic']
+        }
+        
+        # Message type weights
+        self.type_weights = {
+            'system': 0.9,
+            'user': 0.7,
+            'assistant': 0.5,
+            'function': 0.6,
+            'data': 0.8,
+            'summary': 0.7,
+            'unknown': 0.5
+        }
     
-    def score(self, segment: ContextSegment) -> float:
+    def classify(self, segment: ContextSegment) -> float:
         """
-        Score the importance of a segment on a scale of 0-10.
+        Classify importance using rule-based heuristics.
         
         Args:
-            segment: The context segment to score
+            segment: Context segment to classify
             
         Returns:
-            Importance score (0-10)
+            Importance score (0-1)
         """
+        if not segment or not segment.content:
+            return 0.0
+            
         content = segment.content
-        base_score = 5.0  # Start with neutral importance
+        segment_type = segment.segment_type
+        metadata = segment.metadata or {}
         
-        # Check content type
-        if segment.segment_type in self.important_content_types:
-            base_score += 2.0
+        # Base score from message type
+        score = self.type_weights.get(segment_type, 0.5)
         
         # Check for important patterns
-        pattern_matches = sum(1 for pattern in self.compiled_patterns if pattern.search(content))
-        pattern_score = min(3.0, pattern_matches * 0.5)
+        for pattern in self.important_patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                score += 0.1
+                
+        # Check for unimportant patterns
+        for pattern in self.unimportant_patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                score -= 0.1
+                
+        # Check for keywords
+        for keyword in self.importance_keywords['high']:
+            if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
+                score += 0.15
+                
+        for keyword in self.importance_keywords['medium']:
+            if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
+                score += 0.07
+                
+        for keyword in self.importance_keywords['low']:
+            if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
+                score -= 0.05
         
-        # Length considerations - very short or very long content may be less important
-        length_score = 0.0
-        if 10 <= len(content.split()) <= 100:
-            length_score = 1.0
+        # Message length factor (longer messages might be more important)
+        length_factor = min(len(content.split()) / 100.0, 0.2)
+        score += length_factor
         
-        # Recency factor - newer content is generally more important
-        age_hours = segment.age / 3600
-        recency_score = max(0, 2.0 - (age_hours / 12) * 2.0)
-        
-        # Calculate final score (capped at 0-10)
-        final_score = base_score + pattern_score + length_score + recency_score
-        return max(0.0, min(10.0, final_score))
+        # Content recency
+        if hasattr(segment, 'timestamp'):
+            recency = (time.time() - segment.timestamp) / 86400.0  # Days
+            recency_factor = max(0.0, 0.1 - min(recency, 10) / 100.0)
+            score += recency_factor
+            
+        # Explicit importance from metadata
+        if 'importance' in metadata:
+            explicit_importance = float(metadata['importance'])
+            score = score * 0.6 + explicit_importance * 0.4
+            
+        # Ensure score is within range
+        return max(0.0, min(score, 1.0))
 
 
 class MLClassifier:
-    """Machine learning based importance classifier."""
+    """
+    Machine learning-based classifier for message importance.
+    Requires a pre-trained model.
+    """
     
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: Optional[str] = None):
         """
         Initialize ML classifier.
         
         Args:
-            model_path: Path to pretrained model
+            model_path: Path to pre-trained model file
         """
-        # In a real implementation, load the model here
-        # For this implementation, we'll use a simplified approach
-        self.model_path = model_path
+        self.model = None
+        self.vectorizer = None
         
-        # Features we'd extract in a real implementation
-        self.features = [
-            "length",
-            "contains_question",
-            "contains_code",
-            "contains_instruction",
-            "sentiment_score",
-            "named_entity_count"
-        ]
+        if model_path and os.path.exists(model_path):
+            try:
+                with open(model_path, 'rb') as f:
+                    model_data = pickle.load(f)
+                    self.model = model_data.get('model')
+                    self.vectorizer = model_data.get('vectorizer')
+                logging.info(f"ML classifier model loaded from {model_path}")
+            except Exception as e:
+                logging.error(f"Error loading ML model: {e}")
+        else:
+            logging.warning("ML model path not provided or does not exist; ML classification disabled")
     
-    def extract_features(self, segment: ContextSegment) -> Dict[str, float]:
+    def classify(self, segment: ContextSegment) -> float:
         """
-        Extract features from the segment for ML scoring.
+        Classify importance using ML model.
         
         Args:
-            segment: The context segment
+            segment: Context segment to classify
             
         Returns:
-            Dictionary of feature values
+            Importance score (0-1) or 0.5 if model unavailable
         """
-        content = segment.content
-        features = {}
-        
-        # Simple feature extraction
-        features["length"] = len(content)
-        features["contains_question"] = 1.0 if "?" in content else 0.0
-        features["contains_code"] = 1.0 if "```" in content else 0.0
-        features["contains_instruction"] = 1.0 if any(word in content.lower() 
-                                                  for word in ["do", "please", "must", "should"]) else 0.0
-        
-        # In a real implementation, we'd use NLP libraries for these
-        features["sentiment_score"] = 0.5  # Placeholder
-        features["named_entity_count"] = content.count("[") + content.count("]")  # Very rough approximation
-        
-        return features
-    
-    def score(self, segment: ContextSegment, context: List[ContextSegment] = None) -> float:
-        """
-        Score the importance of a segment using ML.
-        
-        Args:
-            segment: The context segment to score
-            context: Optional context segments for contextual scoring
+        if not self.model or not self.vectorizer:
+            return 0.5
             
-        Returns:
-            Importance score (0-10)
-        """
-        # Extract features
-        features = self.extract_features(segment)
-        
-        # In a real implementation, we'd use the model for prediction
-        # Here, we'll use a simple heuristic based on the features
-        
-        # Simple weighted average of features
-        weights = {
-            "length": 0.1,
-            "contains_question": 2.0,
-            "contains_code": 2.5,
-            "contains_instruction": 2.0,
-            "sentiment_score": 1.0,
-            "named_entity_count": 0.5
-        }
-        
-        raw_score = sum(features[key] * weights[key] for key in weights)
-        
-        # Normalize to 0-10 scale
-        return min(10.0, max(0.0, raw_score / 50 * 10))
+        try:
+            content = segment.content
+            # Extract features (text and metadata)
+            features = {
+                'text': content,
+                'segment_type': segment.segment_type,
+                'token_count': segment.token_count,
+                'metadata': json.dumps(segment.metadata or {})
+            }
+            
+            # Transform with vectorizer
+            X = self.vectorizer.transform([features])
+            
+            # Predict probability
+            proba = self.model.predict_proba(X)[0][1]  # Probability of positive class
+            
+            return float(proba)
+        except Exception as e:
+            logging.error(f"Error in ML classification: {e}")
+            return 0.5
 
 
 class LLMClassifier:
-    """LLM-based importance classifier."""
+    """
+    LLM-based classifier for message importance.
+    Uses external LLM to determine importance.
+    """
     
     def __init__(self, config: AdaptiveContextConfig):
         """
@@ -165,139 +200,192 @@ class LLMClassifier:
             config: AdaptiveContext configuration
         """
         self.config = config
-        self.ollama_url = f"{config.ollama_host}/api/generate"
-        self.model = config.default_model
-    
-    def score(self, segment: ContextSegment, context: List[ContextSegment] = None) -> float:
+        self.cache = {}  # Simple cache to avoid repeated queries
+        
+        # Base prompt for importance classification
+        self.base_prompt = """
+        You are an AI assistant that determines the importance of conversation messages.
+        Rate this message's importance on a scale from 0.0 to 1.0, where:
+        - 1.0: Critical, essential information that must be remembered
+        - 0.7-0.9: Very important information that should be prioritized
+        - 0.4-0.6: Moderately important information
+        - 0.1-0.3: Background information with limited relevance
+        - 0.0: Completely unimportant, could be forgotten
+        
+        Consider factors like:
+        - Information density and uniqueness
+        - Presence of facts, data, references
+        - Questions or requests requiring follow-up
+        - Overall contribution to the conversation
+        
+        Message: {message}
+        
+        Rate the importance as a single number between 0.0 and 1.0:
         """
-        Score the importance of a segment using LLM.
+    
+    def classify(self, segment: ContextSegment, context: List[ContextSegment] = None) -> float:
+        """
+        Classify importance using LLM.
         
         Args:
-            segment: The context segment to score
-            context: Optional context segments for contextual scoring
+            segment: Context segment to classify
+            context: Recent conversation context
             
         Returns:
-            Importance score (0-10)
+            Importance score (0-1) or 0.5 if LLM fails
         """
-        if len(segment.content) > self.config.max_llm_classification_length:
-            # Fall back to rule-based for long content
-            return RuleBasedClassifier().score(segment)
+        # Simple feature-based fallback
+        if not segment.content:
+            return 0.1
         
-        # Prepare context if provided
+        content = segment.content
+        
+        # Check cache first
+        cache_key = content[:100]  # Use first 100 chars as key
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+            
+        # Extract context for better classification
         context_text = ""
-        if context and len(context) > 0:
-            context_text = "Previous conversation context:\n"
-            context_text += "\n".join([f"- {seg.content[:100]}..." for seg in context[:3]])
+        if context:
+            context_samples = context[-2:]  # Just use the last 2 messages
+            context_text = "\n".join([f"[{c.segment_type}] {c.content[:100]}..." for c in context_samples])
         
-        # Construct prompt
-        prompt = f"""
-        You are an importance classifier for conversational AI. 
-        Rate the importance of the following message on a scale of 0 to 10, where:
-        - 0: Completely unimportant, can be forgotten
-        - 5: Moderately important
-        - 10: Critically important, must be remembered
-        
-        {context_text}
-        
-        Message to classify:
-        {segment.content}
-        
-        Factors to consider:
-        - Contains key information like names, facts, or instructions
-        - Establishes context that will be important later
-        - Asks a question or requests an action
-        - Contains code, formulas, or specific data
-        
-        Return only a single number between 0 and 10.
-        """
-        
+        # Truncate long messages
+        max_length = 500  # Character limit for LLM
+        if len(content) > max_length:
+            content = content[:max_length] + "..."
+            
+        # Prepare prompt
+        prompt = self.base_prompt.format(message=content)
+        if context_text:
+            prompt = prompt.replace("Message:", f"Recent context:\n{context_text}\n\nMessage:")
+            
         try:
+            # Call Ollama API
             response = requests.post(
-                self.ollama_url,
+                f"{self.config.ollama_host}/api/generate",
                 json={
-                    "model": self.model,
+                    "model": self.config.default_model,
                     "prompt": prompt,
+                    "temperature": 0.1,
                     "stream": False
                 },
                 timeout=5
             )
             
             if response.status_code == 200:
-                result = response.json()
-                response_text = result.get("response", "").strip()
+                result = response.json().get("response", "")
                 
-                # Extract the score from the response
-                try:
-                    # First try to parse as a simple number
-                    score = float(response_text)
-                except ValueError:
-                    # If that fails, try to find a number in the text
-                    match = re.search(r'\b(\d+(\.\d+)?)\b', response_text)
-                    if match:
-                        score = float(match.group(1))
-                    else:
-                        # Fallback
-                        score = 5.0
+                # Extract score from response
+                score_match = re.search(r'0\.\d+', result)
+                if score_match:
+                    score = float(score_match.group(0))
+                    # Cache the result
+                    self.cache[cache_key] = score
+                    return score
+                    
+                # If no decimal found, look for integer
+                int_match = re.search(r'\b[0-9]\b', result)
+                if int_match:
+                    score = float(int_match.group(0)) / 10.0
+                    self.cache[cache_key] = score
+                    return score
                 
-                return max(0.0, min(10.0, score))
-            
         except Exception as e:
-            # Fall back to rule-based on error
-            pass
+            logging.error(f"Error in LLM classification: {e}")
         
-        # Fallback to rule-based
-        return RuleBasedClassifier().score(segment)
+        # Fallback importance
+        return 0.5
 
 
 class ImportanceClassifier:
-    """Ensemble importance classifier."""
+    """
+    Classifier that determines the importance of context segments.
+    """
     
     def __init__(self, config: AdaptiveContextConfig):
         """
-        Initialize the importance classifier.
+        Initialize importance classifier.
         
         Args:
             config: AdaptiveContext configuration
         """
         self.config = config
+        
+        # Initialize component classifiers
         self.rule_classifier = RuleBasedClassifier()
-        self.ml_classifier = MLClassifier(config.ml_model_path) if config.use_ml else None
-        self.llm_classifier = LLMClassifier(config) if config.use_llm_classification else None
-    
+        
+        # Initialize ML classifier if enabled
+        self.ml_classifier = None
+        if hasattr(config, 'use_ml') and config.use_ml:
+            model_path = config.ml_model_path if hasattr(config, 'ml_model_path') else None
+            self.ml_classifier = MLClassifier(model_path)
+        
+        # Initialize LLM classifier
+        self.llm_classifier = LLMClassifier(config)
+        
+        # Set up weights for ensemble
+        self.rule_weight = 0.5  # Default weight for rule-based classifier
+        self.ml_weight = 0.3    # Default weight for ML-based classifier
+        self.llm_weight = 0.7   # Default weight for LLM-based classifier
+        
+        # Override with config if available
+        if hasattr(config, 'rule_weight'):
+            self.rule_weight = config.rule_weight
+        if hasattr(config, 'ml_weight'):
+            self.ml_weight = config.ml_weight
+        if hasattr(config, 'llm_weight'):
+            self.llm_weight = config.llm_weight
+            
     def classify(self, segment: ContextSegment, context: List[ContextSegment] = None) -> float:
         """
-        Classify the importance of a segment using available classifiers.
+        Classify the importance of a context segment.
         
         Args:
-            segment: The context segment to classify
-            context: Optional context segments for contextual classification
+            segment: The segment to classify
+            context: Recent conversation context (optional)
             
         Returns:
-            Importance score (0-10)
+            Importance score between 0 and 1
         """
-        # Get scores from available classifiers
-        scores = []
-        weights = []
+        if segment is None:
+            return 0.0
         
-        # Rule-based (always available)
-        rule_score = self.rule_classifier.score(segment)
-        scores.append(rule_score)
-        weights.append(self.config.rule_weight)
+        # Always use rule-based classification
+        rule_score = self.rule_classifier.classify(segment)
+        scores = [rule_score]
+        weights = [self.rule_weight]
         
-        # ML-based (if enabled)
-        if self.ml_classifier:
-            ml_score = self.ml_classifier.score(segment, context)
+        # Use ML classifier if available
+        if self.ml_classifier is not None:
+            ml_score = self.ml_classifier.classify(segment)
             scores.append(ml_score)
-            weights.append(self.config.ml_weight)
-            
-        # LLM-based (if enabled and within budget)
-        if self.llm_classifier and len(segment.content) < self.config.max_llm_classification_length:
-            llm_score = self.llm_classifier.score(segment, context)
-            scores.append(llm_score)
-            weights.append(self.config.llm_weight)
-            
-        # Return weighted average
-        if not scores:
-            return 5.0  # Default neutral importance
-            
-        return sum(s * w for s, w in zip(scores, weights)) / sum(weights) 
+            weights.append(self.ml_weight)
+        
+        # Use LLM classifier for more complex content
+        use_llm = hasattr(self.config, 'use_llm_classification') and self.config.use_llm_classification
+        if use_llm:
+            max_llm_length = getattr(self.config, 'max_llm_classification_length', 250)
+            if len(segment.content) < max_llm_length:
+                llm_score = self.llm_classifier.classify(segment, context)
+                scores.append(llm_score)
+                weights.append(self.llm_weight)
+            else:
+                # For very long content, adjust rule score slightly higher
+                scores[0] = min(rule_score * 1.2, 1.0)
+        
+        # Normalize weights
+        total_weight = sum(weights)
+        weights = [w / total_weight for w in weights]
+        
+        # Calculate weighted average
+        importance = sum(s * w for s, w in zip(scores, weights))
+        
+        # Ensure importance is within valid range
+        importance = max(0.0, min(importance, 1.0))
+        
+        # Store importance on segment
+        segment.importance = importance
+        
+        return importance 

@@ -22,6 +22,7 @@ AdaptiveContext dynamically manages context information, retaining important ele
   - **Hybrid search** combining vector similarity with BM25 keyword scoring
   - **Sparse-dense fusion** merging results from different retrieval methods
   - **Re-ranking** for improved retrieval precision
+  - **GraphRAG** using knowledge graphs for complex multi-hop queries
 - Compatible with all Ollama models (tested with Llama, Mistral, Phi, Gemma variants)
 - Task-aware adaptation for different conversation types
 - Surprise-based retention prioritizes unexpected or important information
@@ -31,6 +32,9 @@ AdaptiveContext dynamically manages context information, retaining important ele
 
 - Python 3.7+
 - [Ollama](https://ollama.com/) with at least one model installed
+- For GraphRAG functionality: 
+  - `networkx` for graph operations
+  - `spacy` with `en_core_web_sm` model for entity extraction
 
 ## Installation
 
@@ -166,6 +170,16 @@ Persists important facts and retrievable context beyond the immediate conversati
    - **Hybrid search**: Combines dense vector similarity with sparse BM25 keyword scoring
    - **Result fusion**: Merges results from different retrieval methods with normalized scores
    - **Re-ranking**: Applies a secondary scoring pass to refine retrieval precision
+   - **GraphRAG**: Builds and queries a knowledge graph for complex multi-hop queries
+
+### Graph Store
+
+Manages a knowledge graph for complex relational queries:
+1. Extracts entities and relationships from text using NER and dependency parsing
+2. Builds a graph database with entities as nodes and relationships as edges
+3. Enables complex multi-hop queries across documents
+4. Provides path finding between entities to answer complex questions
+5. Integrates with the knowledge store for comprehensive information retrieval
 
 ## Configuration Options
 
@@ -174,45 +188,69 @@ AdaptiveContext is highly configurable. Key configuration options include:
 ```python
 config = AdaptiveContextConfig(
     # Memory tier settings
-    active_tier_tokens=2000,     # Maximum tokens in active memory tier
-    working_tier_tokens=4000,    # Maximum tokens in working memory tier
-    archive_tier_tokens=6000,    # Maximum tokens in archive memory tier
+    active_tier_tokens=4096,     # Maximum tokens in active memory tier
+    working_tier_tokens=8192,    # Maximum tokens in working memory tier
+    archive_tier_tokens=16384,   # Maximum tokens in archive memory tier
     
-    # Classification settings
-    use_ml=False,                # Whether to use ML-based importance classifier
-    use_llm_classification=True, # Whether to use LLM for classification
-    rule_weight=0.5,             # Weight for rule-based classifier
-    ml_weight=0.3,               # Weight for ML-based classifier
-    llm_weight=0.7,              # Weight for LLM-based classifier
+    # Importance thresholds
+    working_importance_threshold=0.3,  # Minimum importance for working tier
+    archive_importance_threshold=0.1,  # Minimum importance for archive tier
     
-    # Compression settings
-    compression_threshold=0.8,   # Tier fullness threshold to trigger compression
+    # Token counting method
+    token_counting_method="basic",  # "basic", "tiktoken", "ollama"
+    
+    # Memory compression
+    enable_compression=True,      # Whether to enable compression
+    compression_threshold=0.8,    # Tier fullness threshold to trigger compression
+    compression_target=0.6,       # Target fullness after compression
+    
+    # Classification parameters
+    classifier_model="gpt-3.5-turbo",  # Model for importance classification
+    classifier_temperature=0.1,        # Temperature for classification
+    
+    # Vector embeddings
+    vector_embedding_model="all-MiniLM-L6-v2",  # Model for vector embeddings
     
     # Ollama settings
-    ollama_host='http://localhost:11434',
-    default_model='llama3',      # Default Ollama model to use
+    ollama_host="http://localhost:11434",
+    default_model="gemma3:1b",    # Default Ollama model to use
     
-    # Knowledge retrieval settings
-    vector_embedding_model='all-MiniLM-L6-v2',  # Model for vector embeddings
-    use_vector_search=True,      # Whether to use vector-based semantic search
-    use_bm25_search=True,        # Whether to use BM25 keyword search
-    hybrid_search_alpha=0.7,     # Weight for vector search in hybrid search (0-1)
-    use_reranking=True,          # Whether to use result re-ranking
-    rerank_top_k=20              # Number of candidates to consider for re-ranking
+    # Persistence paths
+    storage_path="~/.adaptive_context",  # Base storage path
+    knowledge_store_path="~/.adaptive_context/knowledge.db",  # Knowledge DB path
+    
+    # Retrieval settings
+    use_vector_embeddings=True,   # Whether to use vector embeddings
+    use_reranking=True,           # Whether to use result re-ranking
+    
+    # GraphRAG configuration
+    use_graph_rag=True,           # Whether to use knowledge graph for retrieval
+    graph_weight=0.3,             # Weight for graph-based results in ranking
+    enable_multi_hop_queries=True,  # Enable complex multi-hop queries
+    max_graph_hops=3              # Maximum path length for graph traversal
 )
 ```
 
 ## How It Works
 
-1. When new messages are added, they're classified for importance (0-10 scale)
+1. When new messages are added, they're classified for importance (0-1 scale)
 2. Messages are added to the active tier initially
 3. As tiers fill up, less important and older messages are moved to lower tiers
 4. Messages moved to lower tiers undergo progressive compression
 5. Very important facts are extracted to the knowledge store for permanent retention
 6. When relevant, knowledge is retrieved using advanced hybrid search techniques and added to the context
+7. For complex queries, GraphRAG builds and traverses a knowledge graph to find relationships between entities
 
 This approach optimizes token usage while maintaining contextual understanding across long conversations.
 
+## Test GraphRAG Functionality
+
+Test the GraphRAG knowledge graph functionality:
+
+```bash
+python graph_rag_test.py
+```
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
