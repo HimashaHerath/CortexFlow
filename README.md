@@ -17,6 +17,7 @@ AdaptiveContext dynamically manages context information, retaining important ele
 - Importance-based information retention using rule-based, ML, and LLM classification
 - Progressive context compression with extractive and abstractive summarization
 - Knowledge store for long-term information persistence
+- **Vector-based knowledge retrieval** for semantic search of stored knowledge
 - Compatible with all Ollama models (tested with Llama, Mistral, Phi, Gemma variants)
 - Task-aware adaptation for different conversation types
 - Surprise-based retention prioritizes unexpected or important information
@@ -117,6 +118,12 @@ Run the Ollama integration test:
 python ollama_test.py
 ```
 
+Test the vector-based knowledge retrieval:
+
+```bash
+python vector_test.py
+```
+
 ## Core Components
 
 ### Memory Manager
@@ -144,6 +151,7 @@ Persists important facts and retrievable context beyond the immediate conversati
 2. Maintains conversation summaries with keyword indexing
 3. Supports explicit "remember" commands
 4. Implements time-based forgetting for outdated information
+5. **Uses vector embeddings** for semantic search and retrieval
 
 ## Configuration Options
 
@@ -168,7 +176,11 @@ config = AdaptiveContextConfig(
     
     # Ollama settings
     ollama_host='http://localhost:11434',
-    default_model='llama3'       # Default Ollama model to use
+    default_model='llama3',      # Default Ollama model to use
+    
+    # Knowledge retrieval settings
+    vector_embedding_model='all-MiniLM-L6-v2',  # Model for vector embeddings
+    use_vector_search=True       # Whether to use vector-based semantic search
 )
 ```
 
@@ -179,7 +191,7 @@ config = AdaptiveContextConfig(
 3. As tiers fill up, less important and older messages are moved to lower tiers
 4. Messages moved to lower tiers undergo progressive compression
 5. Very important facts are extracted to the knowledge store for permanent retention
-6. When relevant, knowledge is retrieved and added to the context
+6. When relevant, knowledge is retrieved using vector similarity search and added to the context
 
 This approach optimizes token usage while maintaining contextual understanding across long conversations.
 

@@ -1,3 +1,6 @@
+import os
+from typing import Optional
+
 class AdaptiveContextConfig:
     """Configuration for the AdaptiveContext system."""
     
@@ -15,7 +18,9 @@ class AdaptiveContextConfig:
                  compression_threshold=0.8,
                  knowledge_store_path=':memory:',
                  ollama_host='http://localhost:11434',
-                 default_model='llama3'):
+                 default_model='llama3',
+                 vector_embedding_model='all-MiniLM-L6-v2',
+                 use_vector_search=True):
         """
         Initialize AdaptiveContext configuration.
         
@@ -34,6 +39,8 @@ class AdaptiveContextConfig:
             knowledge_store_path: Path to knowledge store database
             ollama_host: Ollama API host URL
             default_model: Default Ollama model to use
+            vector_embedding_model: Model to use for vector embeddings
+            use_vector_search: Whether to use vector-based search
         """
         # Memory tier settings
         self.active_tier_tokens = active_tier_tokens
@@ -54,6 +61,8 @@ class AdaptiveContextConfig:
         
         # Knowledge store settings
         self.knowledge_store_path = knowledge_store_path
+        self.vector_embedding_model = vector_embedding_model
+        self.use_vector_search = use_vector_search
         
         # Ollama settings
         self.ollama_host = ollama_host

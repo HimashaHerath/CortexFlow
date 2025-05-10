@@ -6,6 +6,15 @@ import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from sqlitedict import SqliteDict
 from datetime import datetime
+import logging
+
+# Import sentence-transformers for vector embeddings
+try:
+    from sentence_transformers import SentenceTransformer
+    VECTOR_ENABLED = True
+except ImportError:
+    VECTOR_ENABLED = False
+    logging.warning("sentence-transformers not found. Vector-based retrieval will be disabled.")
 
 from adaptive_context.config import AdaptiveContextConfig
 
@@ -31,8 +40,18 @@ class KnowledgeStore:
         self.facts = SqliteDict(self.db_path, tablename='facts', autocommit=True)
         self.summaries = SqliteDict(self.db_path, tablename='summaries', autocommit=True)
         
-        # Simple in-memory vector store
-        # In a production system, this would use FAISS or similar
+        # Initialize embedding model if available
+        self.model = None
+        self.embedding_dimension = 384  # Default for all-MiniLM-L6-v2
+        if VECTOR_ENABLED:
+            try:
+                # Use a small efficient model by default
+                self.model = SentenceTransformer('all-MiniLM-L6-v2')
+                logging.info("Vector embedding model loaded successfully")
+            except Exception as e:
+                logging.error(f"Error loading vector model: {e}")
+        
+        # Vector store for embeddings
         self.vector_store = {}
         
         # Initialize SQLite for structured data
@@ -40,6 +59,8 @@ class KnowledgeStore:
         
         # Trust marker for retrieved knowledge
         self.trust_marker = "[VERIFIED FACT]"
+        
+        logging.info(f"Knowledge store initialized with vector retrieval: {VECTOR_ENABLED}")
     
     def _init_db(self):
         """Initialize the SQLite database with required tables."""
@@ -64,6 +85,14 @@ class KnowledgeStore:
         )
         ''')
         
+        # Add embedding columns if vector-based retrieval is enabled
+        if VECTOR_ENABLED:
+            try:
+                cursor.execute('ALTER TABLE fact_triples ADD COLUMN embedding BLOB')
+            except sqlite3.OperationalError:
+                # Column may already exist
+                pass
+        
         # Create index for faster lookups
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_subject ON fact_triples(subject)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_predicate ON fact_triples(predicate)')
@@ -73,6 +102,49 @@ class KnowledgeStore:
         else:
             conn.commit()
             conn.close()
+    
+    def _generate_embedding(self, text: str) -> Optional[np.ndarray]:
+        """
+        Generate embedding vector for text.
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            Embedding vector or None if embedding fails
+        """
+        if not VECTOR_ENABLED or self.model is None:
+            return None
+            
+        try:
+            # Generate embedding
+            embedding = self.model.encode(text)
+            return embedding
+        except Exception as e:
+            logging.error(f"Error generating embedding: {e}")
+            return None
+    
+    def _vector_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
+        """
+        Calculate cosine similarity between two vectors.
+        
+        Args:
+            vec1: First vector
+            vec2: Second vector
+            
+        Returns:
+            Cosine similarity score (0-1)
+        """
+        if vec1 is None or vec2 is None:
+            return 0.0
+            
+        # Normalize vectors
+        vec1_norm = vec1 / np.linalg.norm(vec1)
+        vec2_norm = vec2 / np.linalg.norm(vec2)
+        
+        # Calculate cosine similarity
+        similarity = np.dot(vec1_norm, vec2_norm)
+        return float(similarity)
     
     def store_fact_triple(self, subject: str, predicate: str, obj: str, 
                           confidence: float = 1.0, source: str = None) -> int:
@@ -97,10 +169,26 @@ class KnowledgeStore:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
         
-        cursor.execute(
-            'INSERT INTO fact_triples (subject, predicate, object, confidence, timestamp, source) VALUES (?, ?, ?, ?, ?, ?)',
-            (subject, predicate, obj, confidence, time.time(), source)
-        )
+        # Generate embedding for the fact if possible
+        fact_text = f"{subject} {predicate} {obj}"
+        embedding = self._generate_embedding(fact_text)
+        embedding_blob = None
+        
+        if embedding is not None:
+            # Convert embedding to binary blob
+            embedding_blob = embedding.tobytes()
+            
+            # Store in vector store for in-memory search
+            cursor.execute(
+                'INSERT INTO fact_triples (subject, predicate, object, confidence, timestamp, source, embedding) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (subject, predicate, obj, confidence, time.time(), source, embedding_blob)
+            )
+        else:
+            # Store without embedding
+            cursor.execute(
+                'INSERT INTO fact_triples (subject, predicate, object, confidence, timestamp, source) VALUES (?, ?, ?, ?, ?, ?)',
+                (subject, predicate, obj, confidence, time.time(), source)
+            )
         
         fact_id = cursor.lastrowid
         
@@ -267,24 +355,30 @@ class KnowledgeStore:
         # Generate a unique ID based on timestamp
         summary_id = f"summary_{int(timestamp)}"
         
+        # Generate embedding for the summary
+        embedding = self._generate_embedding(summary)
+        
         # Store the summary with metadata
         self.summaries[summary_id] = {
             'text': summary,
             'keywords': keywords,
             'timestamp': timestamp,
-            'datetime': datetime.fromtimestamp(timestamp).isoformat()
+            'datetime': datetime.fromtimestamp(timestamp).isoformat(),
+            'embedding': embedding.tolist() if embedding is not None else None
         }
         
         # Add to vector store for retrieval
-        # In a real system, this would generate embeddings using a model
-        # For simplicity, we'll use keyword matching
-        self.vector_store[summary_id] = ' '.join(keywords)
+        if embedding is not None:
+            self.vector_store[summary_id] = embedding
+        else:
+            # Fall back to keyword storage if embedding fails
+            self.vector_store[summary_id] = ' '.join(keywords)
         
         return summary_id
     
     def get_relevant_knowledge(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """
-        Retrieve knowledge relevant to the query.
+        Retrieve knowledge relevant to the query using vector similarity.
         
         Args:
             query: The search query
@@ -295,60 +389,190 @@ class KnowledgeStore:
         """
         results = []
         
-        # First check fact triples
-        query_terms = query.lower().split()
+        # Generate embedding for the query
+        query_embedding = self._generate_embedding(query)
         
-        # Search for facts containing query terms
-        if self.conn is not None:
-            # Using in-memory database
-            conn = self.conn
-        else:
-            # Using file-based database
-            conn = sqlite3.connect(self.db_path)
-        
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        try:
-            # Build a query that searches across all fields
-            sql_query = '''
-            SELECT * FROM fact_triples 
-            WHERE subject LIKE ? OR predicate LIKE ? OR object LIKE ?
-            ORDER BY confidence DESC
-            LIMIT ?
-            '''
+        # First check fact triples using vector search if available
+        if VECTOR_ENABLED and query_embedding is not None:
+            if self.conn is not None:
+                # Using in-memory database
+                conn = self.conn
+            else:
+                # Using file-based database
+                conn = sqlite3.connect(self.db_path)
             
-            # Improve search by expanding query with synonyms and related terms
-            expanded_query = self._expand_query(query)
-            for term in expanded_query:
-                param = f"%{term}%"
-                cursor.execute(sql_query, (param, param, param, max_results))
-                fact_results = [dict(row) for row in cursor.fetchall()]
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            try:
+                # Get all facts with embeddings
+                cursor.execute('SELECT * FROM fact_triples WHERE embedding IS NOT NULL')
+                facts_with_embeddings = [dict(row) for row in cursor.fetchall()]
                 
-                # Add facts to results with trust marker
-                for fact in fact_results:
+                # Calculate similarity and sort
+                similarity_scores = []
+                for fact in facts_with_embeddings:
+                    embedding_bytes = fact.get('embedding')
+                    if embedding_bytes:
+                        # Convert binary blob back to numpy array
+                        fact_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
+                        # Reshape if needed
+                        if len(fact_embedding) != self.embedding_dimension:
+                            fact_embedding = fact_embedding[:self.embedding_dimension]
+                        
+                        # Calculate similarity
+                        similarity = self._vector_similarity(query_embedding, fact_embedding)
+                        similarity_scores.append((fact, similarity))
+                
+                # Sort by similarity (descending)
+                similarity_scores.sort(key=lambda x: x[1], reverse=True)
+                
+                # Add top results
+                for fact, similarity in similarity_scores[:max_results]:
                     results.append({
                         'type': 'fact',
                         'content': f"{self.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}",
                         'confidence': fact['confidence'],
                         'timestamp': fact['timestamp'],
-                        'source': fact['source'] if fact['source'] else "memory"
+                        'source': fact['source'] if fact['source'] else "memory",
+                        'similarity': similarity
                     })
                 
-                if len(results) >= max_results:
-                    break
-        except sqlite3.OperationalError as e:
-            # Table might not exist yet or other SQLite error
-            print(f"SQLite error in get_relevant_knowledge: {e}")
+            except sqlite3.OperationalError as e:
+                # Table might not exist yet or other SQLite error
+                logging.error(f"SQLite error in vector search: {e}")
+                # Fall back to keyword search below
+                
+            # If we didn't find enough results with vector search, fall back to keyword search
+            if len(results) < max_results:
+                # Fall back to keyword search for remaining results
+                query_terms = query.lower().split()
+                
+                # Build a query that searches across all fields
+                sql_query = '''
+                SELECT * FROM fact_triples 
+                WHERE subject LIKE ? OR predicate LIKE ? OR object LIKE ?
+                ORDER BY confidence DESC
+                LIMIT ?
+                '''
+                
+                # Improve search by expanding query with synonyms and related terms
+                expanded_query = self._expand_query(query)
+                for term in expanded_query:
+                    param = f"%{term}%"
+                    cursor.execute(sql_query, (param, param, param, max_results - len(results)))
+                    fact_results = [dict(row) for row in cursor.fetchall()]
+                    
+                    # Add facts to results with trust marker
+                    for fact in fact_results:
+                        # Skip if we already have this fact from vector search
+                        if any(r['content'] == f"{self.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}" for r in results):
+                            continue
+                            
+                        results.append({
+                            'type': 'fact',
+                            'content': f"{self.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}",
+                            'confidence': fact['confidence'],
+                            'timestamp': fact['timestamp'],
+                            'source': fact['source'] if fact['source'] else "memory"
+                        })
+                    
+                    if len(results) >= max_results:
+                        break
+        else:
+            # If vector search isn't available, fall back to keyword search
+            if self.conn is not None:
+                # Using in-memory database
+                conn = self.conn
+            else:
+                # Using file-based database
+                conn = sqlite3.connect(self.db_path)
+            
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            try:
+                query_terms = query.lower().split()
+                
+                # Build a query that searches across all fields
+                sql_query = '''
+                SELECT * FROM fact_triples 
+                WHERE subject LIKE ? OR predicate LIKE ? OR object LIKE ?
+                ORDER BY confidence DESC
+                LIMIT ?
+                '''
+                
+                # Improve search by expanding query with synonyms and related terms
+                expanded_query = self._expand_query(query)
+                for term in expanded_query:
+                    param = f"%{term}%"
+                    cursor.execute(sql_query, (param, param, param, max_results))
+                    fact_results = [dict(row) for row in cursor.fetchall()]
+                    
+                    # Add facts to results with trust marker
+                    for fact in fact_results:
+                        results.append({
+                            'type': 'fact',
+                            'content': f"{self.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}",
+                            'confidence': fact['confidence'],
+                            'timestamp': fact['timestamp'],
+                            'source': fact['source'] if fact['source'] else "memory"
+                        })
+                    
+                    if len(results) >= max_results:
+                        break
+            except sqlite3.OperationalError as e:
+                # Table might not exist yet or other SQLite error
+                logging.error(f"SQLite error in keyword search: {e}")
         
         if self.conn is None:
             conn.close()
         
-        # Search conversation summaries
-        # In a real system, this would use vector similarity
-        if len(results) < max_results:
+        # Search conversation summaries with vector similarity
+        if len(results) < max_results and VECTOR_ENABLED and query_embedding is not None:
             summary_scores = []
+            
+            # Check all summaries with vector embeddings
+            for summary_id, summary_data in self.summaries.items():
+                summary_embedding = None
+                
+                # Get embedding from vector store or summary data
+                if summary_id in self.vector_store and isinstance(self.vector_store[summary_id], np.ndarray):
+                    summary_embedding = self.vector_store[summary_id]
+                elif summary_data.get('embedding') is not None:
+                    if isinstance(summary_data['embedding'], list):
+                        # Convert list to numpy array
+                        summary_embedding = np.array(summary_data['embedding'])
+                
+                # Calculate similarity if we have an embedding
+                if summary_embedding is not None:
+                    similarity = self._vector_similarity(query_embedding, summary_embedding)
+                    summary_scores.append((summary_id, similarity))
+            
+            # Sort by similarity
+            summary_scores.sort(key=lambda x: x[1], reverse=True)
+            
+            # Add top summaries
+            for summary_id, score in summary_scores[:max_results - len(results)]:
+                if summary_id in self.summaries:
+                    summary = self.summaries[summary_id]
+                    results.append({
+                        'type': 'summary',
+                        'content': f"From previous conversation: {summary['text']}",
+                        'keywords': summary['keywords'],
+                        'timestamp': summary['timestamp'],
+                        'similarity': score
+                    })
+        elif len(results) < max_results:
+            # Fall back to keyword matching for summaries
+            summary_scores = []
+            query_terms = query.lower().split()
+            
             for summary_id, keywords in self.vector_store.items():
+                # Skip if not a string (might be an embedding)
+                if not isinstance(keywords, str):
+                    continue
+                    
                 # Improved keyword matching with partial matches
                 score = 0
                 for term in query_terms:
@@ -377,9 +601,11 @@ class KnowledgeStore:
                         'score': score
                     })
         
-        # Sort all results by relevance (confidence or score)
-        results.sort(key=lambda x: x.get('confidence', 0) if x['type'] == 'fact' else x.get('score', 0), 
-                     reverse=True)
+        # Sort all results by relevance (confidence/similarity or score)
+        results.sort(key=lambda x: (
+            x.get('similarity', 0) if VECTOR_ENABLED else 0,
+            x.get('confidence', 0) if x['type'] == 'fact' else x.get('score', 0)
+        ), reverse=True)
         
         return results[:max_results]
     
@@ -513,7 +739,7 @@ class KnowledgeStore:
             if self.conn is not None:
                 self.conn.close()
         except Exception as e:
-            print(f"Error closing knowledge store: {e}")
+            logging.error(f"Error closing knowledge store: {e}")
     
     def __del__(self):
         """Clean up resources on deletion."""
