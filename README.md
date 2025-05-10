@@ -197,6 +197,40 @@ Enables collaborative multi-agent reasoning over complex queries:
 4. Sequential processing allows for complex reasoning chains
 5. Specialized prompt templates guide each agent's focus
 
+Each agent in the chain serves a specific role:
+- **Explorer Agent**: Concentrates on broad exploration without answering the query directly, retrieving diverse relevant knowledge using both vector and graph-based approaches
+- **Analyzer Agent**: Identifies relationships between discovered facts, finding connections and patterns relevant to the query
+- **Synthesizer Agent**: Combines insights from previous agents to generate a comprehensive final answer that integrates all discovered information
+
+This multi-agent approach follows research from Google's "Chain of Agents: Large Language Models Collaborating on Long Context Tasks" (2025) and is particularly effective for:
+- Complex queries requiring multi-hop reasoning
+- Questions that benefit from structured exploration before answering
+- Queries where connecting multiple pieces of information is necessary
+
+To use the Chain of Agents framework:
+```python
+# Enable Chain of Agents in your configuration
+config = AdaptiveContextConfig(
+    use_chain_of_agents=True,
+    chain_complexity_threshold=5,  # Only use for reasonably complex queries
+    # ... other config options
+)
+
+# Create the manager with this configuration
+manager = AdaptiveContextManager(config)
+
+# Regular usage - CoA is automatically engaged for complex queries
+manager.add_message("user", "What connection exists between X and Y?")
+response = manager.generate_response()
+```
+
+The framework automatically determines when to engage the Chain of Agents based on query complexity. For testing and debugging, see the `coa_test.py` script:
+```bash
+python coa_test.py --model llama3.2 --verbose
+```
+
+For planned improvements to the Chain of Agents framework, see [TODO.md](TODO.md).
+
 ## Configuration Options
 
 AdaptiveContext is highly configurable. Key configuration options include:
