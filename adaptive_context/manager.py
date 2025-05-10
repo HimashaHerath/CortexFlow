@@ -2,7 +2,8 @@ import time
 import json
 import logging
 import requests
-from typing import List, Dict, Any, Optional, Tuple
+import traceback
+from typing import List, Dict, Any, Optional, Union
 
 from adaptive_context.config import AdaptiveContextConfig
 from adaptive_context.memory import (
@@ -10,9 +11,10 @@ from adaptive_context.memory import (
     MemoryTier, 
     ActiveTier, 
     WorkingTier, 
-    ArchiveTier
+    ArchiveTier,
+    ConversationMemory
 )
-from adaptive_context.classifier import ImportanceClassifier
+from adaptive_context.classifier import ImportanceClassifier, ContentClassifier
 from adaptive_context.compressor import ContextCompressor
 from adaptive_context.knowledge import KnowledgeStore
 
@@ -23,566 +25,219 @@ logging.basicConfig(
 )
 logger = logging.getLogger('adaptive_context')
 
+def configure_logging(verbose: bool = False):
+    """Configure logging for the adaptive_context module."""
+    level = logging.DEBUG if verbose else logging.INFO
+    
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+
 class AdaptiveContextManager:
     """
-    Main orchestrator for the AdaptiveContext system that manages the memory tiers,
-    importance classification, context compression, and knowledge store.
+    Main manager class for AdaptiveContext system.
+    Coordinates between components for memory, knowledge, and external integrations.
     """
     
-    def __init__(self, config: AdaptiveContextConfig = None):
+    def __init__(self, config=None):
         """
-        Initialize the adaptive context manager.
+        Initialize the AdaptiveContextManager with provided configuration.
         
         Args:
-            config: Configuration object (optional, uses defaults if not provided)
+            config: Configuration for the system, if None, default config is used
         """
-        self.config = config or AdaptiveContextConfig()
-        logger.info(f"Initializing AdaptiveContextManager with {self.config.active_tier_tokens} active tokens, "
-                   f"{self.config.working_tier_tokens} working tokens, "
-                   f"{self.config.archive_tier_tokens} archive tokens")
+        from .config import AdaptiveContextConfig
         
-        # Initialize memory tiers
-        self.active_tier = ActiveTier(self.config.active_tier_tokens)
-        self.working_tier = WorkingTier(self.config.working_tier_tokens)
-        self.archive_tier = ArchiveTier(self.config.archive_tier_tokens)
+        # Initialize config if not provided
+        self.config = config if config is not None else AdaptiveContextConfig()
         
-        # Initialize components
-        self.importance_classifier = ImportanceClassifier(self.config)
-        self.compressor = ContextCompressor(self.config)
-        self.knowledge_store = KnowledgeStore(self.config)
+        # Set up logging
+        verbose = self.config.verbose_logging if hasattr(self.config, "verbose_logging") else False
+        configure_logging(verbose)
         
-        # Track token counting and state
-        self.total_tokens = 0
-        self.token_counting_method = "basic"  # Could be "basic", "ollama", "tiktoken"
-        self.session_start_time = time.time()
+        # Log initialization
+        logger.info(f"Initializing AdaptiveContextManager with {self.config.active_token_limit} active tokens, "
+                   f"{self.config.working_token_limit} working tokens, {self.config.archive_token_limit} archive tokens")
         
-        # Maximum tokens for a single segment to handle message chunking
-        self.max_segment_tokens = int(self.config.active_tier_tokens * 0.7)  # 70% of active tier
-        
-        logger.info("AdaptiveContextManager initialized successfully")
-    
-    def _count_tokens(self, text: str) -> int:
-        """
-        Count tokens in text using the selected method.
-        
-        Args:
-            text: Input text
+        try:
+            # Initialize components
+            self.knowledge_store = KnowledgeStore(self.config)
+            self.memory = ConversationMemory(self.config)
             
-        Returns:
-            Estimated token count
-        """
-        if self.token_counting_method == "basic":
-            # Simple approximation: words + punctuation
-            return len(text.split()) + text.count(".") + text.count(",") + text.count("!") + text.count("?")
-        
-        elif self.token_counting_method == "ollama":
-            # Use Ollama API to count tokens (more accurate but higher latency)
-            try:
-                response = requests.post(
-                    f"{self.config.ollama_host}/api/tokenize",
-                    json={"model": self.config.default_model, "text": text},
-                    timeout=2
-                )
-                if response.status_code == 200:
-                    return len(response.json().get("tokens", []))
-            except Exception as e:
-                logger.warning(f"Error counting tokens with Ollama: {e}")
-                # Fall back to basic counting on error
-        
-        # Default basic counting
-        return len(text.split())
-    
-    def _chunk_large_message(self, content: str, segment_type: str, metadata: Dict[str, Any]) -> List[ContextSegment]:
-        """
-        Chunk large messages into smaller segments to fit in memory tiers.
-        
-        Args:
-            content: Message content
-            segment_type: Type of message
-            metadata: Metadata for the message
-            
-        Returns:
-            List of context segments
-        """
-        # If content is small enough, return as a single segment
-        token_count = self._count_tokens(content)
-        if token_count <= self.max_segment_tokens:
-            segment = ContextSegment(
-                content=content,
-                importance=0.0,  # Will be set by classifier
-                timestamp=time.time(),
-                token_count=token_count,
-                segment_type=segment_type,
-                metadata=metadata or {}
-            )
-            return [segment]
-        
-        # Otherwise, split the content
-        chunks = []
-        sentences = content.split(". ")
-        current_chunk = ""
-        current_tokens = 0
-        
-        for i, sentence in enumerate(sentences):
-            # Add period back except for the last sentence
-            if i < len(sentences) - 1:
-                sentence += "."
-            
-            sentence_tokens = self._count_tokens(sentence)
-            
-            # If a single sentence is too large, split by spaces
-            if sentence_tokens > self.max_segment_tokens:
-                # Handle this large sentence separately
-                if current_chunk:
-                    # Store the current accumulated chunk
-                    chunk_tokens = self._count_tokens(current_chunk)
-                    chunk_segment = ContextSegment(
-                        content=current_chunk,
-                        importance=0.0,  # Will be set by classifier
-                        timestamp=time.time(),
-                        token_count=chunk_tokens,
-                        segment_type=segment_type,
-                        metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
-                    )
-                    chunks.append(chunk_segment)
-                    current_chunk = ""
-                    current_tokens = 0
-                
-                # Split the long sentence
-                words = sentence.split(" ")
-                sub_chunk = ""
-                sub_tokens = 0
-                
-                for word in words:
-                    word_tokens = self._count_tokens(word + " ")
-                    if sub_tokens + word_tokens > self.max_segment_tokens:
-                        if sub_chunk:
-                            sub_segment = ContextSegment(
-                                content=sub_chunk,
-                                importance=0.0,  # Will be set by classifier
-                                timestamp=time.time(),
-                                token_count=sub_tokens,
-                                segment_type=segment_type,
-                                metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
-                            )
-                            chunks.append(sub_segment)
-                        sub_chunk = word + " "
-                        sub_tokens = word_tokens
-                    else:
-                        sub_chunk += word + " "
-                        sub_tokens += word_tokens
-                
-                # Add the remaining sub-chunk
-                if sub_chunk:
-                    sub_segment = ContextSegment(
-                        content=sub_chunk,
-                        importance=0.0,  # Will be set by classifier
-                        timestamp=time.time(),
-                        token_count=sub_tokens,
-                        segment_type=segment_type,
-                        metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
-                    )
-                    chunks.append(sub_segment)
-            
-            # If adding this sentence would exceed the limit
-            elif current_tokens + sentence_tokens > self.max_segment_tokens:
-                # Store the current chunk
-                chunk_segment = ContextSegment(
-                    content=current_chunk,
-                    importance=0.0,  # Will be set by classifier
-                    timestamp=time.time(),
-                    token_count=current_tokens,
-                    segment_type=segment_type,
-                    metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
-                )
-                chunks.append(chunk_segment)
-                
-                # Start a new chunk with this sentence
-                current_chunk = sentence + " "
-                current_tokens = sentence_tokens
+            # Initialize content classifier if enabled
+            if hasattr(self.config, "use_ml_classifier") and self.config.use_ml_classifier:
+                self.classifier = ContentClassifier(self.config)
             else:
-                # Add sentence to the current chunk
-                current_chunk += sentence + " "
-                current_tokens += sentence_tokens
-        
-        # Add the last chunk if there's anything left
-        if current_chunk:
-            chunk_segment = ContextSegment(
-                content=current_chunk,
-                importance=0.0,  # Will be set by classifier
-                timestamp=time.time(),
-                token_count=current_tokens,
-                segment_type=segment_type,
-                metadata={**metadata} if metadata else {"chunked": True, "part": len(chunks) + 1}
-            )
-            chunks.append(chunk_segment)
-        
-        return chunks
+                self.classifier = None
+                
+            logger.info("AdaptiveContextManager initialized")
+            
+        except Exception as e:
+            logger.error(f"Error initializing AdaptiveContextManager: {e}")
+            logger.error(traceback.format_exc())
+            raise
     
-    def add_message(self, content: str, segment_type: str = "user", metadata: Dict[str, Any] = None) -> bool:
+    def add_message(self, role: str, content: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Add a new message to the context.
+        Add a message to the conversation.
         
         Args:
+            role: Message role (e.g., user, assistant, system)
             content: Message content
-            segment_type: Type of message ('user', 'assistant', 'system', etc.)
             metadata: Optional metadata for the message
             
         Returns:
-            True if message was added successfully
+            Message object that was added
         """
-        if not content:
-            return False
-            
-        # Handle large messages by chunking
-        segments = self._chunk_large_message(content, segment_type, metadata)
+        message = self.memory.add_message(role, content, metadata)
         
-        # Track if all segments were added successfully
-        all_added = True
-        added_count = 0
-        
-        for segment in segments:
-            # Get current context for importance classification
-            current_context = self._get_recent_context()
-            
-            # Classify importance
-            importance = self.importance_classifier.classify(segment, current_context)
-            
-            # Boost importance for certain message types
-            if segment_type == "system":
-                importance = min(10.0, importance * 1.2)  # System messages are more important
-            elif segment_type == "user":
-                importance = min(10.0, importance * 1.1)  # User messages slightly more important
-            
-            segment.importance = importance
-            
-            logger.info(f"Adding {segment_type} message with {segment.token_count} tokens and importance {importance:.2f}")
-            
-            # Try to add to active tier first
-            if self.active_tier.add_segment(segment):
-                self.total_tokens += segment.token_count
-                added_count += 1
-                logger.debug(f"Added to active tier, now at {self.active_tier.current_token_count}/{self.active_tier.max_tokens} tokens")
+        # Perform classification only for user messages
+        if role == "user" and self.classifier is not None:
+            try:
+                # Classify content
+                result = self.classifier.classify(content)
+                message["classification"] = result
+                logger.debug(f"Message classified as: {result}")
+            except Exception as e:
+                logger.error(f"Error classifying message: {e}")
                 
-                # Check if we need to manage tiers after adding
-                if self.active_tier.fullness_ratio > self.config.compression_threshold:
-                    logger.info(f"Active tier exceeds threshold ({self.active_tier.fullness_ratio:.2f}), managing tiers")
-                    self._manage_tiers()
-                    
-            else:
-                # If active tier is full, we need to make room
-                logger.info("Active tier full, making room")
-                self._manage_tiers()
-                
-                # Try again after managing tiers
-                if self.active_tier.add_segment(segment):
-                    self.total_tokens += segment.token_count
-                    added_count += 1
-                else:
-                    # If still can't add, segment is too large
-                    logger.warning(f"Message too large ({segment.token_count} tokens) to add to context")
-                    all_added = False
-        
-        return added_count > 0  # Success if at least one segment was added
+        return message
     
-    def _manage_tiers(self):
+    def get_conversation_context(self, max_tokens: int = None) -> Dict[str, Any]:
         """
-        Manage memory tiers to maintain efficient context window usage.
-        This is the core of the adaptive context management algorithm.
-        """
-        # Step 1: Move less important items from active to working tier
-        if self.active_tier.fullness_ratio > self.config.compression_threshold:
-            logger.info("Moving less important segments from active to working tier")
-            
-            # Find less important segments
-            active_segments = self.active_tier.segments.copy()
-            
-            # Sort by importance and age (less important and older first)
-            # Give priority to non-user/system segments for moving down
-            active_segments.sort(key=lambda s: (
-                2.0 if s.segment_type in ["user", "system"] else 1.0,  # User and system segments stay longer
-                s.importance,
-                -s.age
-            ))
-            
-            # Move segments until below threshold or working tier is full
-            segments_to_move = []
-            tokens_to_move = 0
-            target_tokens = int(self.active_tier.current_token_count * 0.7)  # Target 70% fullness
-            
-            for segment in active_segments:
-                if (self.active_tier.current_token_count - tokens_to_move > target_tokens and 
-                    self.working_tier.current_token_count + segment.token_count <= self.working_tier.max_tokens):
-                    segments_to_move.append(segment)
-                    tokens_to_move += segment.token_count
-                    
-                if self.active_tier.current_token_count - tokens_to_move <= target_tokens:
-                    break
-            
-            # Move identified segments
-            for segment in segments_to_move:
-                index = self.active_tier.segments.index(segment)
-                removed = self.active_tier.remove_segment(index)
-                if removed:
-                    self.working_tier.add_segment(removed)
-                    logger.debug(f"Moved segment with importance {removed.importance:.2f} to working tier")
-        
-        # Step 2: Compress working tier if it's getting full
-        if self.working_tier.fullness_ratio > self.config.compression_threshold:
-            logger.info("Compressing working tier segments")
-            
-            # Get working segments
-            working_segments = self.working_tier.segments.copy()
-            
-            # Calculate target token count (80% of capacity)
-            target_tokens = int(self.working_tier.max_tokens * 0.8)
-            
-            # Compress segments to meet target
-            compressed_segments = self.compressor.progressive_compress(
-                working_segments, target_tokens
-            )
-            
-            # Clear and refill working tier with compressed segments
-            self.working_tier = WorkingTier(self.config.working_tier_tokens)
-            for segment in compressed_segments:
-                self.working_tier.add_segment(segment)
-                
-            logger.debug(f"Working tier compressed to {self.working_tier.current_token_count}/{self.working_tier.max_tokens} tokens")
-        
-        # Step 3: Move least important items from working to archive tier
-        if (self.working_tier.fullness_ratio > self.config.compression_threshold and 
-            self.archive_tier.current_token_count < self.archive_tier.max_tokens):
-            logger.info("Moving segments from working to archive tier")
-            
-            # Find less important segments
-            working_segments = self.working_tier.segments.copy()
-            
-            # Sort by importance and age
-            working_segments.sort(key=lambda s: (s.importance, -s.age))
-            
-            # Calculate how many tokens to move
-            target_working_tokens = int(self.working_tier.max_tokens * 0.7)  # Target 70% fullness
-            tokens_to_move = max(0, self.working_tier.current_token_count - target_working_tokens)
-            available_archive_tokens = self.archive_tier.max_tokens - self.archive_tier.current_token_count
-            tokens_to_move = min(tokens_to_move, available_archive_tokens)
-            
-            # Move segments
-            moved_tokens = 0
-            for segment in working_segments:
-                if moved_tokens >= tokens_to_move:
-                    break
-                
-                # Compress before moving to archive
-                archive_ratio = 0.5  # More aggressive compression for archive
-                compressed = self.compressor.compress_segment(segment, archive_ratio)
-                
-                # Remove from working tier
-                index = self.working_tier.segments.index(segment)
-                self.working_tier.remove_segment(index)
-                
-                # Add to archive tier
-                self.archive_tier.add_segment(compressed)
-                moved_tokens += segment.token_count
-                logger.debug(f"Moved and compressed segment with importance {segment.importance:.2f} to archive tier")
-        
-        # Step 4: Extract facts for knowledge store from archive tier
-        if self.archive_tier.fullness_ratio > 0.9:
-            logger.info("Extracting facts from archive tier to knowledge store")
-            
-            # Get oldest and least important segments
-            archive_segments = self.archive_tier.segments.copy()
-            archive_segments.sort(key=lambda s: (s.importance, -s.age))
-            
-            # Extract facts from oldest 20% of segments
-            segments_to_process = archive_segments[:max(1, len(archive_segments) // 5)]
-            
-            fact_count = 0
-            for segment in segments_to_process:
-                # Only process segments older than 1 hour
-                if segment.age < 3600:
-                    continue
-                
-                # Extract facts
-                facts = self.knowledge_store.extract_facts_from_text(segment.content)
-                
-                # Store in knowledge store with confidence based on importance
-                confidence = min(0.8, segment.importance / 10)
-                for subject, predicate, obj in facts:
-                    self.knowledge_store.store_fact_triple(
-                        subject=subject,
-                        predicate=predicate,
-                        obj=obj,
-                        confidence=confidence,
-                        source=f"archive_segment_{segment.timestamp}"
-                    )
-                    fact_count += 1
-                
-                # Remove processed segment if we've extracted facts
-                if facts:
-                    index = self.archive_tier.segments.index(segment)
-                    self.archive_tier.remove_segment(index)
-                    logger.debug(f"Removed segment from archive after extracting {len(facts)} facts")
-            
-            logger.info(f"Extracted {fact_count} facts from archive tier")
-            
-            # If we still need more space, remove oldest segments
-            if self.archive_tier.fullness_ratio > 0.9:
-                # Remove oldest 10%
-                archive_segments = sorted(self.archive_tier.segments, key=lambda s: s.timestamp)
-                segments_to_remove = archive_segments[:max(1, len(archive_segments) // 10)]
-                
-                for segment in segments_to_remove:
-                    index = self.archive_tier.segments.index(segment)
-                    self.archive_tier.remove_segment(index)
-                    
-                logger.info(f"Removed {len(segments_to_remove)} oldest segments from archive tier")
-    
-    def _get_recent_context(self, max_segments: int = 5) -> List[ContextSegment]:
-        """
-        Get recent context segments for use in classification.
+        Get the full conversation context for generating a response.
         
         Args:
-            max_segments: Maximum segments to return
+            max_tokens: Maximum tokens for the context
             
         Returns:
-            List of recent segments
+            Context with messages and knowledge
         """
-        all_segments = self.active_tier.segments.copy()
-        all_segments.sort(key=lambda s: s.timestamp, reverse=True)
-        return all_segments[:max_segments]
-    
-    def get_full_context(self) -> str:
-        """
-        Get the full context across all tiers for sending to the LLM.
-        
-        Returns:
-            Concatenated context text
-        """
-        # Get content from each tier
-        active_content = self.active_tier.get_content()
-        working_content = self.working_tier.get_content()
-        archive_content = self.archive_tier.get_content()
-        
-        # Assemble with tier markers
-        full_context = active_content
-        
-        if working_content:
-            full_context += "\n\n[Working Memory]:\n" + working_content
-            
-        if archive_content:
-            full_context += "\n\n[Long-term Memory]:\n" + archive_content
-        
-        # Add relevant knowledge from knowledge store if available
-        if active_content:
-            # Use recent user queries to find relevant knowledge
-            recent_segments = [s for s in self.active_tier.segments if s.segment_type == "user"]
-            if recent_segments:
-                recent_query = recent_segments[0].content
-                relevant_knowledge = self.knowledge_store.get_relevant_knowledge(recent_query, max_results=3)
-                
-                if relevant_knowledge:
-                    knowledge_text = "\n\n[TRUSTED MEMORY - AI MUST USE THIS INFORMATION AS FACTUAL]:\n"
-                    for item in relevant_knowledge:
-                        knowledge_text += f"- {item['content']}\n"
-                    
-                    # Place trusted knowledge near the beginning for higher importance
-                    full_context = knowledge_text + "\n" + full_context
-        
-        # Add system guidance for handling memory
-        memory_guidance = (
-            "\n\n[SYSTEM REMINDER: Any information marked with [VERIFIED FACT] is confirmed true information "
-            "from persistent memory that you should treat as completely factual. "
-            "Use it confidently in your responses without hesitation or disclaimers.]\n"
-        )
-        full_context = memory_guidance + full_context
-        
-        return full_context
-    
-    def flush(self):
-        """Reset all memory tiers for a new conversation."""
-        logger.info("Flushing all memory tiers")
-        
-        # Summarize current conversation before flushing
-        if self.active_tier.segments:
-            active_content = self.active_tier.get_content()
-            
-            # Extract keywords from content
-            words = active_content.lower().split()
-            keywords = list(set(word for word in words if len(word) > 3))[:20]
-            
-            # Store summary in knowledge store
-            self.knowledge_store.store_conversation_summary(
-                summary=f"Conversation from {time.strftime('%Y-%m-%d %H:%M', time.localtime(self.session_start_time))}: {active_content[:200]}...",
-                keywords=keywords
-            )
-            logger.info(f"Stored conversation summary with {len(keywords)} keywords")
-        
-        # Reset tiers
-        self.active_tier = ActiveTier(self.config.active_tier_tokens)
-        self.working_tier = WorkingTier(self.config.working_tier_tokens)
-        self.archive_tier = ArchiveTier(self.config.archive_tier_tokens)
-        
-        # Reset session time
-        self.session_start_time = time.time()
-        self.total_tokens = 0
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """
-        Get statistics about the current context state.
-        
-        Returns:
-            Dictionary of statistics
-        """
-        return {
-            "total_tokens": self.total_tokens,
-            "active_tier": {
-                "tokens": self.active_tier.current_token_count,
-                "capacity": self.active_tier.max_tokens,
-                "fullness": self.active_tier.fullness_ratio,
-                "segments": len(self.active_tier.segments)
-            },
-            "working_tier": {
-                "tokens": self.working_tier.current_token_count,
-                "capacity": self.working_tier.max_tokens,
-                "fullness": self.working_tier.fullness_ratio,
-                "segments": len(self.working_tier.segments)
-            },
-            "archive_tier": {
-                "tokens": self.archive_tier.current_token_count,
-                "capacity": self.archive_tier.max_tokens,
-                "fullness": self.archive_tier.fullness_ratio,
-                "segments": len(self.archive_tier.segments)
-            },
-            "session_duration": time.time() - self.session_start_time
+        context = {
+            "messages": self.memory.get_context_messages(),
+            "knowledge": []
         }
+        
+        # Get the most recent user message for knowledge retrieval
+        user_messages = self.memory.get_messages_by_role("user")
+        if user_messages:
+            last_user_message = user_messages[-1]["content"]
+            
+            # Retrieve relevant knowledge for the user's message
+            knowledge_items = self.knowledge_store.get_relevant_knowledge(last_user_message)
+            context["knowledge"] = knowledge_items
+        
+        return context
     
-    def explicitly_remember(self, text: str) -> bool:
+    def generate_response(self, prompt: str = None, model: str = None) -> str:
         """
-        Explicitly store something in the knowledge base.
+        Generate a response using the conversation context.
+        
+        Args:
+            prompt: Optional prompt to use instead of the conversation context
+            model: Model to use for generation
+            
+        Returns:
+            Generated response
+        """
+        try:
+            import requests
+            
+            # Use model from config if not specified
+            if model is None:
+                model = self.config.default_model
+                
+            # Get conversation context if no prompt provided
+            if prompt is None:
+                context = self.get_conversation_context()
+                
+                # Extract messages
+                messages = context["messages"]
+                
+                # Add knowledge as system message if available
+                knowledge = context.get("knowledge", [])
+                if knowledge:
+                    knowledge_text = "\n".join(item["text"] for item in knowledge)
+                    
+                    # Add knowledge context as a system message
+                    messages = [{"role": "system", "content": f"Use this knowledge to answer the question:\n{knowledge_text}"}] + messages
+                
+                # Format as prompt if needed
+                if not messages:
+                    prompt = "Hello! How can I assist you today?"
+            else:
+                messages = [{"role": "user", "content": prompt}]
+                
+            # Get Ollama URL
+            ollama_url = f"{self.config.ollama_host}/api/chat"
+            
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": False
+            }
+            
+            logger.debug(f"Sending request to Ollama: {ollama_url}")
+            response = requests.post(ollama_url, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                generated_text = result["message"]["content"]
+                
+                # Add the response to memory
+                self.add_message("assistant", generated_text)
+                
+                return generated_text
+            else:
+                error_message = f"Ollama error: {response.status_code} - {response.text}"
+                logger.error(error_message)
+                return f"Error generating response: {error_message}"
+                
+        except Exception as e:
+            logger.error(f"Error generating response: {e}")
+            return f"Error generating response: {str(e)}"
+    
+    def remember_knowledge(self, text: str, source: str = None) -> List[int]:
+        """
+        Explicitly remember knowledge from text.
         
         Args:
             text: Text to remember
+            source: Source of the knowledge
             
         Returns:
-            True if successfully stored
+            List of IDs for the stored knowledge
         """
-        try:
-            # Use higher confidence (0.95) for explicit memory
-            fact_ids = self.knowledge_store.remember_explicit(text, confidence=0.95)
-            logger.info(f"Explicitly stored {len(fact_ids)} facts")
-            return len(fact_ids) > 0
-        except Exception as e:
-            logger.error(f"Error explicitly remembering: {e}")
-            return False
+        # Store the knowledge
+        fact_ids = self.knowledge_store.remember_explicit(text, source=source)
+        
+        return fact_ids
     
-    def close(self):
+    def get_knowledge(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Retrieve knowledge relevant to a query.
+        
+        Args:
+            query: Search query
+            
+        Returns:
+            List of relevant knowledge items
+        """
+        return self.knowledge_store.get_relevant_knowledge(query)
+    
+    def clear_memory(self) -> None:
+        """Clear conversation memory."""
+        self.memory.clear_memory()
+    
+    def close(self) -> None:
         """Clean up resources."""
         try:
-            self.knowledge_store.close()
-            logger.info("AdaptiveContextManager resources closed")
+            if hasattr(self, 'knowledge_store'):
+                self.knowledge_store.close()
         except Exception as e:
             logger.error(f"Error closing resources: {e}")
-    
-    def __del__(self):
-        """Ensure resources are cleaned up."""
+            
+    def __del__(self) -> None:
+        """Destructor to clean up resources."""
         self.close() 

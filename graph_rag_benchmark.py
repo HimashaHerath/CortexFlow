@@ -14,6 +14,7 @@ import numpy as np
 from typing import Dict, Any, List, Tuple
 from collections import defaultdict
 import matplotlib.pyplot as plt
+import sqlite3
 try:
     import requests
     REQUESTS_AVAILABLE = True
@@ -122,28 +123,120 @@ class GraphRAGBenchmark:
         print("\nLoading knowledge base...")
         start_time = time.time()
         
+        # Add debug info before loading
+        print(f"Initial graph statistics:")
+        graph_store = self.manager.knowledge_store.graph_store
+        if graph_store.graph:
+            print(f"  - Entities (nodes): {graph_store.graph.number_of_nodes()}")
+            print(f"  - Relationships (edges): {graph_store.graph.number_of_edges()}")
+            
+            if self.args.verbose:
+                # Check if SpaCy and NetworkX are available
+                print(f"  - SpaCy enabled: {hasattr(graph_store, 'nlp') and graph_store.nlp is not None}")
+                print(f"  - NetworkX enabled: {hasattr(graph_store, 'graph') and graph_store.graph is not None}")
+        
+        entities_found = 0
+        relations_found = 0
+        
+        # Test entity extraction directly
+        print("\nTesting entity extraction directly:")
+        test_text = "Guido van Rossum created Python programming language in 1991."
+        entities = graph_store.extract_entities(test_text)
+        print(f"  Extracted entities from test text: {entities}")
+        
+        # Test relation extraction directly
+        relations = graph_store.extract_relations(test_text)
+        print(f"  Extracted relations from test text: {relations}")
+        
+        # Test entity addition directly
+        entity_id = graph_store.add_entity("Python", "LANGUAGE", {"test": True})
+        print(f"  Added test entity with ID: {entity_id}")
+        
+        # Test relation addition directly
+        relation_added = graph_store.add_relation("Guido van Rossum", "created", "Python", 1.0, {"test": True})
+        print(f"  Added test relation: {relation_added}")
+            
+        # Process each knowledge item
         for i, knowledge in enumerate(TEST_KNOWLEDGE):
             if self.args.verbose:
                 print(f"[{i+1}/{len(TEST_KNOWLEDGE)}] Adding: {knowledge}")
+                
+                # Debug entity and relation extraction
+                print("  Extracted entities:")
+                entities = graph_store.extract_entities(knowledge)
+                entities_found += len(entities)
+                for entity in entities:
+                    print(f"    - {entity['text']} ({entity['type']})")
+                
+                print("  Extracted relations:")
+                relations = graph_store.extract_relations(knowledge)
+                relations_found += len(relations)
+                for subj, pred, obj in relations:
+                    print(f"    - {subj} --({pred})--> {obj}")
             else:
                 if i % 10 == 0:
                     print(f"Added {i}/{len(TEST_KNOWLEDGE)} facts...", end='\r')
                     
-            self.manager.knowledge_store.remember_explicit(
+            # Remember the knowledge item
+            fact_ids = self.manager.knowledge_store.remember_explicit(
                 text=knowledge,
                 source="benchmark_data",
                 confidence=0.9
             )
+            
+            if self.args.verbose:
+                print(f"  Facts stored: {len(fact_ids)}")
         
         load_time = time.time() - start_time
         print(f"\nKnowledge base loaded in {load_time:.2f} seconds")
+        print(f"Total entities extracted: {entities_found}")
+        print(f"Total relations extracted: {relations_found}")
         
         # Print graph statistics
         graph_store = self.manager.knowledge_store.graph_store
         if graph_store.graph:
-            print(f"Graph Statistics:")
+            print(f"Final Graph Statistics:")
             print(f"  - Entities (nodes): {graph_store.graph.number_of_nodes()}")
             print(f"  - Relationships (edges): {graph_store.graph.number_of_edges()}")
+            
+            if self.args.verbose and graph_store.graph.number_of_nodes() > 0:
+                print("\nSample entities in graph:")
+                entities = list(graph_store.graph.nodes(data=True))[:5]
+                for entity_id, attrs in entities:
+                    print(f"  - ID {entity_id}: {attrs.get('name', 'Unknown')} ({attrs.get('entity_type', 'Unknown')})")
+                    
+                if graph_store.graph.number_of_edges() > 0:
+                    print("\nSample relationships in graph:")
+                    edges = list(graph_store.graph.edges(data=True))[:5]
+                    for source, target, attrs in edges:
+                        relation = attrs.get('relation', 'related_to')
+                        source_name = graph_store.graph.nodes[source].get('name', 'Unknown')
+                        target_name = graph_store.graph.nodes[target].get('name', 'Unknown')
+                        print(f"  - {source_name} --({relation})--> {target_name}")
+                        
+        # Test direct database access
+        print("\nChecking database directly:")
+        conn = sqlite3.connect(self.test_db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Count entities
+        cursor.execute('SELECT COUNT(*) FROM graph_entities')
+        entity_count = cursor.fetchone()[0]
+        print(f"  Database entities: {entity_count}")
+        
+        # Count relationships
+        cursor.execute('SELECT COUNT(*) FROM graph_relationships')
+        rel_count = cursor.fetchone()[0]
+        print(f"  Database relationships: {rel_count}")
+        
+        # Sample entities
+        cursor.execute('SELECT id, entity, entity_type FROM graph_entities LIMIT 5')
+        print("  Sample entities in database:")
+        for row in cursor.fetchall():
+            print(f"    - ID {row['id']}: {row['entity']} ({row['entity_type']})")
+            
+        conn.close()
     
     def evaluate_retrieval_precision(self, query_type: str, query_data: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
         """
@@ -159,12 +252,33 @@ class GraphRAGBenchmark:
         query = query_data["query"]
         expected_entities = query_data.get("expected_entities", [])
         
+        if self.args.verbose:
+            print(f"\nDEBUG - Processing query: '{query}'")
+            print(f"  Expected entities: {expected_entities}")
+        
+        # Extract entities from query for debugging
+        if self.args.verbose:
+            entities = self.manager.knowledge_store.graph_store.extract_entities(query)
+            print(f"  Entities extracted from query: {[e['text'] for e in entities]}")
+        
         start_time = time.time()
         results = self.manager.knowledge_store.get_relevant_knowledge(query, max_results=5)
         query_time = time.time() - start_time
         
         # Get texts from results
         retrieved_texts = [result.get('text', '') for result in results]
+        
+        if self.args.verbose:
+            print(f"  Retrieved {len(results)} results in {query_time:.4f}s")
+            print(f"  Results:")
+            for i, result in enumerate(results):
+                print(f"    {i+1}. {result.get('text', '')} [Score: {result.get('score', 0):.4f}, Type: {result.get('type', 'unknown')}]")
+                
+            # Debug direct graph search results
+            print("\n  DEBUG - Direct graph search results:")
+            graph_results = self.manager.knowledge_store._graph_search(query, max_results=5)
+            for i, result in enumerate(graph_results):
+                print(f"    {i+1}. {result.get('text', '')} [Score: {result.get('score', 0):.4f}, Type: {result.get('type', 'unknown')}]")
         
         # Use metrics utility to calculate precision
         precision = calculate_precision(expected_entities, retrieved_texts)
@@ -173,6 +287,13 @@ class GraphRAGBenchmark:
         recall = calculate_recall(expected_entities, retrieved_texts)
         f1 = calculate_f1(precision, recall)
         mrr = calculate_mrr(expected_entities, retrieved_texts)
+        
+        if self.args.verbose:
+            print(f"\n  Metrics:")
+            print(f"    Precision: {precision:.4f}")
+            print(f"    Recall: {recall:.4f}")  
+            print(f"    F1 Score: {f1:.4f}")
+            print(f"    MRR: {mrr:.4f}")
         
         return precision, {
             "query": query,
@@ -340,6 +461,17 @@ class GraphRAGBenchmark:
         print("Running GraphRAG Benchmarks")
         print("="*80)
         
+        # Set up logging for debug output
+        if self.args.verbose:
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+        
+        # Test graph traversal directly first
+        if self.args.verbose:
+            self._test_graph_traversal()
+        
         for query_type, queries in BENCHMARK_QUERIES.items():
             print(f"\nBenchmarking {query_type} queries...")
             
@@ -448,6 +580,73 @@ class GraphRAGBenchmark:
         
         if self.args.plot:
             self._generate_plots()
+            
+    def _test_graph_traversal(self):
+        """Test basic graph traversal operations to verify functionality."""
+        print("\n" + "="*80)
+        print("Testing Basic Graph Operations")
+        print("="*80)
+        
+        graph_store = self.manager.knowledge_store.graph_store
+        
+        # Test direct database access
+        if self.conn is not None:
+            conn = self.conn
+        else:
+            conn = sqlite3.connect(graph_store.db_path)
+            
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            # Count entities in database
+            cursor.execute('SELECT COUNT(*) FROM graph_entities')
+            entity_count = cursor.fetchone()[0]
+            print(f"Entities in database: {entity_count}")
+            
+            # Count relationships in database
+            cursor.execute('SELECT COUNT(*) FROM graph_relationships')
+            rel_count = cursor.fetchone()[0]
+            print(f"Relationships in database: {rel_count}")
+            
+            # Sample entities
+            print("\nSample entities in database:")
+            cursor.execute('SELECT id, entity, entity_type FROM graph_entities LIMIT 5')
+            for row in cursor.fetchall():
+                print(f"  {row['id']}: {row['entity']} ({row['entity_type']})")
+                
+            # Sample relationships
+            print("\nSample relationships in database:")
+            cursor.execute('''
+                SELECT r.id, e1.entity as source, r.relation_type, e2.entity as target
+                FROM graph_relationships r
+                JOIN graph_entities e1 ON r.source_id = e1.id
+                JOIN graph_entities e2 ON r.target_id = e2.id
+                LIMIT 5
+            ''')
+            for row in cursor.fetchall():
+                print(f"  {row['source']} --({row['relation_type']})--> {row['target']}")
+            
+            # Test entity extraction on a sample query
+            test_query = "Who created Python programming language?"
+            print(f"\nTesting entity extraction on query: '{test_query}'")
+            
+            entities = graph_store.extract_entities(test_query)
+            print(f"Extracted entities:")
+            for entity in entities:
+                print(f"  - {entity['text']} ({entity['type']})")
+                
+                # Test get_entity_neighbors for this entity
+                neighbors = graph_store.get_entity_neighbors(entity['text'], direction="both")
+                print(f"    Found {len(neighbors)} neighbors:")
+                for neighbor in neighbors[:3]:  # Show first 3
+                    print(f"      - {neighbor.get('entity', 'Unknown')} ({neighbor.get('relation', 'related_to')})")
+            
+        except Exception as e:
+            print(f"Error in graph traversal test: {e}")
+        finally:
+            if self.conn is None:
+                conn.close()
     
     def _save_results(self):
         """Save benchmark results to a file."""

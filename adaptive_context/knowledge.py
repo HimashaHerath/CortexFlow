@@ -33,106 +33,177 @@ class KnowledgeStore:
     
     def __init__(self, config: AdaptiveContextConfig):
         """
-        Initialize knowledge store.
+        Initialize the knowledge store with configuration.
         
         Args:
-            config: AdaptiveContext configuration
+            config: Configuration for the knowledge store
         """
         self.config = config
         self.db_path = config.knowledge_store_path
         
-        # For in-memory databases, we need to maintain a persistent connection
-        self.conn = None
-        if self.db_path == ':memory:':
-            self.conn = sqlite3.connect(self.db_path)
+        # Trust marker for high-confidence facts
+        self.trust_marker = config.trust_marker if hasattr(config, 'trust_marker') else "📚"
         
-        # Initialize SQLite storage
-        self.facts = SqliteDict(self.db_path, tablename='facts', autocommit=True)
-        self.summaries = SqliteDict(self.db_path, tablename='summaries', autocommit=True)
+        # Configure retrieval settings
+        self.use_reranking = config.use_reranking if hasattr(config, 'use_reranking') else True
+        self.rerank_top_k = config.rerank_top_k if hasattr(config, 'rerank_top_k') else 15
         
-        # Initialize embedding model if available
-        self.model = None
-        self.embedding_dimension = 384  # Default for all-MiniLM-L6-v2
-        if VECTOR_ENABLED:
-            try:
-                # Use a small efficient model by default
-                self.model = SentenceTransformer(config.vector_embedding_model)
-                self.embedding_dimension = self.model.get_sentence_embedding_dimension()
-                logging.info("Vector embedding model loaded successfully")
-            except Exception as e:
-                logging.error(f"Error loading vector model: {e}")
-        
-        # Vector store for embeddings
-        self.vector_store = {}
-        
-        # BM25 index
-        self.bm25_corpus = []  # List of tokenized documents for BM25
-        self.bm25_index = None  # BM25 index
-        self.id_to_doc_mapping = {}  # Map document IDs to their content
-        self.doc_to_id_mapping = {}  # Map document content to their IDs
-        
-        # Initialize SQLite for structured data
-        self._init_db()
-        
-        # Initialize GraphStore for knowledge graph
-        self.graph_store = GraphStore(config)
-        
-        # Trust marker for retrieved knowledge
-        self.trust_marker = "[VERIFIED FACT]"
+        # GraphRAG settings
+        self.use_graph_rag = config.use_graph_rag if hasattr(config, 'use_graph_rag') else False
+        self.graph_weight = config.graph_weight if hasattr(config, 'graph_weight') else 0.3
         
         # Hybrid search parameters
         self.hybrid_alpha = 0.7  # Weight for dense vector search (1-alpha is weight for sparse BM25)
         
-        # Re-ranking parameters 
-        self.use_reranking = config.use_reranking if hasattr(config, 'use_reranking') else True
-        self.rerank_top_k = 20  # Number of initial candidates to re-rank
+        # Initialize database connection
+        self._init_db()
         
-        # GraphRAG parameters
-        self.use_graph_rag = config.use_graph_rag if hasattr(config, 'use_graph_rag') else True
-        self.graph_weight = 0.3  # Weight for graph-based results in the final ranking
+        # Initialize vector embedding model
+        self.model = None
+        self.embedding_dimension = 384  # Default for all-MiniLM-L6-v2
         
+        if VECTOR_ENABLED:
+            try:
+                from sentence_transformers import SentenceTransformer
+                
+                # Get vector model from config
+                vector_model = config.vector_model if hasattr(config, 'vector_model') else "all-MiniLM-L6-v2"
+                
+                self.model = SentenceTransformer(vector_model)
+                logging.info("Vector embedding model loaded successfully")
+            except ImportError:
+                logging.warning("SentenceTransformer not available. Vector search will be disabled.")
+            except Exception as e:
+                logging.error(f"Error loading vector model: {e}")
+                
+        # Initialize BM25 index
+        self.bm25_index = None
+        self.bm25_corpus = []
+        self.bm25_doc_ids = []
+        self.bm25_last_update = 0
+        
+        # Storage for in-memory caches
+        self.vector_index = None
+        self.vector_ids = []
+        self.vector_store = {}  # For summaries
+        
+        # Create SQLiteDicts for persistence
+        try:
+            from sqlitedict import SqliteDict
+            self.summaries = SqliteDict(self.db_path, tablename='summaries', autocommit=True)
+        except ImportError:
+            logging.warning("SqliteDict not available. In-memory storage will be used.")
+            self.summaries = {}
+        except Exception as e:
+            logging.error(f"Error initializing summary store: {e}")
+            self.summaries = {}
+            
+        # Initialize the graph store if GraphRAG is enabled
+        self.graph_store = None
+        if self.use_graph_rag:
+            try:
+                from .graph_store import GraphStore
+                self.graph_store = GraphStore(config)
+                logging.info(f"Graph store initialized successfully")
+            except Exception as e:
+                logging.error(f"Error initializing graph store: {e}")
+                self.use_graph_rag = False
+                
+        # In-memory connection for better performance
+        self.conn = None
+        try:
+            self.conn = sqlite3.connect(":memory:")
+            self._copy_db_to_memory()
+        except Exception as e:
+            logging.error(f"Error creating in-memory database: {e}")
+            self.conn = None
+            
         logging.info(f"Knowledge store initialized with vector retrieval: {VECTOR_ENABLED}, BM25: {BM25_ENABLED}")
     
     def _init_db(self):
-        """Initialize the SQLite database with required tables."""
-        if self.conn is not None:
-            # We're using an in-memory database
-            cursor = self.conn.cursor()
-        else:
-            # Using a file-based database
+        """Initialize the database for storing structured knowledge."""
+        # Initialize connection
+        self.conn = None
+        
+        try:
+            # Create tables if they don't exist
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-        
-        # Create facts table if it doesn't exist
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS fact_triples (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject TEXT NOT NULL,
-            predicate TEXT NOT NULL,
-            object TEXT NOT NULL,
-            confidence REAL,
-            timestamp REAL,
-            source TEXT
-        )
-        ''')
-        
-        # Add embedding columns if vector-based retrieval is enabled
-        if VECTOR_ENABLED:
-            try:
-                cursor.execute('ALTER TABLE fact_triples ADD COLUMN embedding BLOB')
-            except sqlite3.OperationalError:
-                # Column may already exist
-                pass
-        
-        # Create index for faster lookups
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_subject ON fact_triples(subject)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_predicate ON fact_triples(predicate)')
-        
-        if self.conn is not None:
-            self.conn.commit()
-        else:
+            
+            # Create fact triples table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS fact_triples (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    subject TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    object TEXT NOT NULL,
+                    confidence REAL,
+                    timestamp REAL,
+                    source TEXT,
+                    embedding BLOB
+                )
+            ''')
+            
+            # Create indices for faster queries
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_subject ON fact_triples(subject)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_predicate ON fact_triples(predicate)')
+            
+            # Create graph entities table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS graph_entities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entity TEXT NOT NULL UNIQUE,
+                    entity_type TEXT,
+                    metadata TEXT,
+                    timestamp REAL
+                )
+            ''')
+            
+            # Create graph relationships table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS graph_relationships (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_id INTEGER,
+                    target_id INTEGER,
+                    relation_type TEXT,
+                    weight REAL,
+                    metadata TEXT,
+                    timestamp REAL,
+                    FOREIGN KEY (source_id) REFERENCES graph_entities (id),
+                    FOREIGN KEY (target_id) REFERENCES graph_entities (id)
+                )
+            ''')
+            
+            # Create indices for graph queries
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_source ON graph_relationships(source_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_target ON graph_relationships(target_id)')
+            
             conn.commit()
             conn.close()
+            
+            logging.debug(f"Database initialized at {self.db_path}")
+            
+        except sqlite3.Error as e:
+            logging.error(f"SQLite error initializing database: {e}")
+    
+    def _copy_db_to_memory(self):
+        """Copy the database to memory for faster access."""
+        try:
+            # Open the file database
+            disk_conn = sqlite3.connect(self.db_path)
+            
+            # Copy to in-memory database
+            disk_conn.backup(self.conn)
+            disk_conn.close()
+            
+            logging.debug("Database copied to memory")
+            
+        except sqlite3.Error as e:
+            logging.error(f"Error copying database to memory: {e}")
+            
+        except AttributeError:
+            logging.error("In-memory connection not initialized")
+            self.conn = None
     
     def _generate_embedding(self, text: str) -> Optional[np.ndarray]:
         """
@@ -871,10 +942,45 @@ class KnowledgeStore:
             # Track entities found in query
             query_entities = [entity["text"] for entity in entities]
             
+            logging.debug(f"Graph search for query: '{query}'")
+            logging.debug(f"Extracted entities: {query_entities}")
+            
+            # If we don't have entities, try using noun phrases and proper nouns
+            if not query_entities:
+                # Extract noun phrases from query
+                try:
+                    doc = self.graph_store.nlp(query) if hasattr(self.graph_store, 'nlp') else None
+                    if doc:
+                        # Find noun phrases
+                        for chunk in doc.noun_chunks:
+                            if len(chunk.text) > 2:  # Skip very short chunks
+                                query_entities.append(chunk.text)
+                                
+                        # Find proper nouns
+                        for token in doc:
+                            if token.pos_ == "PROPN" and len(token.text) > 2:
+                                if token.text not in query_entities:
+                                    query_entities.append(token.text)
+                                    
+                        logging.debug(f"Added potential entities from query: {query_entities}")
+                except Exception as e:
+                    logging.error(f"Error extracting additional entities: {e}")
+            
+            # If we still don't have entities, use important words from the query
+            if not query_entities:
+                # Use words that might be important
+                for word in query.split():
+                    if len(word) > 3 and word.lower() not in ["what", "where", "when", "how", "why", "who", "does", "is", "are", "the", "and", "that", "this"]:
+                        query_entities.append(word)
+                        
+                logging.debug(f"Using important words as entities: {query_entities}")
+            
             # If we have entities in the query
             if query_entities:
                 # Get subgraph relevant to the query
                 subgraph = self.graph_store.build_knowledge_subgraph(query, max_nodes=30)
+                
+                logging.debug(f"Built subgraph with {len(subgraph['nodes'])} nodes and {len(subgraph['edges'])} edges")
                 
                 # For each entity in the query, explore its neighbors
                 for entity_text in query_entities:
@@ -883,6 +989,8 @@ class KnowledgeStore:
                         direction="both",
                         limit=5
                     )
+                    
+                    logging.debug(f"Found {len(neighbors)} neighbors for entity '{entity_text}'")
                     
                     # Convert neighbors to knowledge items
                     for neighbor in neighbors:
@@ -917,8 +1025,10 @@ class KnowledgeStore:
                             paths = self.graph_store.path_query(
                                 start_entity=start_entity,
                                 end_entity=end_entity,
-                                max_hops=2  # Limit path length for performance
+                                max_hops=4  # Increased max hops for path finding
                             )
+                            
+                            logging.debug(f"Found {len(paths)} paths between '{start_entity}' and '{end_entity}'")
                             
                             # Convert paths to knowledge items
                             for path in paths:
@@ -932,11 +1042,73 @@ class KnowledgeStore:
                                         "type": "graph_path"
                                     })
             
+            # If no results were found but we have query terms, try fuzzy matching
+            if not results and len(query.split()) > 0:
+                # Try fuzzy matching with common terms in query
+                for word in query.split():
+                    if len(word) > 3:  # Only use meaningful words
+                        cursor = None
+                        try:
+                            if hasattr(self, 'conn') and self.conn is not None:
+                                conn = self.conn
+                            else:
+                                conn = sqlite3.connect(self.graph_store.db_path)
+                                
+                            conn.row_factory = sqlite3.Row
+                            cursor = conn.cursor()
+                            
+                            # Search for entities that might match
+                            cursor.execute('''
+                                SELECT id, entity, entity_type FROM graph_entities 
+                                WHERE entity LIKE ? LIMIT 5
+                            ''', (f"%{word}%",))
+                            
+                            entity_matches = cursor.fetchall()
+                            
+                            for entity in entity_matches:
+                                entity_id = entity['id']
+                                entity_text = entity['entity']
+                                
+                                # Look for relationships involving this entity
+                                cursor.execute('''
+                                    SELECT r.relation_type, e2.entity 
+                                    FROM graph_relationships r
+                                    JOIN graph_entities e2 ON r.target_id = e2.id
+                                    WHERE r.source_id = ?
+                                    LIMIT 3
+                                ''', (entity_id,))
+                                
+                                relations = cursor.fetchall()
+                                
+                                for relation in relations:
+                                    relation_type = relation['relation_type']
+                                    target_entity = relation['entity']
+                                    
+                                    fact_text = f"{entity_text} {relation_type} {target_entity}"
+                                    
+                                    results.append({
+                                        "text": fact_text,
+                                        "score": 0.4,  # Lower score for fuzzy matches
+                                        "confidence": 0.5,
+                                        "source": "knowledge_graph",
+                                        "type": "graph_fact"
+                                    })
+                        except Exception as e:
+                            logging.error(f"Error in fuzzy entity matching: {e}")
+                        finally:
+                            if not hasattr(self, 'conn') or self.conn is None:
+                                if conn is not None:
+                                    conn.close()
+            
             # Sort results by score
             results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)[:max_results]
             
+            logging.debug(f"Graph search returned {len(results)} results")
+            
         except Exception as e:
             logging.error(f"Error in graph search: {e}")
+            import traceback
+            logging.error(f"Traceback: {traceback.format_exc()}")
         
         return results
     
@@ -1025,8 +1197,12 @@ class KnowledgeStore:
         """
         fact_ids = []
         
+        logging.debug(f"Remembering text explicitly: '{text[:50]}...'")
+        
         # Extract triples from text
         triples = self.extract_facts_from_text(text)
+        
+        logging.debug(f"Extracted {len(triples)} fact triples")
         
         # Store each triple as a fact
         for subject, predicate, obj in triples:
@@ -1042,7 +1218,36 @@ class KnowledgeStore:
         
         # Process text to build knowledge graph
         if hasattr(self, 'graph_store'):
-            self.graph_store.process_text_to_graph(text, source=source)
+            # Make sure graph_store is initialized
+            if not hasattr(self.graph_store, 'extract_entities'):
+                logging.error("GraphStore is not properly initialized")
+                return fact_ids
+                
+            # Process text to extract entities and relations
+            relations_added = self.graph_store.process_text_to_graph(text, source=source)
+            logging.debug(f"Added {relations_added} relations to knowledge graph")
+            
+            # Manually add the text as a single fact if no relations were extracted
+            if not relations_added and not fact_ids:
+                # Try to extract simple subject-verb-object
+                words = text.split()
+                if len(words) >= 3:
+                    subject = words[0]
+                    predicate = "states"
+                    obj = " ".join(words[1:])
+                    
+                    # Add to graph
+                    success = self.graph_store.add_relation(
+                        source_entity=subject,
+                        relation_type=predicate,
+                        target_entity=obj,
+                        metadata={"source": source} if source else None
+                    )
+                    
+                    if success:
+                        logging.debug(f"Added backup relation: {subject} {predicate} {obj}")
+        else:
+            logging.warning("No graph_store available for graph-based storage")
         
         return fact_ids
     

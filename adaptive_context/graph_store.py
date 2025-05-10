@@ -170,19 +170,21 @@ class GraphStore:
     
     def extract_entities(self, text: str) -> List[Dict[str, Any]]:
         """
-        Extract entities from text using NER.
+        Extract named entities from text using SpaCy.
         
         Args:
             text: Input text to extract entities from
             
         Returns:
-            List of entity dictionaries with name, type, and position
+            List of entity dictionaries with text, type, start, end
         """
         entities = []
         
         if SPACY_ENABLED and self.nlp is not None:
             try:
                 doc = self.nlp(text)
+                
+                # First try to get named entities
                 for ent in doc.ents:
                     entities.append({
                         'text': ent.text,
@@ -190,16 +192,58 @@ class GraphStore:
                         'start': ent.start_char,
                         'end': ent.end_char
                     })
+                
+                # If no entities found, try noun phrases
+                if not entities:
+                    for chunk in doc.noun_chunks:
+                        if len(chunk.text) > 2:  # Skip very short chunks
+                            entities.append({
+                                'text': chunk.text,
+                                'type': 'NOUN_PHRASE',
+                                'start': chunk.start_char,
+                                'end': chunk.end_char
+                            })
+                            
+                    # Also try proper nouns
+                    for token in doc:
+                        if token.pos_ == "PROPN" and len(token.text) > 2:
+                            # Check if this proper noun is already part of an entity
+                            is_part_of_entity = False
+                            for entity in entities:
+                                if token.idx >= entity['start'] and token.idx + len(token.text) <= entity['end']:
+                                    is_part_of_entity = True
+                                    break
+                                    
+                            if not is_part_of_entity:
+                                entities.append({
+                                    'text': token.text,
+                                    'type': 'PROPER_NOUN',
+                                    'start': token.idx,
+                                    'end': token.idx + len(token.text)
+                                })
+                
+                # If still no entities, use important words as entities
+                if not entities:
+                    for token in doc:
+                        if token.is_alpha and not token.is_stop and len(token.text) > 3:
+                            entities.append({
+                                'text': token.text,
+                                'type': token.pos_,
+                                'start': token.idx,
+                                'end': token.idx + len(token.text)
+                            })
                     
             except Exception as e:
                 logging.error(f"Error extracting entities: {e}")
+                import traceback
+                logging.error(f"Traceback: {traceback.format_exc()}")
         
         return entities
     
     def extract_relations(self, text: str) -> List[Tuple[str, str, str]]:
         """
         Extract subject-predicate-object triples from text.
-        This is a simplistic pattern-based approach.
+        This uses dependency parsing to find relationships.
         
         Args:
             text: Input text to extract relations from
@@ -213,30 +257,125 @@ class GraphStore:
             try:
                 doc = self.nlp(text)
                 
+                # Process each sentence separately
                 for sent in doc.sents:
-                    # Simple SVO (subject-verb-object) extraction
-                    subject = None
-                    verb = None
-                    obj = None
-                    
+                    # Find root verb and its subject/object
+                    root_verb = None
                     for token in sent:
-                        # Find the subject
-                        if token.dep_ == "nsubj" and token.head.pos_ == "VERB":
-                            subject = token.text
-                            verb = token.head.text
+                        if token.dep_ == "ROOT" and token.pos_ == "VERB":
+                            root_verb = token
+                            break
+                    
+                    # If we found a root verb, look for its subject and object
+                    if root_verb:
+                        subject = None
+                        direct_object = None
+                        
+                        # Find subject and object
+                        for child in root_verb.children:
+                            # Find subject
+                            if child.dep_ in ["nsubj", "nsubjpass"]:
+                                # Get the full noun phrase
+                                subject = self._get_span_text(child)
+                                
+                            # Find direct object
+                            elif child.dep_ in ["dobj", "pobj"]:
+                                # Get the full noun phrase
+                                direct_object = self._get_span_text(child)
+                                
+                        # If we have both subject and object, create a relation
+                        if subject and direct_object:
+                            relations.append((subject, root_verb.lemma_, direct_object))
+                    
+                    # If no root verb relation found, try other patterns
+                    if not relations:
+                        # Try subject-verb-object patterns with any verb
+                        for token in sent:
+                            if token.pos_ == "VERB":
+                                subject = None
+                                direct_object = None
+                                
+                                # Find subject and object for this verb
+                                for child in token.children:
+                                    if child.dep_ in ["nsubj", "nsubjpass"] and not subject:
+                                        subject = self._get_span_text(child)
+                                        
+                                    elif child.dep_ in ["dobj", "pobj"] and not direct_object:
+                                        direct_object = self._get_span_text(child)
+                                
+                                # If we found both, add the relation
+                                if subject and direct_object:
+                                    relations.append((subject, token.lemma_, direct_object))
+                
+                # If no relations found with dependency parsing, try a simpler approach
+                if not relations:
+                    entities = self.extract_entities(text)
+                    if len(entities) >= 2:
+                        # Create relations between consecutive entities
+                        for i in range(len(entities) - 1):
+                            # Find words between entities that might be predicates
+                            entity1 = entities[i]
+                            entity2 = entities[i + 1]
                             
-                            # Find the object associated with this verb
-                            for child in token.head.children:
-                                if child.dep_ in ["dobj", "pobj"]:
-                                    obj = child.text
-                                    # Add the relation
-                                    if subject and verb and obj:
-                                        relations.append((subject, verb, obj))
-            
+                            # Get text between entities
+                            between_start = entity1['end']
+                            between_end = entity2['start']
+                            
+                            if between_end > between_start:
+                                between_text = text[between_start:between_end].strip()
+                                
+                                # If there's text between, use it as predicate
+                                if between_text:
+                                    # Clean up the predicate
+                                    predicate = between_text.strip()
+                                    # Remove common stopwords
+                                    for stopword in [" the ", " a ", " an ", " and ", " or ", " but ", " of "]:
+                                        predicate = predicate.replace(stopword, " ")
+                                    predicate = predicate.strip()
+                                    
+                                    if predicate:
+                                        relations.append((entity1['text'], predicate, entity2['text']))
+                                else:
+                                    # If no text between, use generic relation
+                                    relations.append((entity1['text'], "related_to", entity2['text']))
+                
             except Exception as e:
                 logging.error(f"Error extracting relations: {e}")
+                import traceback
+                logging.error(f"Traceback: {traceback.format_exc()}")
                 
         return relations
+        
+    def _get_span_text(self, token) -> str:
+        """
+        Get the full text span for a token, including its children.
+        
+        Args:
+            token: The token to get span text for
+            
+        Returns:
+            Text of the span
+        """
+        # If token has no children, just return its text
+        if not list(token.children):
+            return token.text
+            
+        # Otherwise, get the leftmost and rightmost token in the subtree
+        leftmost = token
+        rightmost = token
+        
+        # Find leftmost token
+        for descendant in token.subtree:
+            if descendant.i < leftmost.i:
+                leftmost = descendant
+                
+        # Find rightmost token
+        for descendant in token.subtree:
+            if descendant.i > rightmost.i:
+                rightmost = descendant
+                
+        # Return the span text
+        return token.doc[leftmost.i:rightmost.i + 1].text
     
     def add_entity(self, entity: str, entity_type: str = None, metadata: Dict[str, Any] = None) -> int:
         """
@@ -814,9 +953,51 @@ class GraphStore:
             Number of relations added
         """
         relations_added = 0
+        entities_added = 0
         
         # Extract entities
         entities = self.extract_entities(text)
+        
+        logging.debug(f"Processing text for graph: '{text[:50]}...'")
+        logging.debug(f"Extracted {len(entities)} entities")
+        
+        # If SpaCy didn't find any entities, try a simpler approach to extract potential entities
+        if not entities and SPACY_ENABLED and self.nlp is not None:
+            try:
+                doc = self.nlp(text)
+                
+                # Extract noun phrases as potential entities
+                for chunk in doc.noun_chunks:
+                    if len(chunk.text) > 2:  # Skip very short chunks
+                        entities.append({
+                            'text': chunk.text,
+                            'type': 'NOUN_PHRASE',  # Generic type for noun phrases
+                            'start': chunk.start_char,
+                            'end': chunk.end_char
+                        })
+                        
+                # Extract proper names that might have been missed
+                for token in doc:
+                    if token.pos_ == "PROPN" and len(token.text) > 2:
+                        # Check if this proper noun is already part of an entity
+                        is_part_of_entity = False
+                        for entity in entities:
+                            if token.idx >= entity['start'] and token.idx + len(token.text) <= entity['end']:
+                                is_part_of_entity = True
+                                break
+                                
+                        if not is_part_of_entity:
+                            entities.append({
+                                'text': token.text,
+                                'type': 'PROPER_NOUN',
+                                'start': token.idx,
+                                'end': token.idx + len(token.text)
+                            })
+                            
+                logging.debug(f"Added {len(entities)} additional entities using noun phrases and proper nouns")
+                
+            except Exception as e:
+                logging.error(f"Error extracting additional entities: {e}")
         
         # Map of entity text to entity ID
         entity_ids = {}
@@ -831,12 +1012,47 @@ class GraphStore:
             
             if entity_id >= 0:
                 entity_ids[entity_info["text"]] = entity_id
+                entities_added += 1
         
-        # Extract relations
+        # Extract relations using SpaCy
         relations = self.extract_relations(text)
+        
+        logging.debug(f"Extracted {len(relations)} relations")
+        
+        # If no relations were found with standard extraction, try a simple subject-verb-object approach
+        if not relations and len(entities) >= 2:
+            try:
+                # Create simple relations between co-occurring entities
+                entity_pairs = []
+                sorted_entities = sorted(entities, key=lambda e: e['start'])
+                
+                # Connect entities that appear close to each other
+                for i in range(len(sorted_entities) - 1):
+                    for j in range(i + 1, min(i + 3, len(sorted_entities))):
+                        # If entities are close enough in text
+                        if sorted_entities[j]['start'] - sorted_entities[i]['end'] < 50:
+                            entity_pairs.append((
+                                sorted_entities[i]['text'],
+                                "related_to",
+                                sorted_entities[j]['text']
+                            ))
+                
+                # Add these as backup relations
+                relations.extend(entity_pairs)
+                logging.debug(f"Added {len(entity_pairs)} proximity-based relations")
+                
+            except Exception as e:
+                logging.error(f"Error creating backup relations: {e}")
         
         # Add relations to graph
         for subject, predicate, obj in relations:
+            # Skip relations with empty components
+            if not subject.strip() or not predicate.strip() or not obj.strip():
+                continue
+                
+            # Normalize predicate to create consistent relation types
+            predicate = predicate.lower().strip()
+            
             success = self.add_relation(
                 source_entity=subject,
                 relation_type=predicate,
@@ -846,6 +1062,8 @@ class GraphStore:
             
             if success:
                 relations_added += 1
+        
+        logging.debug(f"Added {entities_added} entities and {relations_added} relations to graph")
         
         return relations_added
     

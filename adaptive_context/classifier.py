@@ -389,3 +389,112 @@ class ImportanceClassifier:
         segment.importance = importance
         
         return importance 
+
+class ContentClassifier:
+    """
+    Classifier for content types in messages.
+    Used to identify content categories, questions, commands, etc.
+    """
+    
+    def __init__(self, config: AdaptiveContextConfig):
+        """
+        Initialize the content classifier.
+        
+        Args:
+            config: Configuration object
+        """
+        self.config = config
+        
+        # Define classification categories
+        self.categories = {
+            "question": ["what", "why", "how", "when", "where", "who", "which", "?"],
+            "command": ["do", "please", "can you", "could you", "make", "create", "find", "search"],
+            "factual": ["is", "are", "was", "were", "fact", "knowledge", "information"],
+            "opinion": ["think", "believe", "feel", "opinion", "perspective"],
+            "greeting": ["hi", "hello", "hey", "good morning", "good afternoon", "good evening"],
+            "farewell": ["bye", "goodbye", "see you", "talk later", "thanks"]
+        }
+        
+        # Initialize vector model if ML classification is enabled
+        self.model = None
+        if hasattr(config, 'use_ml_classifier') and config.use_ml_classifier:
+            try:
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer(config.classifier_model)
+                logger.info(f"Content classifier model loaded: {config.classifier_model}")
+            except ImportError:
+                logger.warning("SentenceTransformer not available for ML classification")
+            except Exception as e:
+                logger.error(f"Error loading classifier model: {e}")
+    
+    def classify(self, content: str) -> Dict[str, Any]:
+        """
+        Classify the content of a message.
+        
+        Args:
+            content: Text content to classify
+            
+        Returns:
+            Classification results
+        """
+        result = {
+            "categories": {},
+            "primary_category": None,
+            "is_question": False,
+            "sentiment": "neutral",
+            "confidence": 0.0
+        }
+        
+        # Skip classification for very short content
+        if len(content) < 3:
+            return result
+            
+        # Normalize content for classification
+        normalized = content.lower().strip()
+        
+        # Simple rule-based classification
+        for category, keywords in self.categories.items():
+            score = 0.0
+            for keyword in keywords:
+                if keyword in normalized:
+                    score += 0.2
+                    
+            # Scale to 0-1
+            score = min(1.0, score)
+            result["categories"][category] = score
+        
+        # Determine primary category
+        if result["categories"]:
+            primary = max(result["categories"].items(), key=lambda x: x[1])
+            if primary[1] > 0.2:  # Minimum threshold
+                result["primary_category"] = primary[0]
+                result["confidence"] = primary[1]
+        
+        # Check if content is a question
+        result["is_question"] = normalized.endswith("?") or any(q in normalized for q in ["what", "why", "how", "when", "where", "who", "which"])
+        
+        # Simple sentiment detection
+        positive_words = ["good", "great", "excellent", "amazing", "wonderful", "fantastic", "happy", "thanks"]
+        negative_words = ["bad", "terrible", "awful", "horrible", "sad", "angry", "upset", "disappointed"]
+        
+        positive_score = sum(1 for word in positive_words if word in normalized)
+        negative_score = sum(1 for word in negative_words if word in normalized)
+        
+        if positive_score > negative_score:
+            result["sentiment"] = "positive"
+        elif negative_score > positive_score:
+            result["sentiment"] = "negative"
+            
+        # Use ML classification if available
+        if self.model is not None:
+            try:
+                # For this example, we use predefined categories
+                # A real implementation would have a trained classifier
+                result["ml_classification"] = {
+                    "enabled": True,
+                    "model": self.config.classifier_model
+                }
+            except Exception as e:
+                logger.error(f"Error in ML classification: {e}")
+                
+        return result 
