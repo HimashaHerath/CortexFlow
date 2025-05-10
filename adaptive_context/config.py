@@ -20,7 +20,11 @@ class AdaptiveContextConfig:
                  ollama_host='http://localhost:11434',
                  default_model='llama3',
                  vector_embedding_model='all-MiniLM-L6-v2',
-                 use_vector_search=True):
+                 use_vector_search=True,
+                 use_bm25_search=True,
+                 hybrid_search_alpha=0.7,
+                 use_reranking=True,
+                 rerank_top_k=20):
         """
         Initialize AdaptiveContext configuration.
         
@@ -41,6 +45,10 @@ class AdaptiveContextConfig:
             default_model: Default Ollama model to use
             vector_embedding_model: Model to use for vector embeddings
             use_vector_search: Whether to use vector-based search
+            use_bm25_search: Whether to use BM25 keyword search
+            hybrid_search_alpha: Weight for vector search in hybrid search (0-1)
+            use_reranking: Whether to use result re-ranking
+            rerank_top_k: Number of candidates to consider for re-ranking
         """
         # Memory tier settings
         self.active_tier_tokens = active_tier_tokens
@@ -67,6 +75,12 @@ class AdaptiveContextConfig:
         # Ollama settings
         self.ollama_host = ollama_host
         self.default_model = default_model
+        
+        # Advanced retrieval settings
+        self.use_bm25_search = use_bm25_search
+        self.hybrid_search_alpha = hybrid_search_alpha
+        self.use_reranking = use_reranking
+        self.rerank_top_k = rerank_top_k
         
         # Calculate weights for importance scoring
         self.weights = [self.rule_weight]

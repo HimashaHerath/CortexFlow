@@ -18,6 +18,10 @@ AdaptiveContext dynamically manages context information, retaining important ele
 - Progressive context compression with extractive and abstractive summarization
 - Knowledge store for long-term information persistence
 - **Vector-based knowledge retrieval** for semantic search of stored knowledge
+- **Advanced retrieval techniques**:
+  - **Hybrid search** combining vector similarity with BM25 keyword scoring
+  - **Sparse-dense fusion** merging results from different retrieval methods
+  - **Re-ranking** for improved retrieval precision
 - Compatible with all Ollama models (tested with Llama, Mistral, Phi, Gemma variants)
 - Task-aware adaptation for different conversation types
 - Surprise-based retention prioritizes unexpected or important information
@@ -124,6 +128,12 @@ Test the vector-based knowledge retrieval:
 python vector_test.py
 ```
 
+Test advanced retrieval techniques:
+
+```bash
+python advanced_retrieval_test.py
+```
+
 ## Core Components
 
 ### Memory Manager
@@ -152,6 +162,10 @@ Persists important facts and retrievable context beyond the immediate conversati
 3. Supports explicit "remember" commands
 4. Implements time-based forgetting for outdated information
 5. **Uses vector embeddings** for semantic search and retrieval
+6. **Advanced retrieval techniques**:
+   - **Hybrid search**: Combines dense vector similarity with sparse BM25 keyword scoring
+   - **Result fusion**: Merges results from different retrieval methods with normalized scores
+   - **Re-ranking**: Applies a secondary scoring pass to refine retrieval precision
 
 ## Configuration Options
 
@@ -180,7 +194,11 @@ config = AdaptiveContextConfig(
     
     # Knowledge retrieval settings
     vector_embedding_model='all-MiniLM-L6-v2',  # Model for vector embeddings
-    use_vector_search=True       # Whether to use vector-based semantic search
+    use_vector_search=True,      # Whether to use vector-based semantic search
+    use_bm25_search=True,        # Whether to use BM25 keyword search
+    hybrid_search_alpha=0.7,     # Weight for vector search in hybrid search (0-1)
+    use_reranking=True,          # Whether to use result re-ranking
+    rerank_top_k=20              # Number of candidates to consider for re-ranking
 )
 ```
 
@@ -191,7 +209,7 @@ config = AdaptiveContextConfig(
 3. As tiers fill up, less important and older messages are moved to lower tiers
 4. Messages moved to lower tiers undergo progressive compression
 5. Very important facts are extracted to the knowledge store for permanent retention
-6. When relevant, knowledge is retrieved using vector similarity search and added to the context
+6. When relevant, knowledge is retrieved using advanced hybrid search techniques and added to the context
 
 This approach optimizes token usage while maintaining contextual understanding across long conversations.
 
