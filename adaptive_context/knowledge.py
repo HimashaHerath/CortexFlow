@@ -112,7 +112,7 @@ class KnowledgeStore:
         # In-memory connection for better performance
         self.conn = None
         try:
-            self.conn = sqlite3.connect(":memory:")
+            self.conn = sqlite3.connect("")
             self._copy_db_to_memory()
         except Exception as e:
             logging.error(f"Error creating in-memory database: {e}")
@@ -127,7 +127,15 @@ class KnowledgeStore:
         
         try:
             # Create tables if they don't exist
-            conn = sqlite3.connect(self.db_path)
+            # Handle in-memory database in a platform-independent way
+            if self.db_path == ":memory:":
+                # For Windows compatibility, use empty string instead of ":memory:"
+                conn = sqlite3.connect("")
+                conn.row_factory = sqlite3.Row
+            else:
+                conn = sqlite3.connect(self.db_path)
+                conn.row_factory = sqlite3.Row
+            
             cursor = conn.cursor()
             
             # Create fact triples table
@@ -202,7 +210,15 @@ class KnowledgeStore:
         """Copy the database to memory for faster access."""
         try:
             # Open the file database
+            if self.db_path == ":memory:":
+                # If we're already using in-memory database, no need to copy
+                return
+            
             disk_conn = sqlite3.connect(self.db_path)
+            
+            # Create in-memory connection if it doesn't exist
+            if self.conn is None:
+                self.conn = sqlite3.connect("")
             
             # Copy to in-memory database
             disk_conn.backup(self.conn)

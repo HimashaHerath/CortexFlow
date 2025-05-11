@@ -40,7 +40,8 @@ class GraphStore:
         # For in-memory databases, we need to maintain a persistent connection
         self.conn = None
         if self.db_path == ':memory:':
-            self.conn = sqlite3.connect(self.db_path)
+            # For Windows compatibility, use empty string instead of ":memory:"
+            self.conn = sqlite3.connect("")
         
         # Initialize NetworkX graph if available
         self.graph = nx.DiGraph() if NETWORKX_ENABLED else None

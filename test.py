@@ -17,7 +17,7 @@ def test_basic_functionality():
         active_tier_tokens=500,
         working_tier_tokens=1000,
         archive_tier_tokens=1500,
-        knowledge_store_path=":memory:"
+        knowledge_store_path="test_memory.db"
     )
     
     context_manager = AdaptiveContextManager(config)

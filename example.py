@@ -39,7 +39,7 @@ def main():
     parser.add_argument("--active-tokens", type=int, default=2000, help="Active tier token limit")
     parser.add_argument("--working-tokens", type=int, default=4000, help="Working tier token limit")
     parser.add_argument("--archive-tokens", type=int, default=6000, help="Archive tier token limit")
-    parser.add_argument("--db", default=":memory:", help="Knowledge store database path")
+    parser.add_argument("--db", default="memory.db", help="Knowledge store database path")
     args = parser.parse_args()
     
     # Configure AdaptiveContext
