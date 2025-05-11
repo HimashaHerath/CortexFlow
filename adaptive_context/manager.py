@@ -471,7 +471,7 @@ class AdaptiveContextManager:
     
     def clear_memory(self) -> None:
         """Clear the conversation memory."""
-        self.memory.clear()
+        self.memory.clear_memory()
         
         # Reset dynamic weighting to defaults if enabled
         if self.config.use_dynamic_weighting and self.weighting_engine:

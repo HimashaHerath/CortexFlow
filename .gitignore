@@ -77,4 +77,5 @@ Thumbs.db
 graph_rag_benchmark_results.png
 benchmark_graph_rag.db
 results.json
-*.json 
+*.json temp_deep_memory/
+benchmark/temp_deep_memory/
