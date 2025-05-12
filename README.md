@@ -31,6 +31,11 @@ CortexFlow dynamically manages context information, retaining important elements
 - **Enhanced entity and relation extraction** with semantic role labeling and coreference resolution
 - **Logical reasoning capabilities** with forward chaining, backward chaining, and abductive reasoning
 - **Uncertainty handling and belief revision** for managing contradictions and incomplete information
+- **Performance optimization features** for scalable knowledge graph operations:
+  - Graph partitioning for efficient storage and retrieval
+  - Multi-hop indexing for faster traversal
+  - Query planning for optimizing reasoning paths
+  - Caching for common reasoning patterns
 
 ## Installation
 
@@ -174,6 +179,60 @@ paths = manager.knowledge_store.graph_store.path_query_with_abstraction(
     start_entity="Marie Curie",
     end_entity="University of Paris"
 )
+```
+
+## Performance Optimization for Knowledge Graphs
+
+CortexFlow provides advanced performance optimization capabilities for scalable knowledge graph operations:
+
+- **Graph Partitioning**: Divides large graphs into manageable subgraphs based on connectivity patterns
+- **Multi-hop Indexing**: Pre-computes and stores paths between entities for faster traversal
+- **Query Planning**: Generates optimized execution plans for knowledge graph operations
+- **Reasoning Pattern Caching**: Stores and reuses common reasoning patterns to avoid redundant computation
+
+Example usage:
+
+```python
+from cortexflow import CortexFlowManager, CortexFlowConfig
+
+# Configure with performance optimization enabled
+config = CortexFlowConfig(
+    use_graph_rag=True,
+    use_performance_optimization=True,
+    use_graph_partitioning=True,
+    use_multihop_indexing=True,
+    graph_partition_method="louvain",
+    max_indexed_hops=2,
+    knowledge_store_path="knowledge.db"
+)
+manager = CortexFlowManager(config)
+
+# Partition the knowledge graph for efficient operations
+partition_result = manager.partition_graph(method="louvain")
+print(f"Created {partition_result['partitions']} partitions")
+
+# Create indexes for multi-hop paths (up to 2 hops)
+index_result = manager.create_hop_indexes(max_hops=2)
+print(f"Created {index_result['indexes_created']} indexes")
+
+# Use the query planning system for optimized path queries
+query_plan = manager.optimize_path_query(
+    start_entity="Albert Einstein",
+    end_entity="Princeton University",
+    max_hops=3,
+    relation_constraints=["affiliated_with", "worked_at"]
+)
+print(f"Query plan using {query_plan['plan']['strategy']} strategy")
+
+# Cache common reasoning patterns for reuse
+manager.cache_reasoning_pattern(
+    pattern_key="scientist_institution|Albert Einstein",
+    pattern_result={"institution": "Princeton University", "role": "Professor"}
+)
+
+# Get performance statistics
+stats = manager.get_performance_stats()
+print(f"Cache hit rate: {stats['caching']['hit_rate']}%")
 ```
 
 ## Logical Reasoning Mechanisms

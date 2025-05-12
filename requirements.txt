@@ -3,6 +3,7 @@ numpy>=1.19.5
 scipy>=1.7.0
 networkx>=2.5
 python-louvain>=0.16  # For graph community detection and hierarchical abstraction
+scikit-learn>=1.0.0  # For spectral clustering in graph partitioning
 
 # NLP and text processing
 spacy>=3.2.0

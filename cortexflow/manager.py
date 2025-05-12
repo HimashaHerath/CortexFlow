@@ -61,6 +61,15 @@ except ImportError:
     logger = logging.getLogger('cortexflow')
     logger.warning("uncertainty_handler module not found. Uncertainty handling functionality will be disabled.")
 
+# Add import for Performance Optimization
+try:
+    from cortexflow.performance_optimizer import PerformanceOptimizer
+    PERFORMANCE_OPTIMIZATION_ENABLED = True
+except ImportError:
+    PERFORMANCE_OPTIMIZATION_ENABLED = False
+    logger = logging.getLogger('cortexflow')
+    logger.warning("performance_optimizer module not found. Performance optimization functionality will be disabled.")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -158,6 +167,17 @@ class CortexFlowManager(ContextProvider):
                     logger.info("Uncertainty Handler initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize Uncertainty Handler: {e}")
+                
+            # Initialize Performance Optimizer if enabled
+            self.performance_optimizer = None
+            if hasattr(self.config, "use_performance_optimization") and self.config.use_performance_optimization and PERFORMANCE_OPTIMIZATION_ENABLED:
+                try:
+                    # Pass the graph store to the performance optimizer
+                    graph_store = self.knowledge_store.graph_store if hasattr(self.knowledge_store, 'graph_store') else None
+                    self.performance_optimizer = PerformanceOptimizer(self.config, graph_store)
+                    logger.info("Performance Optimizer initialized successfully")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Performance Optimizer: {e}")
                 
             logger.info("CortexFlowManager initialized")
             
@@ -299,21 +319,45 @@ class CortexFlowManager(ContextProvider):
     
     def get_stats(self) -> Dict[str, Any]:
         """
-        Get statistics about the CortexFlowManager.
+        Get system-wide statistics.
         
         Returns:
-            Dictionary with statistics
+            Dictionary with various statistics
         """
-        stats = {}
+        stats = {
+            "memory": {
+                "messages": self.memory.get_message_count() if hasattr(self.memory, "get_message_count") else None,
+                "total_tokens": self.memory.get_total_tokens() if hasattr(self.memory, "get_total_tokens") else None,
+                "tiers": self.memory.get_tier_stats() if hasattr(self.memory, "get_tier_stats") else None
+            },
+            "knowledge": {
+                "facts": self.knowledge_store.get_fact_count() if hasattr(self.knowledge_store, "get_fact_count") else None,
+                "embeddings": self.knowledge_store.get_embedding_count() if hasattr(self.knowledge_store, "get_embedding_count") else None,
+                "sources": self.knowledge_store.get_source_count() if hasattr(self.knowledge_store, "get_source_count") else None
+            }
+        }
         
-        # Include memory stats
-        if hasattr(self.memory, "get_stats"):
-            stats["memory"] = self.memory.get_stats()
-            
-        # Include dynamic weighting stats if enabled
-        if self.config.use_dynamic_weighting and self.weighting_engine:
-            stats["dynamic_weighting"] = self.get_dynamic_weighting_stats()
-            
+        # Add dynamic weighting stats if available
+        if self.weighting_engine:
+            try:
+                stats["dynamic_weighting"] = self.get_dynamic_weighting_stats()
+            except Exception:
+                pass
+                
+        # Add uncertainty handling stats if available
+        if self.uncertainty_handler:
+            try:
+                stats["uncertainty"] = self.uncertainty_handler.get_stats()
+            except Exception:
+                pass
+                
+        # Add performance optimization stats if available
+        if self.performance_optimizer:
+            try:
+                stats["performance"] = self.performance_optimizer.get_stats()
+            except Exception:
+                pass
+                
         return stats
     
     def generate_response(self, prompt: str = None, model: str = None) -> str:
@@ -796,15 +840,26 @@ class CortexFlowManager(ContextProvider):
             self.reset_dynamic_weighting()
     
     def close(self) -> None:
-        """Clean up resources."""
+        """Close and clean up resources."""
         try:
-            if hasattr(self, 'knowledge_store'):
+            if self.memory:
+                self.memory.close()
+                
+            if self.knowledge_store:
                 self.knowledge_store.close()
+                
+            if self.uncertainty_handler:
+                self.uncertainty_handler.close()
+                
+            if self.performance_optimizer:
+                self.performance_optimizer.close()
+                
+            logger.info("CortexFlowManager closed")
         except Exception as e:
-            logger.error(f"Error closing knowledge store: {e}")
-    
+            logger.error(f"Error during close: {e}")
+
     def __del__(self) -> None:
-        """Clean up on deletion."""
+        """Destructor."""
         self.close()
 
     def get_context(self) -> Dict[str, Any]:
@@ -906,4 +961,176 @@ class CortexFlowManager(ContextProvider):
             return True
         except Exception as e:
             logger.error(f"Error adding logical rule: {e}")
-            return False 
+            return False
+    
+    def optimize_query(self, query: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate an optimized query plan for knowledge graph operations.
+        
+        Args:
+            query: Dictionary with query parameters
+            
+        Returns:
+            Optimized query plan
+        """
+        if not self.performance_optimizer:
+            return {"status": "error", "message": "Performance optimizer not enabled"}
+        
+        try:
+            return self.performance_optimizer.generate_query_plan(query)
+        except Exception as e:
+            logger.error(f"Error generating optimized query plan: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def partition_graph(self, method: str = None, partition_count: int = None) -> Dict[str, Any]:
+        """
+        Partition the knowledge graph for improved performance.
+        
+        Args:
+            method: Partitioning method (louvain, spectral, modularity)
+            partition_count: Target number of partitions
+            
+        Returns:
+            Partition statistics
+        """
+        if not self.performance_optimizer:
+            return {"status": "error", "message": "Performance optimizer not enabled"}
+        
+        try:
+            # Use default method from config if not specified
+            if method is None:
+                method = self.config.graph_partition_method
+                
+            # Use default count from config if not specified
+            if partition_count is None:
+                partition_count = self.config.target_partition_count
+                
+            return self.performance_optimizer.partition_graph(method, partition_count)
+        except Exception as e:
+            logger.error(f"Error partitioning graph: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def create_hop_indexes(self, max_hops: int = None) -> Dict[str, Any]:
+        """
+        Create indexes for multi-hop queries to speed up traversal.
+        
+        Args:
+            max_hops: Maximum number of hops to index
+            
+        Returns:
+            Indexing statistics
+        """
+        if not self.performance_optimizer:
+            return {"status": "error", "message": "Performance optimizer not enabled"}
+        
+        try:
+            # Use default from config if not specified
+            if max_hops is None:
+                max_hops = self.config.max_indexed_hops
+                
+            return self.performance_optimizer.create_hop_indexes(max_hops)
+        except Exception as e:
+            logger.error(f"Error creating hop indexes: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def optimize_path_query(self, start_entity: str, end_entity: str, 
+                       max_hops: int = 3, 
+                       relation_constraints: List[str] = None) -> Dict[str, Any]:
+        """
+        Optimize a path query between entities using the query planning system.
+        
+        Args:
+            start_entity: Starting entity
+            end_entity: Target entity
+            max_hops: Maximum path length
+            relation_constraints: Optional list of allowed relation types
+            
+        Returns:
+            Optimized query plan
+        """
+        if not self.performance_optimizer:
+            return {"status": "error", "message": "Performance optimizer not enabled"}
+        
+        try:
+            query = {
+                "type": "path",
+                "start_entity": start_entity,
+                "end_entity": end_entity,
+                "max_hops": max_hops,
+                "relation_constraints": relation_constraints or []
+            }
+            
+            return self.performance_optimizer.optimize_query_execution(query)
+        except Exception as e:
+            logger.error(f"Error optimizing path query: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """
+        Get performance statistics from the optimizer.
+        
+        Returns:
+            Dictionary with performance statistics
+        """
+        if not self.performance_optimizer:
+            return {"status": "disabled", "message": "Performance optimizer not enabled"}
+        
+        try:
+            return self.performance_optimizer.get_stats()
+        except Exception as e:
+            logger.error(f"Error getting performance stats: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def clear_performance_caches(self) -> Dict[str, Any]:
+        """
+        Clear all performance optimization caches.
+        
+        Returns:
+            Dictionary with cache clearing statistics
+        """
+        if not self.performance_optimizer:
+            return {"status": "disabled", "message": "Performance optimizer not enabled"}
+        
+        try:
+            return self.performance_optimizer.clear_caches()
+        except Exception as e:
+            logger.error(f"Error clearing performance caches: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def cache_reasoning_pattern(self, pattern_key: str, pattern_result: Any) -> bool:
+        """
+        Cache a common reasoning pattern for reuse.
+        
+        Args:
+            pattern_key: Unique identifier for the reasoning pattern
+            pattern_result: Result of the reasoning pattern
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.performance_optimizer:
+            return False
+        
+        try:
+            self.performance_optimizer.cache_reasoning_pattern(pattern_key, pattern_result)
+            return True
+        except Exception as e:
+            logger.error(f"Error caching reasoning pattern: {e}")
+            return False
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        Get cache statistics including hit rates.
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        if not self.performance_optimizer:
+            return {"status": "disabled", "message": "Performance optimizer not enabled"}
+            
+        try:
+            stats = self.performance_optimizer.get_stats()
+            return stats.get("caching", {})
+        except Exception as e:
+            logger.error(f"Error getting cache stats: {e}")
+            return {"status": "error", "message": str(e)} 

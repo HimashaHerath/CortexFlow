@@ -73,6 +73,19 @@ class CortexFlowConfig:
     uncertainty_representation: str = "confidence"  # confidence, distribution, or both
     reason_with_incomplete_info: bool = True  # Whether to attempt reasoning with incomplete information
     
+    # Performance Optimization settings
+    use_performance_optimization: bool = False
+    use_graph_partitioning: bool = False  # Enable graph partitioning for efficient storage and retrieval
+    graph_partition_method: str = "louvain"  # Graph partitioning method: louvain, spectral, modularity
+    target_partition_count: int = 5  # Target number of partitions (if applicable to method)
+    use_multihop_indexing: bool = False  # Enable indexing strategies for multi-hop queries
+    max_indexed_hops: int = 2  # Maximum number of hops to index for quick retrieval
+    use_query_planning: bool = True  # Enable query planning system for optimizing reasoning paths
+    use_reasoning_cache: bool = True  # Enable caching for common reasoning patterns
+    reasoning_cache_max_size: int = 1000  # Maximum number of reasoning patterns to cache
+    query_cache_max_size: int = 500  # Maximum number of query plans to cache
+    cache_ttl: int = 3600  # Cache time-to-live in seconds (0 for no expiration)
+    
     # LLM Integration
     default_model: str = "gemma3:1b"
     ollama_host: str = "http://localhost:11434"
@@ -206,6 +219,40 @@ class CortexFlowConfig:
             
         if not hasattr(self, 'reason_with_incomplete_info'):
             self.reason_with_incomplete_info = True
+            
+        # Performance Optimization backward compatibility
+        if not hasattr(self, 'use_performance_optimization'):
+            self.use_performance_optimization = False
+            
+        if not hasattr(self, 'use_graph_partitioning'):
+            self.use_graph_partitioning = False
+            
+        if not hasattr(self, 'graph_partition_method'):
+            self.graph_partition_method = "louvain"
+            
+        if not hasattr(self, 'target_partition_count'):
+            self.target_partition_count = 5
+            
+        if not hasattr(self, 'use_multihop_indexing'):
+            self.use_multihop_indexing = False
+            
+        if not hasattr(self, 'max_indexed_hops'):
+            self.max_indexed_hops = 2
+            
+        if not hasattr(self, 'use_query_planning'):
+            self.use_query_planning = True
+            
+        if not hasattr(self, 'use_reasoning_cache'):
+            self.use_reasoning_cache = True
+            
+        if not hasattr(self, 'reasoning_cache_max_size'):
+            self.reasoning_cache_max_size = 1000
+            
+        if not hasattr(self, 'query_cache_max_size'):
+            self.query_cache_max_size = 500
+            
+        if not hasattr(self, 'cache_ttl'):
+            self.cache_ttl = 3600
         
         # Inference Engine backward compatibility
         if not hasattr(self, 'use_inference_engine'):
@@ -246,7 +293,7 @@ class CortexFlowConfig:
         Returns:
             Dictionary representation of configuration
         """
-        return {
+        config_dict = {
             "active_token_limit": self.active_token_limit,
             "working_token_limit": self.working_token_limit,
             "archive_token_limit": self.archive_token_limit,
@@ -299,8 +346,20 @@ class CortexFlowConfig:
             "reliability_weight": self.reliability_weight,
             "confidence_threshold": self.confidence_threshold,
             "uncertainty_representation": self.uncertainty_representation,
-            "reason_with_incomplete_info": self.reason_with_incomplete_info
+            "reason_with_incomplete_info": self.reason_with_incomplete_info,
+            "use_performance_optimization": self.use_performance_optimization,
+            "use_graph_partitioning": self.use_graph_partitioning,
+            "graph_partition_method": self.graph_partition_method,
+            "target_partition_count": self.target_partition_count,
+            "use_multihop_indexing": self.use_multihop_indexing,
+            "max_indexed_hops": self.max_indexed_hops,
+            "use_query_planning": self.use_query_planning,
+            "use_reasoning_cache": self.use_reasoning_cache,
+            "reasoning_cache_max_size": self.reasoning_cache_max_size,
+            "query_cache_max_size": self.query_cache_max_size,
+            "cache_ttl": self.cache_ttl,
         }
+        return config_dict
     
     def log_config(self):
         """Log the current configuration."""
