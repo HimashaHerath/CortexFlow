@@ -56,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed build_knowledge_subgraph method for reliable entity handling
   - Enhanced temporal consistency calculation in consistency metrics
   - Added support for path finding and reasoning path logging
+- Improved memory and resource management:
+  - Added proper resource cleanup to `Ontology` class with `close()` method and destructor
+  - Enhanced `CortexFlowManager.close()` to properly clean up all child components
+  - Implemented context manager pattern for `TraversalProfiler` with proper cleanup
+  - Added safer file operations with context managers to prevent resource leaks
+  - Enhanced existing `close()` methods with more thorough cleanup
+  - Added destruction safeguards to ensure resources are properly released
+  - Improved error handling in cleanup routines across modules
 
 ### Fixed
 - Resolved issues with CortexFlowManager multi-hop query handling
