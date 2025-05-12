@@ -586,4 +586,97 @@ class CortexFlowManager(ContextProvider):
         
     def clear_context(self) -> None:
         """Clear all context data."""
-        self.clear_memory() 
+        self.clear_memory()
+
+    def answer_why_question(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Answer a why-question using backward chaining logical reasoning.
+        
+        Args:
+            query: The why question to answer
+            
+        Returns:
+            Explanation steps for the answer
+        """
+        if not self.knowledge_store or not hasattr(self.knowledge_store, "use_inference_engine") or not self.knowledge_store.use_inference_engine:
+            return [{"type": "error", "message": "Inference engine is not enabled"}]
+        
+        try:
+            return self.knowledge_store.inference_engine.answer_why_question(query)
+        except Exception as e:
+            logger.error(f"Error answering why question: {e}")
+            return [{"type": "error", "message": f"Error processing question: {str(e)}"}]
+    
+    def generate_novel_implications(self, iterations: int = None) -> List[Dict[str, Any]]:
+        """
+        Generate novel implications using forward chaining.
+        
+        Args:
+            iterations: Number of forward chaining iterations (default uses config)
+            
+        Returns:
+            List of newly inferred facts
+        """
+        if not self.knowledge_store or not hasattr(self.knowledge_store, "use_inference_engine") or not self.knowledge_store.use_inference_engine:
+            return []
+        
+        try:
+            if iterations is None:
+                iterations = self.config.max_forward_chain_iterations
+                
+            return self.knowledge_store.inference_engine.forward_chain(iterations=iterations)
+        except Exception as e:
+            logger.error(f"Error generating implications: {e}")
+            return []
+    
+    def generate_hypotheses(self, observation: str, max_hypotheses: int = None) -> List[Dict[str, Any]]:
+        """
+        Generate hypotheses to explain an observation using abductive reasoning.
+        
+        Args:
+            observation: The observation to explain
+            max_hypotheses: Maximum number of hypotheses to generate (default uses config)
+            
+        Returns:
+            List of hypotheses that could explain the observation
+        """
+        if not self.knowledge_store or not hasattr(self.knowledge_store, "use_inference_engine") or not self.knowledge_store.use_inference_engine:
+            return []
+        
+        try:
+            if max_hypotheses is None:
+                max_hypotheses = self.config.max_abductive_hypotheses
+                
+            return self.knowledge_store.generate_hypotheses(observation, max_hypotheses=max_hypotheses)
+        except Exception as e:
+            logger.error(f"Error generating hypotheses: {e}")
+            return []
+    
+    def add_logical_rule(self, name: str, premise_patterns: List[Dict[str, Any]], 
+                       conclusion_pattern: Dict[str, Any], confidence: float = 0.8) -> bool:
+        """
+        Add a logical rule to the inference engine.
+        
+        Args:
+            name: Rule name
+            premise_patterns: List of premise patterns that must be satisfied
+            conclusion_pattern: The conclusion pattern to infer
+            confidence: Rule confidence (0.0-1.0)
+            
+        Returns:
+            Success status
+        """
+        if not self.knowledge_store or not hasattr(self.knowledge_store, "use_inference_engine") or not self.knowledge_store.use_inference_engine:
+            return False
+        
+        try:
+            self.knowledge_store.inference_engine.add_rule(
+                name=name,
+                premise=premise_patterns,
+                conclusion=conclusion_pattern,
+                confidence=confidence
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error adding logical rule: {e}")
+            return False 

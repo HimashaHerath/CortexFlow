@@ -83,6 +83,14 @@ class CortexFlowConfig:
     # Optional custom configuration
     custom_config: Dict[str, Any] = field(default_factory=dict)
     
+    # Inference Engine settings
+    use_inference_engine: bool = False
+    max_inference_depth: int = 5
+    inference_confidence_threshold: float = 0.6
+    max_forward_chain_iterations: int = 3
+    abductive_reasoning_enabled: bool = True
+    max_abductive_hypotheses: int = 5
+    
     def __post_init__(self):
         """Initialize any derived settings after creation."""
         # Ensure path is absolute
@@ -163,6 +171,25 @@ class CortexFlowConfig:
                 "working": 0.35,
                 "archive": 0.40
             }
+        
+        # Inference Engine backward compatibility
+        if not hasattr(self, 'use_inference_engine'):
+            self.use_inference_engine = False
+            
+        if not hasattr(self, 'max_inference_depth'):
+            self.max_inference_depth = 5
+            
+        if not hasattr(self, 'inference_confidence_threshold'):
+            self.inference_confidence_threshold = 0.6
+            
+        if not hasattr(self, 'max_forward_chain_iterations'):
+            self.max_forward_chain_iterations = 3
+            
+        if not hasattr(self, 'abductive_reasoning_enabled'):
+            self.abductive_reasoning_enabled = True
+            
+        if not hasattr(self, 'max_abductive_hypotheses'):
+            self.max_abductive_hypotheses = 5
     
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'CortexFlowConfig':
@@ -223,7 +250,13 @@ class CortexFlowConfig:
             "classifier_threshold": self.classifier_threshold,
             "verbose_logging": self.verbose_logging,
             "debug_mode": self.debug_mode,
-            "custom_config": self.custom_config
+            "custom_config": self.custom_config,
+            "use_inference_engine": self.use_inference_engine,
+            "max_inference_depth": self.max_inference_depth,
+            "inference_confidence_threshold": self.inference_confidence_threshold,
+            "max_forward_chain_iterations": self.max_forward_chain_iterations,
+            "abductive_reasoning_enabled": self.abductive_reasoning_enabled,
+            "max_abductive_hypotheses": self.max_abductive_hypotheses
         }
     
     def log_config(self):

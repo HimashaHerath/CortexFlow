@@ -29,6 +29,7 @@ CortexFlow dynamically manages context information, retaining important elements
 - **Chain of Agents** for collaborative multi-agent reasoning over complex queries
 - **Self-Reflection** for verifying knowledge relevance and response consistency
 - **Enhanced entity and relation extraction** with semantic role labeling and coreference resolution
+- **Logical reasoning capabilities** with forward chaining, backward chaining, and abductive reasoning
 
 ## Installation
 
@@ -173,6 +174,65 @@ paths = manager.knowledge_store.graph_store.path_query_with_abstraction(
     end_entity="University of Paris"
 )
 ```
+
+## Logical Reasoning Mechanisms
+
+CortexFlow now includes formal reasoning capabilities over the knowledge graph:
+
+- **Inference Engine**: Apply logical rules to derive new knowledge and answer complex queries
+- **Backward Chaining**: Answer "why" questions by tracing logical dependencies between facts
+- **Forward Chaining**: Discover novel implications by applying rules to existing knowledge
+- **Abductive Reasoning**: Generate hypotheses to explain observations when information is incomplete
+
+Example usage:
+
+```python
+from cortexflow import CortexFlowManager, CortexFlowConfig
+
+# Configure with inference engine enabled
+config = CortexFlowConfig(
+    use_graph_rag=True,
+    use_inference_engine=True,
+    knowledge_store_path="knowledge.db"
+)
+manager = CortexFlowManager(config)
+
+# Add facts to the knowledge graph
+knowledge = manager.knowledge_store
+graph = knowledge.graph_store
+
+# Add some entities and facts
+graph.add_entity("bird", "category")
+graph.add_entity("eagle", "animal_species")
+graph.add_relation("eagle", "is_a", "bird")
+
+# Add a logical rule
+manager.add_logical_rule(
+    name="birds_can_fly",
+    premise_patterns=[
+        {"source": "?X", "relation": "is_a", "target": "bird"}
+    ],
+    conclusion_pattern={"source": "?X", "relation": "can_fly", "target": "true"},
+    confidence=0.8
+)
+
+# Use backward chaining to answer why questions
+explanation = manager.answer_why_question("Why can an eagle fly?")
+for step in explanation:
+    print(f"[{step['type']}] {step['message']}")
+
+# Use forward chaining to discover novel implications
+new_facts = manager.generate_novel_implications()
+for fact in new_facts:
+    print(f"{fact['source']} {fact['relation']} {fact['target']}")
+
+# Use abductive reasoning to generate hypotheses
+hypotheses = manager.generate_hypotheses("Eagles have hollow bones")
+for hypothesis in hypotheses:
+    print(f"{hypothesis['text']} (Confidence: {hypothesis['confidence']})")
+```
+
+To explore the reasoning capabilities in detail, see the [reasoning demo](examples/reasoning_demo.py).
 
 ## Documentation
 

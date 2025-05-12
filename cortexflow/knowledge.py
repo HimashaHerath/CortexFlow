@@ -71,6 +71,22 @@ class KnowledgeStore(KnowledgeStoreInterface):
         # Hybrid search parameters
         self.hybrid_alpha = 0.7  # Weight for dense vector search (1-alpha is weight for sparse BM25)
         
+        # Inference engine settings
+        self.use_inference_engine = config.use_inference_engine if hasattr(config, 'use_inference_engine') else False
+        self.inference_engine = None
+        
+        if self.use_inference_engine:
+            try:
+                from .inference import InferenceEngine
+                self.inference_engine = InferenceEngine(self, config)
+                logging.info(f"Inference engine initialized successfully")
+            except ImportError:
+                logging.error(f"Inference module not found, disabling inference features")
+                self.use_inference_engine = False
+            except Exception as e:
+                logging.error(f"Error initializing inference engine: {e}")
+                self.use_inference_engine = False
+        
         # Initialize database connection
         self._init_db()
         
@@ -91,8 +107,11 @@ class KnowledgeStore(KnowledgeStoreInterface):
         # Initialize BM25 indexer
         self.bm25_index = None
         if BM25_ENABLED:
-            self.bm25_index = BM25Indexer()
-            self._init_bm25_index()
+            # Initialize BM25 related attributes without creating the index yet
+            self.bm25_corpus = []
+            self.id_to_doc_mapping = {}
+            self.doc_to_id_mapping = {}
+            self._update_bm25_index(force_rebuild=True)
         
         # Initialize graph store if enabled
         self.graph_store = None
@@ -327,11 +346,13 @@ class KnowledgeStore(KnowledgeStoreInterface):
         if not BM25_ENABLED:
             return
         
+        # Default values for max IDs
+        max_fact_id = 0
+        max_knowledge_id = 0
+        
         # Check if we need to update
         if not force_rebuild:
             # Get max IDs to check for new content
-            max_fact_id = 0
-            max_knowledge_id = 0
             
             if self.conn is not None:
                 conn = self.conn
@@ -1739,16 +1760,15 @@ class KnowledgeStore(KnowledgeStoreInterface):
 
     def retrieve_context(self, query: str, max_results: int = 5, min_score: float = 0.0) -> List[Dict[str, Any]]:
         """
-        Retrieve relevant context from the knowledge store using advanced hybrid retrieval.
-        Enhanced to include ontology-based reasoning and provenance information.
+        Retrieve relevant context for a query.
         
         Args:
-            query: Query to retrieve context for
-            max_results: Maximum number of results
-            min_score: Minimum relevance score
+            query: The query to retrieve context for
+            max_results: Maximum number of results to return
+            min_score: Minimum similarity score (0-1) for results
             
         Returns:
-            List of retrieval results with text and metadata
+            List of relevant context items
         """
         results = []
         
@@ -1870,6 +1890,52 @@ class KnowledgeStore(KnowledgeStoreInterface):
             except Exception as e:
                 logging.error(f"Error applying ontology reasoning: {e}")
         
+        # If inference engine is enabled, enhance results with inferences
+        if self.use_inference_engine and self.inference_engine:
+            try:
+                # Check if this is a "why" question for backward chaining
+                if query.lower().strip().startswith("why "):
+                    explanations = self.inference_engine.answer_why_question(query)
+                    
+                    if explanations and not any("error" in exp for exp in explanations):
+                        for explanation in explanations:
+                            explanation["score"] = 0.95  # High score for logical explanations
+                            explanation["source"] = "inference_engine"
+                            
+                        # Add explanations to results
+                        results.extend(explanations)
+                        
+                        # Resort results to prioritize explanations
+                        results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
+                else:
+                    # Try to infer new facts through forward chaining
+                    # Only do this occasionally to avoid performance impact
+                    should_run_forward_chain = (hash(query) % 5 == 0)  # ~20% of queries
+                    
+                    if should_run_forward_chain:
+                        inferred_facts = self.inference_engine.forward_chain(
+                            iterations=self.config.max_forward_chain_iterations
+                        )
+                        
+                        # Convert inferred facts to result format
+                        for fact in inferred_facts:
+                            # Create a natural language representation
+                            fact_text = f"{fact.get('source', '')} {fact.get('relation', '')} {fact.get('target', '')}"
+                            
+                            results.append({
+                                "text": fact_text,
+                                "score": 0.85,  # High but lower than direct answers
+                                "confidence": fact.get("confidence", 0.8),
+                                "source": "inference_engine",
+                                "type": "inferred_fact",
+                                "rule": fact.get("rule")
+                            })
+                        
+                        # Resort results
+                        results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
+            except Exception as e:
+                logging.error(f"Error applying inference engine: {e}")
+        
         # Filter by minimum score
         results = [r for r in results if r.get("score", 0) >= min_score]
         
@@ -1913,4 +1979,114 @@ class KnowledgeStore(KnowledgeStoreInterface):
             if "timestamp" not in result and self.track_temporal:
                 result["timestamp"] = datetime.now().isoformat()
         
-        return deduplicated_results[:max_results] 
+        return deduplicated_results[:max_results]
+    
+    def generate_hypotheses(self, observation: str, max_hypotheses: int = 3) -> List[Dict[str, Any]]:
+        """
+        Generate hypotheses to explain an observation using abductive reasoning.
+        
+        Args:
+            observation: The observation to explain
+            max_hypotheses: Maximum number of hypotheses to generate
+            
+        Returns:
+            List of hypothesis explanations
+        """
+        if not self.use_inference_engine or not self.inference_engine:
+            logging.warning("Inference engine not available for hypothesis generation")
+            return []
+            
+        if not self.config.abductive_reasoning_enabled:
+            logging.info("Abductive reasoning is disabled in configuration")
+            return []
+            
+        try:
+            # Extract a fact pattern from the observation
+            fact_pattern = None
+            
+            # Try to extract entities and relations from the graph store
+            if self.graph_store:
+                entities = self.graph_store.extract_entities(observation)
+                if len(entities) >= 1:
+                    # Get the first entity as the observation subject
+                    subject = entities[0]["text"]
+                    
+                    # Try to extract relations
+                    relations = self.graph_store.extract_relations(observation)
+                    if relations:
+                        # Use first relation
+                        s, p, o = relations[0]
+                        fact_pattern = {
+                            "source": s,
+                            "relation": p,
+                            "target": o
+                        }
+                    else:
+                        # Create a simple is_a or has_property fact pattern
+                        words = observation.split()
+                        if "is" in words or "are" in words:
+                            # Find what comes after "is" or "are"
+                            for i, word in enumerate(words):
+                                if word in ["is", "are"] and i < len(words) - 1:
+                                    fact_pattern = {
+                                        "source": subject,
+                                        "relation": "is_a",
+                                        "target": words[i+1]
+                                    }
+                                    break
+                        elif "has" in words or "have" in words:
+                            # Find what comes after "has" or "have"
+                            for i, word in enumerate(words):
+                                if word in ["has", "have"] and i < len(words) - 1:
+                                    fact_pattern = {
+                                        "source": subject,
+                                        "relation": "has_property",
+                                        "target": words[i+1]
+                                    }
+                                    break
+            
+            # If we couldn't extract a fact pattern, return empty
+            if not fact_pattern:
+                logging.warning(f"Could not extract a fact pattern from observation: {observation}")
+                return []
+                
+            # Apply abductive reasoning
+            hypotheses = self.inference_engine.abductive_reasoning(
+                fact_pattern, 
+                max_hypotheses=max_hypotheses
+            )
+            
+            # Format the hypotheses
+            formatted_hypotheses = []
+            for hypothesis in hypotheses:
+                hypothesis_fact = hypothesis.get("hypothesis", {})
+                
+                # Create a natural language representation
+                if hypothesis_fact:
+                    source = hypothesis_fact.get("source", "")
+                    relation = hypothesis_fact.get("relation", "")
+                    target = hypothesis_fact.get("target", "")
+                    
+                    # Format relation for readability
+                    if relation == "is_a":
+                        relation_text = "is a"
+                    elif relation == "has_property":
+                        relation_text = "has"
+                    else:
+                        relation_text = relation.replace("_", " ")
+                    
+                    hypothesis_text = f"{source} {relation_text} {target}"
+                    
+                    formatted_hypotheses.append({
+                        "text": hypothesis_text,
+                        "confidence": hypothesis.get("confidence", 0.5),
+                        "is_known": hypothesis.get("is_known", False),
+                        "source": "abductive_reasoning",
+                        "reasoning_path": f"Rule: {hypothesis.get('rule', 'unknown')}"
+                    })
+            
+            return formatted_hypotheses
+            
+        except Exception as e:
+            logging.error(f"Error generating hypotheses: {e}")
+            return [] 

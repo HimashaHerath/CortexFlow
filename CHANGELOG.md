@@ -8,13 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Logical reasoning mechanisms over knowledge graph:
+  - Formal inference engine using logical rules
+  - Backward chaining for answering "why" questions
+  - Forward chaining for discovering novel implications
+  - Abductive reasoning for hypothesis generation when information is incomplete
+  - Comprehensive test suite for all reasoning capabilities
 - Advanced graph traversal capabilities:
   - Weighted path algorithms that consider relation importance and confidence scores
   - Bidirectional search for efficient complex queries
-  - Constrained path finding (e.g., finding paths only through specific relation types)
+  - Constrained path finding (e.g., finding paths only through specific relationship types)
   - Graph contraction algorithms to handle large knowledge graphs efficiently
   - Hierarchical graph abstraction for improved traversal performance
-- New example script demonstrating the advanced graph traversal features
+- New example scripts demonstrating the advanced graph traversal and reasoning features
 
 ### Fixed
 - Memory tier limit update function
