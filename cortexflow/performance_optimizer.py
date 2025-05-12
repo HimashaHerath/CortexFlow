@@ -11,6 +11,10 @@ from typing import List, Dict, Any, Optional, Tuple, Set, Union
 import sqlite3
 from collections import defaultdict, Counter
 import heapq
+import hashlib
+import pickle
+from datetime import datetime, timedelta
+import os
 
 # Try importing graph libraries
 try:
@@ -29,6 +33,60 @@ except ImportError:
 
 # Configure logging
 logger = logging.getLogger('cortexflow.performance')
+
+class ReasoningPattern:
+    """
+    Represents a reasoning pattern for caching purposes.
+    """
+    
+    def __init__(self, pattern_key: str, hop_count: int = 0, entities: List[str] = None, path: List[str] = None):
+        """
+        Initialize a reasoning pattern.
+        
+        Args:
+            pattern_key: Unique key for the pattern
+            hop_count: Number of hops in the pattern
+            entities: List of entity types involved
+            path: List of path components
+        """
+        self.pattern_key = pattern_key
+        self.hop_count = hop_count
+        self.entities = entities or []
+        self.path = path or []
+        self.hit_count = 0
+        self.last_accessed = datetime.now()
+        self.created_at = datetime.now()
+    
+    def update_stats(self):
+        """Update usage statistics."""
+        self.hit_count += 1
+        self.last_accessed = datetime.now()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "pattern_key": self.pattern_key,
+            "hop_count": self.hop_count,
+            "entities": self.entities,
+            "path": self.path,
+            "hit_count": self.hit_count,
+            "last_accessed": self.last_accessed.isoformat(),
+            "created_at": self.created_at.isoformat()
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ReasoningPattern':
+        """Create from dictionary."""
+        pattern = cls(
+            pattern_key=data["pattern_key"],
+            hop_count=data["hop_count"],
+            entities=data["entities"],
+            path=data["path"]
+        )
+        pattern.hit_count = data["hit_count"]
+        pattern.last_accessed = datetime.fromisoformat(data["last_accessed"])
+        pattern.created_at = datetime.fromisoformat(data["created_at"])
+        return pattern
 
 class PerformanceOptimizer:
     """
@@ -52,6 +110,11 @@ class PerformanceOptimizer:
         
         # Cache for common reasoning patterns
         self.reasoning_cache = {}
+        self.reasoning_patterns = {}
+        
+        # LRU cache for reasoning patterns
+        self.max_cache_size = getattr(config, "max_reasoning_cache_size", 1000)
+        self.cache_expiry = getattr(config, "reasoning_cache_expiry", 3600)  # in seconds
         
         # Cache hit/miss statistics
         self.stats = {
@@ -75,6 +138,9 @@ class PerformanceOptimizer:
         # Initialize optimizations based on config
         self._init_optimizations()
         
+        # Load cached reasoning patterns if persistence is enabled
+        self._load_cached_patterns()
+        
         logger.info("Performance optimizer initialized")
     
     def _init_optimizations(self):
@@ -94,6 +160,54 @@ class PerformanceOptimizer:
                     self.create_hop_indexes()
                 except Exception as e:
                     logger.error(f"Failed to create hop indexes: {e}")
+    
+    def _load_cached_patterns(self):
+        """Load cached reasoning patterns from disk if available."""
+        if not hasattr(self.config, "persist_reasoning_cache") or not self.config.persist_reasoning_cache:
+            return
+        
+        cache_file = getattr(self.config, "reasoning_cache_file", "reasoning_patterns.json")
+        
+        try:
+            if os.path.exists(cache_file):
+                with open(cache_file, 'r') as f:
+                    patterns_data = json.load(f)
+                
+                for pattern_data in patterns_data:
+                    pattern = ReasoningPattern.from_dict(pattern_data)
+                    self.reasoning_patterns[pattern.pattern_key] = pattern
+                
+                logger.info(f"Loaded {len(self.reasoning_patterns)} reasoning patterns from {cache_file}")
+        except IOError as e:
+            logger.error(f"IO error loading reasoning patterns: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON format in reasoning patterns file: {e}")
+        except Exception as e:
+            logger.error(f"Failed to load reasoning patterns: {e}")
+    
+    def _save_cached_patterns(self):
+        """Save cached reasoning patterns to disk if enabled."""
+        if not hasattr(self.config, "persist_reasoning_cache") or not self.config.persist_reasoning_cache:
+            return
+        
+        cache_file = getattr(self.config, "reasoning_cache_file", "reasoning_patterns.json")
+        
+        try:
+            patterns_data = [pattern.to_dict() for pattern in self.reasoning_patterns.values()]
+            
+            # Create the directory if it doesn't exist
+            cache_dir = os.path.dirname(cache_file)
+            if cache_dir and not os.path.exists(cache_dir):
+                os.makedirs(cache_dir, exist_ok=True)
+                
+            with open(cache_file, 'w') as f:
+                json.dump(patterns_data, f, indent=2)
+            
+            logger.info(f"Saved {len(self.reasoning_patterns)} reasoning patterns to {cache_file}")
+        except IOError as e:
+            logger.error(f"IO error saving reasoning patterns: {e}")
+        except Exception as e:
+            logger.error(f"Failed to save reasoning patterns: {e}")
     
     def partition_graph(self, method: str = "louvain", partition_count: int = None) -> Dict[str, Any]:
         """
@@ -253,147 +367,317 @@ class PerformanceOptimizer:
             logger.error(f"Error during graph partitioning: {e}")
             return {"partitions": 0, "status": "failed", "reason": str(e)}
     
-    def create_hop_indexes(self, max_hops: int = 2) -> Dict[str, Any]:
+    def create_hop_indexes(self, max_hops: int = 2, index_frequent_paths: bool = True) -> Dict[str, Any]:
         """
-        Create indexes for multi-hop queries to speed up traversal.
+        Create indexes for multi-hop queries.
         
         Args:
             max_hops: Maximum number of hops to index
+            index_frequent_paths: Whether to index frequent paths based on query patterns
             
         Returns:
             Dictionary with indexing statistics
         """
-        if not self.graph_store:
+        if not self.graph_store or not hasattr(self.graph_store, "graph"):
             logger.warning("No graph store available for indexing")
             return {"status": "failed", "reason": "No graph store available"}
         
         start_time = time.time()
         
         try:
-            # Access the database connection from graph store
-            if hasattr(self.graph_store, "conn") and self.graph_store.conn:
-                conn = self.graph_store.conn
-            else:
-                # Create a new connection to the database
-                conn = sqlite3.connect(self.graph_store.db_path)
+            # Get the graph from graph store
+            G = self.graph_store.graph
             
-            cursor = conn.cursor()
+            if len(G.nodes()) == 0:
+                logger.warning("Graph is empty, cannot create indexes")
+                return {"status": "failed", "reason": "Empty graph"}
             
-            # Create multi-hop index table if it doesn't exist
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS graph_hop_indexes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_entity_id INTEGER NOT NULL,
-                target_entity_id INTEGER NOT NULL,
-                hop_count INTEGER NOT NULL,
-                path_metadata TEXT,
-                timestamp REAL,
-                UNIQUE(source_entity_id, target_entity_id, hop_count)
-            )
-            ''')
-            
-            # Create indexes for the table
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_hop_source ON graph_hop_indexes(source_entity_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_hop_target ON graph_hop_indexes(target_entity_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_hop_count ON graph_hop_indexes(hop_count)')
-            
-            # Commit the schema changes
-            conn.commit()
-            
-            # Index 1-hop connections (direct relationships from graph_relationships)
-            cursor.execute('''
-            INSERT OR REPLACE INTO graph_hop_indexes (source_entity_id, target_entity_id, hop_count, path_metadata, timestamp)
-            SELECT source_id, target_id, 1, 
-                   json_object('relation_type', relation_type, 'weight', weight, 'confidence', confidence),
-                   strftime('%s', 'now')
-            FROM graph_relationships
-            ''')
-            
-            # Commit the 1-hop indexes
-            conn.commit()
-            
-            # For 2+ hops, we need to join the tables
-            index_count = 0
-            
-            # Only build additional hop indexes if max_hops > 1
-            if max_hops > 1 and NETWORKX_ENABLED and hasattr(self.graph_store, "graph"):
-                G = self.graph_store.graph
-                
-                # Get all nodes
-                nodes = list(G.nodes())
-                
-                # For each node, find paths up to max_hops away
-                for source_node in nodes:
-                    # Get the entity ID for the source node
-                    cursor.execute("SELECT id FROM graph_entities WHERE entity = ?", (source_node,))
-                    source_id_result = cursor.fetchone()
-                    
-                    if not source_id_result:
-                        continue
-                    
-                    source_id = source_id_result[0]
-                    
-                    # Use BFS to find nodes within max_hops
-                    for hop in range(2, max_hops + 1):
-                        # Find all nodes exactly hop steps away
-                        paths = nx.single_source_shortest_path_length(G, source_node, cutoff=hop)
-                        
-                        # Filter to only nodes exactly 'hop' steps away
-                        hop_nodes = [node for node, length in paths.items() if length == hop]
-                        
-                        for target_node in hop_nodes:
-                            # Get the entity ID for the target node
-                            cursor.execute("SELECT id FROM graph_entities WHERE entity = ?", (target_node,))
-                            target_id_result = cursor.fetchone()
-                            
-                            if not target_id_result:
-                                continue
-                                
-                            target_id = target_id_result[0]
-                            
-                            # Find shortest path between source and target
-                            path = nx.shortest_path(G, source=source_node, target=target_node)
-                            
-                            # Create path metadata
-                            path_metadata = {
-                                "path": path,
-                                "length": hop,
-                                "intermediate_nodes": path[1:-1]
-                            }
-                            
-                            # Insert into index
-                            cursor.execute('''
-                            INSERT OR REPLACE INTO graph_hop_indexes 
-                            (source_entity_id, target_entity_id, hop_count, path_metadata, timestamp)
-                            VALUES (?, ?, ?, ?, strftime('%s', 'now'))
-                            ''', (source_id, target_id, hop, json.dumps(path_metadata)))
-                            
-                            index_count += 1
-                            
-                        # Commit after each hop level
-                        conn.commit()
-            
-            # Update stats
-            self.stats["index_operations"] += (index_count + 1)  # +1 for the 1-hop batch operation
-            
-            end_time = time.time()
-            execution_time = end_time - start_time
-            self.stats["optimization_time"] += execution_time
-            
-            return {
-                "indexes_created": index_count + 1,  # Include 1-hop indexes
-                "max_hops": max_hops,
-                "execution_time": execution_time,
-                "status": "success"
+            # Initialize statistics
+            stats = {
+                "direct_indexes": 0,
+                "two_hop_indexes": 0,
+                "multi_hop_indexes": 0,
+                "frequent_path_indexes": 0,
+                "indexed_node_types": set(),
+                "indexed_relation_types": set(),
+                "execution_time": 0.0
             }
             
+            # Create direct relationship indexes (1-hop)
+            logger.info("Creating direct relationship indexes")
+            direct_indexes = self._create_direct_indexes(G)
+            stats["direct_indexes"] = direct_indexes
+            
+            # Create 2-hop indexes if max_hops >= 2
+            if max_hops >= 2:
+                logger.info("Creating 2-hop indexes")
+                two_hop_indexes = self._create_two_hop_indexes(G)
+                stats["two_hop_indexes"] = two_hop_indexes
+            
+            # Create multi-hop indexes if max_hops > 2
+            if max_hops > 2:
+                logger.info(f"Creating multi-hop indexes (up to {max_hops} hops)")
+                multi_hop_indexes = self._create_multi_hop_indexes(G, max_hops)
+                stats["multi_hop_indexes"] = multi_hop_indexes
+            
+            # Create indexes for frequent paths if requested
+            if index_frequent_paths and self.query_patterns:
+                logger.info("Creating indexes for frequent query patterns")
+                frequent_path_indexes = self._create_frequent_path_indexes()
+                stats["frequent_path_indexes"] = frequent_path_indexes
+            
+            # Update indexed types statistics
+            for node in G.nodes():
+                node_type = G.nodes[node].get("type")
+                if node_type:
+                    stats["indexed_node_types"].add(node_type)
+            
+            for _, _, edge_attrs in G.edges(data=True):
+                edge_type = edge_attrs.get("type")
+                if edge_type:
+                    stats["indexed_relation_types"].add(edge_type)
+            
+            # Convert sets to lists for JSON serialization
+            stats["indexed_node_types"] = list(stats["indexed_node_types"])
+            stats["indexed_relation_types"] = list(stats["indexed_relation_types"])
+            
+            # Update optimization statistics
+            self.stats["index_operations"] += 1
+            end_time = time.time()
+            execution_time = end_time - start_time
+            stats["execution_time"] = execution_time
+            self.stats["optimization_time"] += execution_time
+            
+            logger.info(f"Indexing completed in {execution_time:.2f} seconds")
+            return {"status": "success", **stats}
+            
         except Exception as e:
-            logger.error(f"Error during hop indexing: {e}")
+            logger.error(f"Failed to create indexes: {e}")
             return {"status": "failed", "reason": str(e)}
-        finally:
-            # Close the connection if we created a new one
-            if not hasattr(self.graph_store, "conn") and conn:
-                conn.close()
+    
+    def _create_direct_indexes(self, G) -> int:
+        """
+        Create indexes for direct relationships (1-hop).
+        
+        Args:
+            G: NetworkX graph
+            
+        Returns:
+            Number of indexes created
+        """
+        if not hasattr(self.graph_store, "create_index"):
+            return 0
+        
+        indexes_created = 0
+        
+        # Group edges by type
+        edge_types = {}
+        for u, v, data in G.edges(data=True):
+            edge_type = data.get("type", "unknown")
+            if edge_type not in edge_types:
+                edge_types[edge_type] = []
+            edge_types[edge_type].append((u, v))
+        
+        # Create indexes for each edge type
+        for edge_type, edges in edge_types.items():
+            try:
+                self.graph_store.create_index(edge_type)
+                indexes_created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create index for edge type {edge_type}: {e}")
+        
+        # Create indexes for common node attributes
+        node_attrs = set()
+        for node, attrs in G.nodes(data=True):
+            for attr in attrs:
+                if attr not in ("id", "type"):
+                    node_attrs.add(attr)
+        
+        for attr in node_attrs:
+            try:
+                self.graph_store.create_index(attr)
+                indexes_created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create index for node attribute {attr}: {e}")
+        
+        return indexes_created
+    
+    def _create_two_hop_indexes(self, G) -> int:
+        """
+        Create indexes for 2-hop paths.
+        
+        Args:
+            G: NetworkX graph
+            
+        Returns:
+            Number of indexes created
+        """
+        if not hasattr(self.graph_store, "create_composite_index"):
+            return 0
+        
+        indexes_created = 0
+        
+        # Find common 2-hop paths
+        two_hop_paths = {}
+        
+        for node in G.nodes():
+            # Get all neighbors (1-hop)
+            neighbors = list(G.neighbors(node))
+            
+            # For each neighbor, get its neighbors (2-hop from original node)
+            for neighbor in neighbors:
+                # Get edge type from node to neighbor
+                edge1_type = G.get_edge_data(node, neighbor).get("type", "unknown")
+                
+                # Get all 2-hop neighbors
+                two_hop_neighbors = list(G.neighbors(neighbor))
+                
+                for two_hop_neighbor in two_hop_neighbors:
+                    if two_hop_neighbor == node:  # Skip cycles
+                        continue
+                    
+                    # Get edge type from neighbor to 2-hop neighbor
+                    edge2_type = G.get_edge_data(neighbor, two_hop_neighbor).get("type", "unknown")
+                    
+                    # Create path signature
+                    path_key = f"{edge1_type}|{edge2_type}"
+                    
+                    if path_key not in two_hop_paths:
+                        two_hop_paths[path_key] = 0
+                    
+                    two_hop_paths[path_key] += 1
+        
+        # Create indexes for common 2-hop paths
+        for path_key, count in two_hop_paths.items():
+            # Only index paths that appear frequently
+            if count < 10:
+                continue
+            
+            edge_types = path_key.split("|")
+            try:
+                self.graph_store.create_composite_index(edge_types)
+                indexes_created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create 2-hop index for path {path_key}: {e}")
+        
+        return indexes_created
+    
+    def _create_multi_hop_indexes(self, G, max_hops: int) -> int:
+        """
+        Create indexes for multi-hop paths (3+ hops).
+        
+        Args:
+            G: NetworkX graph
+            max_hops: Maximum number of hops to index
+            
+        Returns:
+            Number of indexes created
+        """
+        if not hasattr(self.graph_store, "create_path_index"):
+            return 0
+        
+        indexes_created = 0
+        
+        # Sample nodes to analyze paths
+        sample_size = min(100, len(G.nodes()))
+        sample_nodes = list(G.nodes())[:sample_size]
+        
+        # Find common multi-hop paths
+        path_counts = Counter()
+        
+        for source in sample_nodes:
+            # Use BFS to find paths up to max_hops
+            visited = {source}
+            queue = [(source, [])]
+            
+            while queue:
+                node, path = queue.pop(0)
+                
+                # Skip if path is already at max length
+                if len(path) // 2 >= max_hops:
+                    continue
+                
+                # Get neighbors
+                for neighbor in G.neighbors(node):
+                    if neighbor in visited:
+                        continue
+                    
+                    # Get edge type
+                    edge_type = G.get_edge_data(node, neighbor).get("type", "unknown")
+                    
+                    # Create new path
+                    new_path = path + [edge_type, neighbor]
+                    
+                    # Record path signature if it's at least 3 hops
+                    if len(new_path) // 2 >= 3:
+                        # Extract only edge types for signature
+                        edge_types = [new_path[i] for i in range(0, len(new_path), 2)]
+                        path_key = "|".join(edge_types)
+                        path_counts[path_key] += 1
+                    
+                    # Add to queue for further exploration
+                    visited.add(neighbor)
+                    queue.append((neighbor, new_path))
+        
+        # Create indexes for common multi-hop paths
+        for path_key, count in path_counts.most_common(20):  # Limit to top 20 paths
+            edge_types = path_key.split("|")
+            try:
+                self.graph_store.create_path_index(edge_types)
+                indexes_created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create multi-hop index for path {path_key}: {e}")
+        
+        return indexes_created
+    
+    def _create_frequent_path_indexes(self) -> int:
+        """
+        Create indexes for frequent query patterns.
+        
+        Returns:
+            Number of indexes created
+        """
+        if not hasattr(self.graph_store, "create_path_index"):
+            return 0
+        
+        indexes_created = 0
+        
+        # Extract patterns from query history
+        common_patterns = self.query_patterns.most_common(10)
+        
+        for pattern_key, count in common_patterns:
+            # Skip patterns with low frequency
+            if count < 5:
+                continue
+            
+            # Try to find pattern in reasoning patterns
+            path = []
+            if pattern_key in self.reasoning_patterns:
+                pattern = self.reasoning_patterns[pattern_key]
+                path = pattern.path
+            
+            # Skip if no path found
+            if not path:
+                continue
+            
+            # Extract edge types from path
+            edge_types = []
+            for i in range(1, len(path), 2):
+                if i < len(path):
+                    edge_types.append(path[i])
+            
+            # Skip if no edge types found
+            if not edge_types:
+                continue
+            
+            # Create index for this path
+            try:
+                self.graph_store.create_path_index(edge_types)
+                indexes_created += 1
+            except Exception as e:
+                logger.warning(f"Failed to create index for frequent path {edge_types}: {e}")
+        
+        return indexes_created
     
     def generate_query_plan(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -552,111 +836,261 @@ class PerformanceOptimizer:
                 "error": str(e)
             }
     
-    def cache_reasoning_pattern(self, pattern_key: str, pattern_result: Any) -> None:
+    def generate_pattern_key(self, pattern: Dict[str, Any]) -> str:
         """
-        Cache a common reasoning pattern for reuse.
+        Generate a unique key for a reasoning pattern.
         
         Args:
-            pattern_key: Unique identifier for the reasoning pattern
-            pattern_result: Result of the reasoning pattern
-        """
-        self.reasoning_cache[pattern_key] = {
-            "result": pattern_result,
-            "timestamp": time.time(),
-            "usage_count": 0
-        }
-    
-    def get_cached_reasoning(self, pattern_key: str) -> Optional[Any]:
-        """
-        Retrieve a cached reasoning pattern result.
-        
-        Args:
-            pattern_key: Unique identifier for the reasoning pattern
+            pattern: Reasoning pattern data
             
         Returns:
-            Cached result if available, None otherwise
+            String key for the pattern
         """
-        if pattern_key in self.reasoning_cache:
-            cache_entry = self.reasoning_cache[pattern_key]
-            cache_entry["usage_count"] += 1
-            self.stats["reasoning_cache_hits"] += 1
-            return cache_entry["result"]
+        # Extract key components
+        components = []
         
+        # Add entity types
+        if "entity_types" in pattern:
+            components.append("entities:" + ",".join(sorted(pattern["entity_types"])))
+        
+        # Add relation types
+        if "relation_types" in pattern:
+            components.append("relations:" + ",".join(sorted(pattern["relation_types"])))
+        
+        # Add path structure
+        if "path" in pattern:
+            components.append("path:" + ",".join(pattern["path"]))
+        
+        # Add hop count
+        if "hop_count" in pattern:
+            components.append(f"hops:{pattern['hop_count']}")
+        
+        # Join all components and create a hash
+        key_string = "|".join(components)
+        return hashlib.md5(key_string.encode()).hexdigest()
+    
+    def extract_pattern_from_query(self, query: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract a reasoning pattern from a query.
+        
+        Args:
+            query: Query to analyze
+            
+        Returns:
+            Extracted pattern data
+        """
+        pattern = {}
+        
+        # Extract entity types
+        if "entities" in query:
+            entity_types = set()
+            for entity in query["entities"]:
+                if "type" in entity:
+                    entity_types.add(entity["type"])
+            
+            if entity_types:
+                pattern["entity_types"] = list(entity_types)
+        
+        # Extract relation types
+        if "relations" in query:
+            relation_types = set()
+            for relation in query["relations"]:
+                if "type" in relation:
+                    relation_types.add(relation["type"])
+            
+            if relation_types:
+                pattern["relation_types"] = list(relation_types)
+        
+        # Extract path structure
+        if "path" in query:
+            pattern["path"] = query["path"]
+        
+        # Calculate hop count
+        if "path" in query:
+            pattern["hop_count"] = max(0, len(query["path"]) // 2)
+        
+        return pattern
+    
+    def cache_reasoning_pattern(self, pattern_data: Dict[str, Any], result: Any) -> str:
+        """
+        Cache a reasoning pattern and its result.
+        
+        Args:
+            pattern_data: Pattern data
+            result: Query result
+            
+        Returns:
+            Pattern key
+        """
+        # Generate pattern key
+        pattern_key = self.generate_pattern_key(pattern_data)
+        
+        # Create or update pattern
+        if pattern_key in self.reasoning_patterns:
+            pattern = self.reasoning_patterns[pattern_key]
+            pattern.update_stats()
+        else:
+            pattern = ReasoningPattern(
+                pattern_key=pattern_key,
+                hop_count=pattern_data.get("hop_count", 0),
+                entities=pattern_data.get("entity_types", []),
+                path=pattern_data.get("path", [])
+            )
+            self.reasoning_patterns[pattern_key] = pattern
+        
+        # Cache result
+        self.reasoning_cache[pattern_key] = result
+        
+        # Prune cache if needed
+        self._prune_reasoning_cache()
+        
+        # Update stats
+        self.stats["optimization_time"] += 0.001  # Negligible time
+        
+        # Save cached patterns if persistence is enabled
+        if (pattern.hit_count % 10 == 0 and  # Save every 10 hits
+            hasattr(self.config, "persist_reasoning_cache") and 
+            self.config.persist_reasoning_cache):
+            self._save_cached_patterns()
+        
+        return pattern_key
+    
+    def get_cached_reasoning(self, pattern_data: Dict[str, Any]) -> Tuple[bool, Any]:
+        """
+        Get cached reasoning result for a pattern.
+        
+        Args:
+            pattern_data: Pattern data
+            
+        Returns:
+            Tuple of (cache_hit, result)
+        """
+        # Generate pattern key
+        pattern_key = self.generate_pattern_key(pattern_data)
+        
+        # Check if pattern exists in cache
+        if pattern_key in self.reasoning_cache:
+            # Update pattern stats
+            if pattern_key in self.reasoning_patterns:
+                self.reasoning_patterns[pattern_key].update_stats()
+            
+            # Update hit stats
+            self.stats["reasoning_cache_hits"] += 1
+            
+            return True, self.reasoning_cache[pattern_key]
+        
+        # Cache miss
         self.stats["reasoning_cache_misses"] += 1
-        return None
+        return False, None
+    
+    def _prune_reasoning_cache(self):
+        """Prune the reasoning cache if it exceeds the maximum size."""
+        if len(self.reasoning_cache) <= self.max_cache_size:
+            return
+        
+        # First, remove expired entries
+        current_time = datetime.now()
+        expired_keys = []
+        
+        for pattern_key, pattern in self.reasoning_patterns.items():
+            if current_time - pattern.last_accessed > timedelta(seconds=self.cache_expiry):
+                expired_keys.append(pattern_key)
+        
+        for key in expired_keys:
+            if key in self.reasoning_cache:
+                del self.reasoning_cache[key]
+            if key in self.reasoning_patterns:
+                del self.reasoning_patterns[key]
+        
+        # If still too large, remove least recently used entries
+        if len(self.reasoning_cache) > self.max_cache_size:
+            # Sort patterns by last access time
+            sorted_patterns = sorted(
+                self.reasoning_patterns.items(),
+                key=lambda x: x[1].last_accessed
+            )
+            
+            # Remove oldest entries
+            to_remove = len(self.reasoning_cache) - self.max_cache_size
+            for i in range(to_remove):
+                if i < len(sorted_patterns):
+                    key = sorted_patterns[i][0]
+                    if key in self.reasoning_cache:
+                        del self.reasoning_cache[key]
+                    if key in self.reasoning_patterns:
+                        del self.reasoning_patterns[key]
     
     def optimize_query_execution(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Apply all optimization strategies to a query.
+        Optimize a query for execution.
         
         Args:
-            query: Query parameters
+            query: Query to optimize
             
         Returns:
-            Optimized query plan and execution strategy
+            Optimized query with execution plan
         """
-        # Step 1: Generate query plan
+        start_time = time.time()
+        
+        # Check if the query is in the cache
+        cache_key = self._generate_cache_key(query)
+        if cache_key in self.query_cache:
+            self.stats["query_cache_hits"] += 1
+            return self.query_cache[cache_key]
+        
+        self.stats["query_cache_misses"] += 1
+        
+        # Update query pattern statistics
+        pattern = self.extract_pattern_from_query(query)
+        pattern_key = self.generate_pattern_key(pattern)
+        self.query_patterns[pattern_key] += 1
+        
+        # Generate query plan
         plan = self.generate_query_plan(query)
         
-        # Step 2: Try to get from reasoning cache
-        cache_key = self._generate_cache_key(query)
-        cached_result = self.get_cached_reasoning(cache_key)
+        # Update optimized query
+        optimized_query = query.copy()
+        optimized_query["execution_plan"] = plan
         
-        if cached_result is not None:
-            return {
-                "plan": plan,
-                "result": cached_result,
-                "source": "cache"
-            }
+        # Cache the optimized query
+        self.query_cache[cache_key] = optimized_query
         
-        # Step 3: Return optimized plan for execution
-        return {
-            "plan": plan,
-            "source": "plan_only"
-        }
+        # Update stats
+        end_time = time.time()
+        self.stats["optimization_time"] += (end_time - start_time)
+        self.stats["query_plans_generated"] += 1
+        
+        return optimized_query
     
     def _generate_cache_key(self, query: Dict[str, Any]) -> str:
         """
-        Generate a unique cache key for a query.
+        Generate a cache key for a query.
         
         Args:
-            query: Query parameters
+            query: Query to generate key for
             
         Returns:
-            String cache key
+            Cache key string
         """
-        relevant_parts = []
-        
-        if "type" in query:
-            relevant_parts.append(f"type:{query['type']}")
-        
-        if "start_entity" in query:
-            relevant_parts.append(f"start:{query['start_entity']}")
-        
-        if "end_entity" in query:
-            relevant_parts.append(f"end:{query['end_entity']}")
-        
-        if "max_hops" in query:
-            relevant_parts.append(f"hops:{query['max_hops']}")
-        
-        if "relation_constraints" in query and query["relation_constraints"]:
-            constraints = sorted(query["relation_constraints"])
-            relevant_parts.append(f"constraints:{','.join(constraints)}")
-        
-        return "|".join(relevant_parts)
+        # Normalize query by sorting keys
+        normalized = json.dumps(query, sort_keys=True)
+        return hashlib.md5(normalized.encode()).hexdigest()
     
     def clear_caches(self) -> Dict[str, int]:
         """
-        Clear all caches and return statistics.
+        Clear all caches.
         
         Returns:
-            Statistics about cleared items
+            Dictionary with number of entries cleared
         """
         query_cache_size = len(self.query_cache)
         reasoning_cache_size = len(self.reasoning_cache)
         
         self.query_cache = {}
         self.reasoning_cache = {}
+        self.reasoning_patterns = {}
+        
+        logger.info("All caches cleared")
         
         return {
             "query_cache_cleared": query_cache_size,
@@ -665,102 +1099,132 @@ class PerformanceOptimizer:
     
     def get_stats(self) -> Dict[str, Any]:
         """
-        Get performance statistics.
+        Get performance optimization statistics.
         
         Returns:
-            Dictionary with performance statistics
+            Dictionary with statistics
         """
-        return {
-            "caching": {
-                "query_cache_size": len(self.query_cache),
-                "query_cache_hits": self.stats["query_cache_hits"],
-                "query_cache_misses": self.stats["query_cache_misses"],
-                "reasoning_cache_size": len(self.reasoning_cache),
-                "reasoning_cache_hits": self.stats["reasoning_cache_hits"],
-                "reasoning_cache_misses": self.stats["reasoning_cache_misses"],
-                "hit_rate": self._calculate_hit_rate()
-            },
-            "partitioning": {
-                "partition_count": len(self.partitions),
-                "partitions_created": self.stats["partitions_created"]
-            },
-            "indexing": {
-                "index_operations": self.stats["index_operations"]
-            },
-            "query_planning": {
-                "plans_generated": self.stats["query_plans_generated"]
-            },
-            "common_patterns": dict(self.query_patterns.most_common(5)),
-            "total_optimization_time": self.stats["optimization_time"]
-        }
+        # Calculate cache hit rates
+        query_hit_rate = self._calculate_hit_rate(
+            self.stats["query_cache_hits"],
+            self.stats["query_cache_misses"]
+        )
+        
+        reasoning_hit_rate = self._calculate_hit_rate(
+            self.stats["reasoning_cache_hits"],
+            self.stats["reasoning_cache_misses"]
+        )
+        
+        # Get most common query patterns
+        common_patterns = [
+            {"pattern": pattern, "count": count}
+            for pattern, count in self.query_patterns.most_common(10)
+        ]
+        
+        # Get general stats
+        stats = self.stats.copy()
+        stats.update({
+            "query_cache_size": len(self.query_cache),
+            "reasoning_cache_size": len(self.reasoning_cache),
+            "reasoning_patterns": len(self.reasoning_patterns),
+            "query_hit_rate": query_hit_rate,
+            "reasoning_hit_rate": reasoning_hit_rate,
+            "common_patterns": common_patterns
+        })
+        
+        return stats
     
-    def _calculate_hit_rate(self) -> float:
-        """Calculate cache hit rate as a percentage."""
-        query_hits = self.stats["query_cache_hits"]
-        query_misses = self.stats["query_cache_misses"]
-        reasoning_hits = self.stats["reasoning_cache_hits"]
-        reasoning_misses = self.stats["reasoning_cache_misses"]
+    def _calculate_hit_rate(self, hits: int, misses: int) -> float:
+        """
+        Calculate cache hit rate.
         
-        total_requests = query_hits + query_misses + reasoning_hits + reasoning_misses
-        total_hits = query_hits + reasoning_hits
-        
-        if total_requests == 0:
+        Args:
+            hits: Number of cache hits
+            misses: Number of cache misses
+            
+        Returns:
+            Hit rate as a percentage
+        """
+        total = hits + misses
+        if total == 0:
             return 0.0
-        
-        return (total_hits / total_requests) * 100.0
+        return (hits / total) * 100.0
     
     def prune_partitions(self, density_threshold: float = 0.1) -> int:
         """
-        Prune partitions by merging sparse partitions.
+        Prune graph partitions to optimize memory usage.
         
         Args:
-            density_threshold: Minimum density for a partition to remain independent
+            density_threshold: Minimum density threshold for keeping partitions
             
         Returns:
-            Number of partitions after pruning
+            Number of partitions pruned
         """
         if not NETWORKX_ENABLED or not self.partitions:
             return 0
         
-        # Find sparse partitions
-        sparse_partitions = []
+        partitions_before = len(self.partitions)
+        
+        # Identify partitions to prune
+        to_prune = []
         for partition_id, subgraph in self.partitions.items():
-            if len(subgraph.nodes()) > 1:
-                density = nx.density(subgraph)
-                if density < density_threshold:
-                    sparse_partitions.append(partition_id)
-        
-        if not sparse_partitions:
-            return len(self.partitions)
-        
-        # Find optimal merging strategy
-        if len(sparse_partitions) > 1:
-            # Merge all sparse partitions together
-            new_partition_id = max(self.partitions.keys()) + 1
-            nodes_to_merge = []
+            if len(subgraph.nodes()) <= 1:
+                to_prune.append(partition_id)
+                continue
             
-            for partition_id in sparse_partitions:
-                nodes_to_merge.extend(self.partitions[partition_id].nodes())
-                
-            # Create the merged partition
-            if hasattr(self.graph_store, "graph"):
-                self.partitions[new_partition_id] = self.graph_store.graph.subgraph(nodes_to_merge).copy()
-                
-                # Update partition mappings
-                for node in nodes_to_merge:
-                    self.partition_mapping[node] = new_partition_id
-                
-                # Remove old partitions
-                for partition_id in sparse_partitions:
-                    if partition_id in self.partitions:
-                        del self.partitions[partition_id]
+            density = nx.density(subgraph)
+            if density < density_threshold:
+                to_prune.append(partition_id)
         
-        return len(self.partitions)
+        # Prune identified partitions
+        for partition_id in to_prune:
+            del self.partitions[partition_id]
+        
+        # Update partition mapping
+        if to_prune:
+            self.partition_mapping = {
+                node: partition_id
+                for node, partition_id in self.partition_mapping.items()
+                if partition_id not in to_prune
+            }
+        
+        partitions_after = len(self.partitions)
+        pruned = partitions_before - partitions_after
+        
+        logger.info(f"Pruned {pruned} partitions with density below {density_threshold}")
+        
+        return pruned
     
     def close(self):
-        """Clean up resources."""
-        # Clear caches
-        self.query_cache = {}
-        self.reasoning_cache = {}
-        self.partitions = {}
-        self.partition_mapping = {} 
+        """Clean up resources and save state."""
+        try:
+            # Save cached patterns if enabled
+            if hasattr(self.config, "persist_reasoning_cache") and self.config.persist_reasoning_cache:
+                self._save_cached_patterns()
+            
+            # Clear caches to free memory
+            self.query_cache = {}
+            self.reasoning_cache = {}
+            
+            # Clear partitions and indexes
+            self.partitions = {}
+            self.partition_mapping = {}
+            self.direct_indexes = {}
+            self.two_hop_indexes = {}
+            self.multi_hop_indexes = {}
+            
+            # Close any database connections
+            if hasattr(self, 'conn') and self.conn is not None:
+                self.conn.close()
+                self.conn = None
+            
+            logger.info("Performance optimizer resources cleaned up")
+        except Exception as e:
+            logger.error(f"Error during performance optimizer cleanup: {e}")
+    
+    def __del__(self):
+        """Destructor to ensure resources are cleaned up."""
+        try:
+            self.close()
+        except Exception as e:
+            logger.error(f"Error in performance optimizer __del__: {e}") 

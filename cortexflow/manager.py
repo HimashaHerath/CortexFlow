@@ -855,6 +855,15 @@ class CortexFlowManager(ContextProvider):
             if self.performance_optimizer:
                 self.performance_optimizer.close()
                 
+            # Close ontology if it exists
+            if hasattr(self, 'ontology') and self.ontology:
+                self.ontology.close()
+                
+            # Close any graph_store directly owned by the manager
+            if hasattr(self, 'graph_store') and self.graph_store and \
+               (not hasattr(self, 'knowledge_store') or self.graph_store is not self.knowledge_store.graph_store):
+                self.graph_store.close()
+                
             logger.info("CortexFlowManager closed")
         except Exception as e:
             logger.error(f"Error during close: {e}")

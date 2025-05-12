@@ -148,6 +148,9 @@ class Ontology:
         
         # Build hierarchy maps
         self._build_hierarchy_maps()
+        
+        # Connection for long-lived operations (will be set when needed)
+        self.conn = None
     
     def _init_db(self):
         """Initialize the database tables for ontology."""
@@ -754,4 +757,18 @@ class Ontology:
             return False
             
         finally:
-            conn.close() 
+            conn.close()
+    
+    def close(self):
+        """Close any open database connections and clean up resources."""
+        try:
+            if hasattr(self, 'conn') and self.conn is not None:
+                self.conn.close()
+                self.conn = None
+            logging.info("Ontology resources cleaned up")
+        except Exception as e:
+            logging.error(f"Error closing ontology resources: {e}")
+            
+    def __del__(self):
+        """Destructor to ensure resources are cleaned up."""
+        self.close() 
