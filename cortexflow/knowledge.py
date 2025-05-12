@@ -9,7 +9,7 @@ import time
 import json
 import sqlite3
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple, Union, ContextManager
+from typing import List, Dict, Any, Optional, Tuple, Union, ContextManager, Protocol, runtime_checkable
 from sqlitedict import SqliteDict
 from datetime import datetime
 import logging
@@ -36,6 +36,348 @@ except ImportError:
 from cortexflow.config import CortexFlowConfig
 from cortexflow.graph_store import GraphStore
 from cortexflow.interfaces import KnowledgeStoreInterface
+
+@runtime_checkable
+class SearchStrategy(Protocol):
+    """Strategy interface for search methods."""
+    
+    def search(self, knowledge_store: 'KnowledgeStore', **kwargs) -> List[Dict[str, Any]]:
+        """
+        Execute the search strategy.
+        
+        Args:
+            knowledge_store: The knowledge store instance
+            **kwargs: Strategy-specific parameters
+            
+        Returns:
+            List of search results
+        """
+        pass
+
+
+class BM25SearchStrategy:
+    """BM25 search strategy for keyword-based retrieval."""
+    
+    def search(self, knowledge_store: 'KnowledgeStore', query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Perform BM25 search for keyword-based retrieval.
+        
+        Args:
+            knowledge_store: The knowledge store instance
+            query: The search query
+            max_results: Maximum number of results to return
+            
+        Returns:
+            List of results with BM25 scores
+        """
+        if not BM25_ENABLED or not knowledge_store.bm25_index:
+            return []
+            
+        # Tokenize query
+        tokenized_query = query.lower().split()
+        
+        # Get BM25 scores
+        bm25_scores = knowledge_store.bm25_index.get_scores(tokenized_query)
+        
+        # Sort document IDs by score
+        sorted_indices = np.argsort(bm25_scores)[::-1]
+        
+        results = []
+        for i in sorted_indices[:max_results]:
+            if i in knowledge_store.id_to_doc_mapping and bm25_scores[i] > 0:
+                doc = knowledge_store.id_to_doc_mapping[i]
+                doc_type = doc.get('type', 'fact')
+                
+                if doc_type == 'summary':
+                    results.append({
+                        'type': 'summary',
+                        'content': f"From previous conversation: {doc['text']}",
+                        'keywords': doc.get('keywords', []),
+                        'bm25_score': float(bm25_scores[i]),
+                        'id': doc['id']
+                    })
+                elif doc_type == 'knowledge_item':
+                    results.append({
+                        'type': 'knowledge_item',
+                        'text': doc['text'],
+                        'score': float(bm25_scores[i]),
+                        'content': doc['text'],
+                        'bm25_score': float(bm25_scores[i]),
+                        'id': doc['id']
+                    })
+                else:
+                    results.append({
+                        'type': 'fact',
+                        'text': f"{doc['subject']} {doc['predicate']} {doc['object']}",
+                        'content': f"{knowledge_store.trust_marker} {doc['subject']} {doc['predicate']} {doc['object']}",
+                        'bm25_score': float(bm25_scores[i]),
+                        'score': float(bm25_scores[i]),
+                        'id': doc['id']
+                    })
+                    
+        return results
+
+
+class DenseVectorSearchStrategy:
+    """Dense vector search strategy using embeddings."""
+    
+    def search(self, knowledge_store: 'KnowledgeStore', query_embedding: np.ndarray, max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Perform vector similarity search for embeddings.
+        
+        Args:
+            knowledge_store: The knowledge store instance
+            query_embedding: Query embedding vector
+            max_results: Maximum number of results to return
+        
+        Returns:
+            List of matching items with similarity scores
+        """
+        if not VECTOR_ENABLED or query_embedding is None:
+            return []
+        
+        results = []
+        
+        with knowledge_store.get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Get all facts with embeddings
+            cursor.execute('SELECT id, subject, predicate, object, confidence, embedding FROM fact_triples WHERE embedding IS NOT NULL')
+            facts = cursor.fetchall()
+            
+            # Get all knowledge items with embeddings
+            cursor.execute('SELECT id, text, confidence, embedding FROM knowledge_items WHERE embedding IS NOT NULL')
+            knowledge_items = cursor.fetchall()
+            
+            # Calculate similarity scores for facts
+            for fact in facts:
+                # Convert blob to numpy array
+                embedding_bytes = fact['embedding']
+                if embedding_bytes:
+                    fact_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
+                    
+                    # Skip if the embedding is the wrong shape
+                    if fact_embedding.shape[0] != knowledge_store.embedding_dimension:
+                        continue
+                    
+                    # Calculate cosine similarity
+                    similarity = knowledge_store._vector_similarity(query_embedding, fact_embedding)
+                    
+                    result = {
+                        'id': fact['id'],
+                        'text': f"{fact['subject']} {fact['predicate']} {fact['object']}",
+                        'score': float(similarity),
+                        'type': 'fact',
+                        'confidence': fact['confidence']
+                    }
+                    
+                    results.append(result)
+            
+            # Calculate similarity scores for knowledge items
+            for item in knowledge_items:
+                # Convert blob to numpy array
+                embedding_bytes = item['embedding']
+                if embedding_bytes:
+                    item_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
+                    
+                    # Skip if the embedding is the wrong shape
+                    if item_embedding.shape[0] != knowledge_store.embedding_dimension:
+                        continue
+                    
+                    # Calculate cosine similarity
+                    similarity = knowledge_store._vector_similarity(query_embedding, item_embedding)
+                    
+                    result = {
+                        'id': item['id'],
+                        'text': item['text'],
+                        'score': float(similarity),
+                        'type': 'knowledge',
+                        'confidence': item['confidence']
+                    }
+                    
+                    results.append(result)
+        
+        # Sort by similarity score
+        results.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Return top results
+        return results[:max_results]
+
+
+class HybridSearchStrategy:
+    """Hybrid search strategy combining dense vector and sparse BM25 results."""
+    
+    def search(self, knowledge_store: 'KnowledgeStore', query: str, query_embedding: np.ndarray, max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Perform hybrid search combining dense vector and sparse BM25 results.
+        
+        Args:
+            knowledge_store: The knowledge store instance
+            query: Text query for sparse search
+            query_embedding: Query embedding for dense search
+            max_results: Maximum number of results
+            
+        Returns:
+            List of results with combined scores
+        """
+        # Get sparse BM25 results
+        sparse_results = knowledge_store.search_strategy(
+            strategy="bm25",
+            query=query, 
+            max_results=knowledge_store.rerank_top_k
+        )
+        
+        # Get dense vector results
+        dense_results = knowledge_store.search_strategy(
+            strategy="dense_vector",
+            query_embedding=query_embedding, 
+            max_results=knowledge_store.rerank_top_k
+        )
+        
+        # Combine results
+        combined_results = {}
+        
+        # Normalize sparse scores
+        max_sparse_score = max([r['bm25_score'] for r in sparse_results]) if sparse_results else 1.0
+        min_sparse_score = min([r['bm25_score'] for r in sparse_results]) if sparse_results else 0.0
+        sparse_range = max(1e-6, max_sparse_score - min_sparse_score)
+        
+        # Add sparse results with normalized scores
+        for result in sparse_results:
+            result_id = result['id']
+            normalized_score = (result['bm25_score'] - min_sparse_score) / sparse_range if sparse_range > 0 else 0
+            combined_results[result_id] = {
+                **result,
+                'sparse_score': result['bm25_score'],
+                'normalized_sparse_score': normalized_score,
+                'combined_score': (1 - knowledge_store.hybrid_alpha) * normalized_score
+            }
+            
+        # Add dense results, combining with sparse scores when available
+        for result in dense_results:
+            result_id = result['id']
+            if result_id in combined_results:
+                # Update existing result
+                combined_results[result_id].update({
+                    'similarity': result.get('score', 0),
+                    'dense_score': result.get('score', 0),
+                    'combined_score': combined_results[result_id]['combined_score'] + knowledge_store.hybrid_alpha * result.get('score', 0)
+                })
+            else:
+                # Add new result
+                combined_results[result_id] = {
+                    **result,
+                    'dense_score': result.get('score', 0),
+                    'combined_score': knowledge_store.hybrid_alpha * result.get('score', 0)
+                }
+                
+        # Convert to list and sort by combined score
+        results_list = list(combined_results.values())
+        results_list.sort(key=lambda x: x['combined_score'], reverse=True)
+        
+        return results_list[:max_results]
+
+
+class KeywordSearchStrategy:
+    """Basic keyword search strategy."""
+    
+    def search(self, knowledge_store: 'KnowledgeStore', query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+        """
+        Basic keyword search as fallback when vector/BM25 is not available.
+        
+        Args:
+            knowledge_store: The knowledge store instance
+            query: The search query
+            max_results: Maximum number of results to return
+            
+        Returns:
+            List of results
+        """
+        results = []
+        
+        if knowledge_store.conn is not None:
+            # Using in-memory database
+            conn = knowledge_store.conn
+        else:
+            # Using file-based database
+            conn = sqlite3.connect(knowledge_store.db_path)
+        
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            query_terms = query.lower().split()
+            
+            # Build a query that searches across all fields
+            sql_query = '''
+            SELECT * FROM fact_triples 
+            WHERE subject LIKE ? OR predicate LIKE ? OR object LIKE ?
+            ORDER BY confidence DESC
+            LIMIT ?
+            '''
+            
+            # Improve search by expanding query with synonyms and related terms
+            expanded_query = knowledge_store._expand_query(query)
+            for term in expanded_query:
+                param = f"%{term}%"
+                cursor.execute(sql_query, (param, param, param, max_results))
+                fact_results = [dict(row) for row in cursor.fetchall()]
+                
+                # Add facts to results with trust marker
+                for fact in fact_results:
+                    results.append({
+                        'type': 'fact',
+                        'content': f"{knowledge_store.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}",
+                        'confidence': fact['confidence'],
+                        'timestamp': fact['timestamp'],
+                        'source': fact['source'] if fact['source'] else "memory"
+                    })
+                
+                if len(results) >= max_results:
+                    break
+        except sqlite3.OperationalError as e:
+            logging.error(f"SQLite error in keyword search: {e}")
+        
+        if knowledge_store.conn is None:
+            conn.close()
+            
+        # Search summaries if needed
+        if len(results) < max_results and hasattr(knowledge_store, 'vector_store'):
+            summary_scores = []
+            for summary_id, keywords in knowledge_store.vector_store.items():
+                if not isinstance(keywords, str):
+                    continue
+                    
+                # Improved keyword matching with partial matches
+                score = 0
+                for term in query_terms:
+                    if term in keywords.lower():
+                        score += 1
+                    else:
+                        # Check for partial matches
+                        for keyword in keywords.lower().split():
+                            if term in keyword or keyword in term:
+                                score += 0.5
+                                break
+                
+                if score > 0:
+                    summary_scores.append((summary_id, score))
+            
+            # Sort by score and get top results
+            summary_scores.sort(key=lambda x: x[1], reverse=True)
+            for summary_id, score in summary_scores[:max_results - len(results)]:
+                if hasattr(knowledge_store, 'summaries') and summary_id in knowledge_store.summaries:
+                    summary = knowledge_store.summaries[summary_id]
+                    results.append({
+                        'type': 'summary',
+                        'content': f"From previous conversation: {summary['text']}",
+                        'keywords': summary['keywords'],
+                        'timestamp': summary['timestamp'],
+                        'score': score
+                    })
+                    
+        return results
 
 class KnowledgeStore(KnowledgeStoreInterface):
     """Persistent storage for important facts and retrievable context."""
@@ -163,6 +505,14 @@ class KnowledgeStore(KnowledgeStoreInterface):
         # Add tracking for index updates
         self.last_indexed_fact_id = 0
         self.last_indexed_knowledge_id = 0
+        
+        # Initialize search strategies
+        self._search_strategies = {
+            "bm25": BM25SearchStrategy(),
+            "dense_vector": DenseVectorSearchStrategy(),
+            "hybrid": HybridSearchStrategy(),
+            "keyword": KeywordSearchStrategy()
+        }
     
     @contextmanager
     def get_connection(self) -> sqlite3.Connection:
@@ -689,52 +1039,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         Returns:
             List of results with BM25 scores
         """
-        if not BM25_ENABLED or not self.bm25_index:
-            return []
-            
-        # Tokenize query
-        tokenized_query = query.lower().split()
-        
-        # Get BM25 scores
-        bm25_scores = self.bm25_index.get_scores(tokenized_query)
-        
-        # Sort document IDs by score
-        sorted_indices = np.argsort(bm25_scores)[::-1]
-        
-        results = []
-        for i in sorted_indices[:max_results]:
-            if i in self.id_to_doc_mapping and bm25_scores[i] > 0:
-                doc = self.id_to_doc_mapping[i]
-                doc_type = doc.get('type', 'fact')
-                
-                if doc_type == 'summary':
-                    results.append({
-                        'type': 'summary',
-                        'content': f"From previous conversation: {doc['text']}",
-                        'keywords': doc.get('keywords', []),
-                        'bm25_score': float(bm25_scores[i]),
-                        'id': doc['id']
-                    })
-                elif doc_type == 'knowledge_item':
-                    results.append({
-                        'type': 'knowledge_item',
-                        'text': doc['text'],
-                        'score': float(bm25_scores[i]),
-                        'content': doc['text'],
-                        'bm25_score': float(bm25_scores[i]),
-                        'id': doc['id']
-                    })
-                else:
-                    results.append({
-                        'type': 'fact',
-                        'text': f"{doc['subject']} {doc['predicate']} {doc['object']}",
-                        'content': f"{self.trust_marker} {doc['subject']} {doc['predicate']} {doc['object']}",
-                        'bm25_score': float(bm25_scores[i]),
-                        'score': float(bm25_scores[i]),
-                        'id': doc['id']
-                    })
-                    
-        return results
+        return self.search_strategy(strategy="bm25", query=query, max_results=max_results)
     
     def _dense_vector_search(self, query_embedding: np.ndarray, max_results: int = 10) -> List[Dict[str, Any]]:
         """
@@ -747,76 +1052,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         Returns:
             List of matching items with similarity scores
         """
-        if not VECTOR_ENABLED or query_embedding is None:
-            return []
-        
-        results = []
-        
-        with self.get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            # Get all facts with embeddings
-            cursor.execute('SELECT id, subject, predicate, object, confidence, embedding FROM fact_triples WHERE embedding IS NOT NULL')
-            facts = cursor.fetchall()
-            
-            # Get all knowledge items with embeddings
-            cursor.execute('SELECT id, text, confidence, embedding FROM knowledge_items WHERE embedding IS NOT NULL')
-            knowledge_items = cursor.fetchall()
-            
-            # Calculate similarity scores for facts
-            for fact in facts:
-                # Convert blob to numpy array
-                embedding_bytes = fact['embedding']
-                if embedding_bytes:
-                    fact_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
-                    
-                    # Skip if the embedding is the wrong shape
-                    if fact_embedding.shape[0] != self.embedding_dimension:
-                        continue
-                    
-                    # Calculate cosine similarity
-                    similarity = self._vector_similarity(query_embedding, fact_embedding)
-                    
-                    result = {
-                        'id': fact['id'],
-                        'text': f"{fact['subject']} {fact['predicate']} {fact['object']}",
-                        'score': float(similarity),
-                        'type': 'fact',
-                        'confidence': fact['confidence']
-                    }
-                    
-                    results.append(result)
-            
-            # Calculate similarity scores for knowledge items
-            for item in knowledge_items:
-                # Convert blob to numpy array
-                embedding_bytes = item['embedding']
-                if embedding_bytes:
-                    item_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
-                    
-                    # Skip if the embedding is the wrong shape
-                    if item_embedding.shape[0] != self.embedding_dimension:
-                        continue
-                    
-                    # Calculate cosine similarity
-                    similarity = self._vector_similarity(query_embedding, item_embedding)
-                    
-                    result = {
-                        'id': item['id'],
-                        'text': item['text'],
-                        'score': float(similarity),
-                        'type': 'knowledge',
-                        'confidence': item['confidence']
-                    }
-                    
-                    results.append(result)
-        
-        # Sort by similarity score
-        results.sort(key=lambda x: x['score'], reverse=True)
-        
-        # Return top results
-        return results[:max_results]
+        return self.search_strategy(strategy="dense_vector", query_embedding=query_embedding, max_results=max_results)
     
     def _hybrid_search(self, query: str, query_embedding: np.ndarray, max_results: int = 10) -> List[Dict[str, Any]]:
         """
@@ -830,54 +1066,37 @@ class KnowledgeStore(KnowledgeStoreInterface):
         Returns:
             List of results with combined scores
         """
-        # Get sparse BM25 results
-        sparse_results = self._bm25_search(query, max_results=self.rerank_top_k)
+        return self.search_strategy(strategy="hybrid", query=query, query_embedding=query_embedding, max_results=max_results)
+    
+    def _keyword_search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+        """
+        Basic keyword search as fallback when vector/BM25 is not available.
         
-        # Get dense vector results
-        dense_results = self._dense_vector_search(query_embedding, max_results=self.rerank_top_k)
-        
-        # Combine results
-        combined_results = {}
-        
-        # Normalize sparse scores
-        max_sparse_score = max([r['bm25_score'] for r in sparse_results]) if sparse_results else 1.0
-        min_sparse_score = min([r['bm25_score'] for r in sparse_results]) if sparse_results else 0.0
-        sparse_range = max(1e-6, max_sparse_score - min_sparse_score)
-        
-        # Add sparse results with normalized scores
-        for result in sparse_results:
-            result_id = result['id']
-            normalized_score = (result['bm25_score'] - min_sparse_score) / sparse_range if sparse_range > 0 else 0
-            combined_results[result_id] = {
-                **result,
-                'sparse_score': result['bm25_score'],
-                'normalized_sparse_score': normalized_score,
-                'combined_score': (1 - self.hybrid_alpha) * normalized_score
-            }
+        Args:
+            query: The search query
+            max_results: Maximum number of results to return
             
-        # Add dense results, combining with sparse scores when available
-        for result in dense_results:
-            result_id = result['id']
-            if result_id in combined_results:
-                # Update existing result
-                combined_results[result_id].update({
-                    'similarity': result['similarity'],
-                    'dense_score': result['similarity'],
-                    'combined_score': combined_results[result_id]['combined_score'] + self.hybrid_alpha * result['similarity']
-                })
-            else:
-                # Add new result
-                combined_results[result_id] = {
-                    **result,
-                    'dense_score': result['similarity'],
-                    'combined_score': self.hybrid_alpha * result['similarity']
-                }
-                
-        # Convert to list and sort by combined score
-        results_list = list(combined_results.values())
-        results_list.sort(key=lambda x: x['combined_score'], reverse=True)
+        Returns:
+            List of results
+        """
+        return self.search_strategy(strategy="keyword", query=query, max_results=max_results)
+    
+    def search_strategy(self, strategy: str, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Use a specific search strategy.
         
-        return results_list[:max_results]
+        Args:
+            strategy: The name of the strategy to use
+            **kwargs: Arguments to pass to the strategy
+            
+        Returns:
+            Search results from the selected strategy
+        """
+        if strategy not in self._search_strategies:
+            logging.warning(f"Unknown search strategy: {strategy}, falling back to keyword search")
+            strategy = "keyword"
+            
+        return self._search_strategies[strategy].search(self, **kwargs)
     
     def _rerank_results(self, query: str, results: List[Dict[str, Any]], max_results: int = 5) -> List[Dict[str, Any]]:
         """
@@ -1447,102 +1666,6 @@ class KnowledgeStore(KnowledgeStoreInterface):
             List of IDs for stored facts
         """
         return self.remember_explicit(text, source, confidence)
-    
-    def _keyword_search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
-        """
-        Basic keyword search as fallback when vector/BM25 is not available.
-        
-        Args:
-            query: The search query
-            max_results: Maximum number of results to return
-            
-        Returns:
-            List of results
-        """
-        results = []
-        
-        if self.conn is not None:
-            # Using in-memory database
-            conn = self.conn
-        else:
-            # Using file-based database
-            conn = sqlite3.connect(self.db_path)
-        
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        try:
-            query_terms = query.lower().split()
-            
-            # Build a query that searches across all fields
-            sql_query = '''
-            SELECT * FROM fact_triples 
-            WHERE subject LIKE ? OR predicate LIKE ? OR object LIKE ?
-            ORDER BY confidence DESC
-            LIMIT ?
-            '''
-            
-            # Improve search by expanding query with synonyms and related terms
-            expanded_query = self._expand_query(query)
-            for term in expanded_query:
-                param = f"%{term}%"
-                cursor.execute(sql_query, (param, param, param, max_results))
-                fact_results = [dict(row) for row in cursor.fetchall()]
-                
-                # Add facts to results with trust marker
-                for fact in fact_results:
-                    results.append({
-                        'type': 'fact',
-                        'content': f"{self.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}",
-                        'confidence': fact['confidence'],
-                        'timestamp': fact['timestamp'],
-                        'source': fact['source'] if fact['source'] else "memory"
-                    })
-                
-                if len(results) >= max_results:
-                    break
-        except sqlite3.OperationalError as e:
-            logging.error(f"SQLite error in keyword search: {e}")
-        
-        if self.conn is None:
-            conn.close()
-            
-        # Search summaries if needed
-        if len(results) < max_results:
-            summary_scores = []
-            for summary_id, keywords in self.vector_store.items():
-                if not isinstance(keywords, str):
-                    continue
-                    
-                # Improved keyword matching with partial matches
-                score = 0
-                for term in query_terms:
-                    if term in keywords.lower():
-                        score += 1
-                    else:
-                        # Check for partial matches
-                        for keyword in keywords.lower().split():
-                            if term in keyword or keyword in term:
-                                score += 0.5
-                                break
-                
-                if score > 0:
-                    summary_scores.append((summary_id, score))
-            
-            # Sort by score and get top results
-            summary_scores.sort(key=lambda x: x[1], reverse=True)
-            for summary_id, score in summary_scores[:max_results - len(results)]:
-                if summary_id in self.summaries:
-                    summary = self.summaries[summary_id]
-                    results.append({
-                        'type': 'summary',
-                        'content': f"From previous conversation: {summary['text']}",
-                        'keywords': summary['keywords'],
-                        'timestamp': summary['timestamp'],
-                        'score': score
-                    })
-                    
-        return results
     
     def _expand_query(self, query: str) -> List[str]:
         """
