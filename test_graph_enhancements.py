@@ -175,17 +175,34 @@ def run_all_tests():
             logger.error(f"Test '{name}' ERROR: {e}")
             results.append((name, False))
     
-    # Print summary
-    logger.info("\n\nTest Summary:")
-    logger.info("="*50)
+    # Print summary with very clear markers
+    logger.info("\n\n")
+    logger.info("*" * 80)
+    logger.info("*" + " " * 30 + "TEST SUMMARY" + " " * 30 + "*")
+    logger.info("*" * 80)
     for name, success in results:
         status = "PASSED" if success else "FAILED"
-        logger.info(f"{name:30} {status}")
-    logger.info("="*50)
+        logger.info(f"* {name:30} {status:10} *")
+    logger.info("*" * 80)
     
     passed = sum(1 for _, success in results if success)
     total = len(results)
-    logger.info(f"Passed: {passed}/{total} ({passed/total*100:.1f}%)")
+    logger.info(f"* OVERALL: {passed}/{total} tests passed ({passed/total*100:.1f}%) {'SUCCESS' if passed == total else 'FAILURE'} *")
+    logger.info("*" * 80)
+    logger.info("\n\n")
+    
+    # Also print to stdout to ensure visibility
+    print("\n\n")
+    print("*" * 80)
+    print("*" + " " * 30 + "TEST SUMMARY" + " " * 30 + "*")
+    print("*" * 80)
+    for name, success in results:
+        status = "PASSED" if success else "FAILED"
+        print(f"* {name:30} {status:10} *")
+    print("*" * 80)
+    print(f"* OVERALL: {passed}/{total} tests passed ({passed/total*100:.1f}%) {'SUCCESS' if passed == total else 'FAILURE'} *")
+    print("*" * 80)
+    print("\n\n")
 
 if __name__ == "__main__":
     run_all_tests() 
