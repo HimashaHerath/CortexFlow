@@ -11,13 +11,17 @@ import time
 import re
 import copy
 
-# Try importing graph libraries
-try:
-    import networkx as nx
-    NETWORKX_ENABLED = True
-except ImportError:
-    NETWORKX_ENABLED = False
-    logging.warning("networkx not found. Inference engine capabilities will be limited.")
+# Import dependency utilities
+from cortexflow.dependency_utils import import_optional_dependency
+
+# Import graph libraries
+nx_deps = import_optional_dependency(
+    'networkx',
+    warning_message="networkx not found. Inference engine capabilities will be limited."
+)
+NETWORKX_ENABLED = nx_deps['NETWORKX_ENABLED']
+if NETWORKX_ENABLED:
+    nx = nx_deps['module']
 
 from cortexflow.config import CortexFlowConfig
 from cortexflow.interfaces import KnowledgeStoreInterface

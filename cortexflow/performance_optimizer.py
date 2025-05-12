@@ -16,20 +16,27 @@ import pickle
 from datetime import datetime, timedelta
 import os
 
-# Try importing graph libraries
-try:
-    import networkx as nx
-    NETWORKX_ENABLED = True
-except ImportError:
-    NETWORKX_ENABLED = False
-    logging.warning("networkx not found. Graph optimization functionality will be limited.")
+# Import dependency utilities
+from cortexflow.dependency_utils import import_optional_dependency
 
-try:
-    import community as community_louvain
-    COMMUNITY_DETECTION_ENABLED = True
-except ImportError:
-    COMMUNITY_DETECTION_ENABLED = False
-    logging.warning("python-louvain not found. Community detection for graph partitioning will be limited.")
+# Import graph libraries
+nx_deps = import_optional_dependency(
+    'networkx',
+    warning_message="networkx not found. Graph optimization functionality will be limited."
+)
+NETWORKX_ENABLED = nx_deps['NETWORKX_ENABLED']
+if NETWORKX_ENABLED:
+    nx = nx_deps['module']
+
+# Import community detection library
+community_deps = import_optional_dependency(
+    'community',
+    import_name='community_louvain',
+    warning_message="python-louvain not found. Community detection for graph partitioning will be limited."
+)
+COMMUNITY_DETECTION_ENABLED = community_deps['COMMUNITY_LOUVAIN_ENABLED']
+if COMMUNITY_DETECTION_ENABLED:
+    community_louvain = community_deps['module']
 
 # Configure logging
 logger = logging.getLogger('cortexflow.performance')

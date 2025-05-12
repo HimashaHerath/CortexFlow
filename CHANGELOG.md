@@ -64,6 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced existing `close()` methods with more thorough cleanup
   - Added destruction safeguards to ensure resources are properly released
   - Improved error handling in cleanup routines across modules
+- Centralized optional dependency management:
+  - Created `dependency_utils` module with utilities for handling optional dependencies
+  - Added `check_dependency` and `import_optional_dependency` functions for consistent dependency checking
+  - Refactored optional import patterns across modules to use the new utility functions
+  - Improved error messaging and logging for missing dependencies
 
 ### Changed
 - Refactored search methods in knowledge.py using strategy pattern:

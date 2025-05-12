@@ -13,55 +13,79 @@ import json
 import time
 import re
 
-# Try importing graph libraries
-try:
-    import networkx as nx
-    NETWORKX_ENABLED = True
-except ImportError:
-    NETWORKX_ENABLED = False
-    logging.warning("networkx not found. Knowledge graph functionality will be limited.")
+# Import dependency utilities
+from cortexflow.dependency_utils import import_optional_dependency
 
-# Try importing NER for entity extraction
-try:
-    import spacy
-    SPACY_ENABLED = True
-except ImportError:
-    SPACY_ENABLED = False
-    logging.warning("spacy not found. Automatic entity extraction will be limited.")
+# Import graph libraries
+nx_deps = import_optional_dependency(
+    'networkx',
+    warning_message="networkx not found. Knowledge graph functionality will be limited."
+)
+NETWORKX_ENABLED = nx_deps['NETWORKX_ENABLED']
+if NETWORKX_ENABLED:
+    nx = nx_deps['module']
 
-# Try importing Flair for advanced NER
-try:
-    from flair.data import Sentence
-    from flair.models import SequenceTagger
-    FLAIR_ENABLED = True
-except ImportError:
-    FLAIR_ENABLED = False
-    logging.warning("flair not found. Advanced entity recognition will be limited.")
+# Import NER for entity extraction
+spacy_deps = import_optional_dependency(
+    'spacy',
+    warning_message="spacy not found. Automatic entity extraction will be limited."
+)
+SPACY_ENABLED = spacy_deps['SPACY_ENABLED']
+if SPACY_ENABLED:
+    spacy = spacy_deps['module']
+
+# Import Flair for advanced NER
+flair_deps = import_optional_dependency(
+    'flair.data',
+    import_name='flair',
+    warning_message="flair not found. Advanced entity recognition will be limited.",
+    classes=['Sentence']
+)
+FLAIR_ENABLED = flair_deps['FLAIR_ENABLED']
+if FLAIR_ENABLED:
+    Sentence = flair_deps['Sentence']
+    # Import the SequenceTagger separately
+    try:
+        from flair.models import SequenceTagger
+    except ImportError:
+        FLAIR_ENABLED = False
 
 # Try importing SpanBERT for entity recognition
-try:
-    import torch
-    from transformers import AutoTokenizer, AutoModelForTokenClassification
-    SPANBERT_ENABLED = True
-except ImportError:
-    SPANBERT_ENABLED = False
-    logging.warning("transformers/torch not found. SpanBERT entity recognition will be disabled.")
+spanbert_deps = import_optional_dependency(
+    'torch',
+    warning_message="transformers/torch not found. SpanBERT entity recognition will be disabled."
+)
+transformers_deps = import_optional_dependency(
+    'transformers',
+    warning_message="",  # Skip duplicate warning
+    classes=['AutoTokenizer', 'AutoModelForTokenClassification']
+)
+SPANBERT_ENABLED = spanbert_deps['TORCH_ENABLED'] and transformers_deps['TRANSFORMERS_ENABLED']
+if SPANBERT_ENABLED:
+    torch = spanbert_deps['module']
+    AutoTokenizer = transformers_deps['AutoTokenizer']
+    AutoModelForTokenClassification = transformers_deps['AutoModelForTokenClassification']
 
 # Try importing libraries for fuzzy matching
-try:
-    from thefuzz import fuzz, process
-    FUZZY_MATCHING_ENABLED = True
-except ImportError:
-    FUZZY_MATCHING_ENABLED = False
-    logging.warning("thefuzz not found. Fuzzy entity matching will be disabled.")
+fuzzy_deps = import_optional_dependency(
+    'thefuzz',
+    warning_message="thefuzz not found. Fuzzy entity matching will be disabled.",
+    classes=['fuzz', 'process']
+)
+FUZZY_MATCHING_ENABLED = fuzzy_deps['THEFUZZ_ENABLED']
+if FUZZY_MATCHING_ENABLED:
+    fuzz = fuzzy_deps['fuzz']
+    process = fuzzy_deps['process']
 
 from cortexflow.config import CortexFlowConfig
-try:
-    from cortexflow.ontology import Ontology
-    ONTOLOGY_ENABLED = True
-except ImportError:
-    ONTOLOGY_ENABLED = False
-    logging.warning("Ontology module not found. Advanced knowledge graph capabilities will be limited.")
+ontology_deps = import_optional_dependency(
+    'cortexflow.ontology',
+    warning_message="Ontology module not found. Advanced knowledge graph capabilities will be limited.",
+    classes=['Ontology']
+)
+ONTOLOGY_ENABLED = ontology_deps['CORTEXFLOW_ONTOLOGY_ENABLED']
+if ONTOLOGY_ENABLED:
+    Ontology = ontology_deps['Ontology']
 
 class RelationExtractor:
     """

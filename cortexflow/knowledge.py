@@ -35,21 +35,29 @@ import random
 from contextlib import contextmanager
 import warnings
 
+# Import dependency utilities
+from cortexflow.dependency_utils import import_optional_dependency
+
 # Import sentence-transformers for vector embeddings
-try:
-    from sentence_transformers import SentenceTransformer, util
-    VECTOR_ENABLED = True
-except ImportError:
-    VECTOR_ENABLED = False
-    logging.warning("sentence-transformers not found. Vector-based retrieval will be disabled.")
+vector_deps = import_optional_dependency(
+    'sentence_transformers', 
+    warning_message="sentence-transformers not found. Vector-based retrieval will be disabled.",
+    classes=['SentenceTransformer', 'util']
+)
+VECTOR_ENABLED = vector_deps['SENTENCE_TRANSFORMERS_ENABLED']
+if VECTOR_ENABLED:
+    SentenceTransformer = vector_deps['SentenceTransformer']
+    util = vector_deps['util']
 
 # Import BM25 for keyword-based scoring
-try:
-    from rank_bm25 import BM25Okapi
-    BM25_ENABLED = True
-except ImportError:
-    BM25_ENABLED = False
-    logging.warning("rank_bm25 not found. BM25 keyword scoring will be disabled.")
+bm25_deps = import_optional_dependency(
+    'rank_bm25',
+    warning_message="rank_bm25 not found. BM25 keyword scoring will be disabled.",
+    classes=['BM25Okapi']
+)
+BM25_ENABLED = bm25_deps['RANK_BM25_ENABLED']
+if BM25_ENABLED:
+    BM25Okapi = bm25_deps['BM25Okapi']
 
 from cortexflow.config import CortexFlowConfig
 from cortexflow.graph_store import GraphStore
