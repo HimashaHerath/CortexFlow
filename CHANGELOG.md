@@ -65,6 +65,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added destruction safeguards to ensure resources are properly released
   - Improved error handling in cleanup routines across modules
 
+### Changed
+- Refactored search methods in knowledge.py using strategy pattern:
+  - Created abstract `SearchStrategy` interface
+  - Implemented concrete strategy classes for BM25, dense vector, hybrid, and keyword search
+  - Updated `KnowledgeStore` to use these strategies through the `search_strategy` method
+- Improved configuration management:
+  - Refactored `CortexFlowConfig` using builder pattern and nested config classes
+  - Organized parameters into logical sections for better clarity and maintainability
+  - Added descriptive documentation for all configuration sections
+- Enhanced knowledge module API:
+  - Added new `add_knowledge()` method with clearer naming and purpose
+  - Deprecated `remember_knowledge()` method with proper warnings
+  - Improved backward compatibility with support for both old and new config structures
+  - Added migration guide for transitioning to new API
+
 ### Fixed
 - Resolved issues with CortexFlowManager multi-hop query handling
 - Fixed knowledge snapshot functionality for consistency evaluation
@@ -75,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced demonstration script to use mocked objects for reliable testing
 - Corrected bidirectional search implementation for proper path finding
 - Fixed method patching in test_reasoning_process test case
+- Addressed overlapping functionality between `remember_explicit` and `remember_knowledge` methods
 
 ## [0.7.0] - 2023-10-15
 

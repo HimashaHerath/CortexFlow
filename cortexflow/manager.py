@@ -11,6 +11,7 @@ import requests
 import traceback
 from typing import List, Dict, Any, Optional, Union, Iterator, Tuple
 import re
+import warnings
 
 from cortexflow.interfaces import ContextProvider
 from cortexflow.config import CortexFlowConfig
@@ -604,6 +605,8 @@ class CortexFlowManager(ContextProvider):
         """
         Store important knowledge in the knowledge store.
         
+        DEPRECATED: Use add_knowledge() instead.
+        
         Args:
             text: Text to remember
             source: Optional source of the knowledge
@@ -612,40 +615,76 @@ class CortexFlowManager(ContextProvider):
         Returns:
             List of IDs for the stored knowledge
         """
+        warnings.warn(
+            "remember_knowledge() is deprecated; use add_knowledge() instead",
+            DeprecationWarning, stacklevel=2
+        )
+        return self.add_knowledge(text, source, confidence)
+    
+    def add_knowledge(self, text: str, source: str = None, confidence: float = None) -> List[int]:
+        """
+        Store important knowledge in the knowledge store.
+        
+        Args:
+            text: Text to remember
+            source: Optional source of the knowledge
+            confidence: Optional confidence value for the knowledge
+            
+        Returns:
+            List of IDs for the stored knowledge
+        """
+        # Set default confidence if none provided
+        if confidence is None:
+            confidence = 0.95
+            
         item_ids = self.knowledge_store.add_knowledge(text, source=source, confidence=confidence)
         
         # Check for contradictions if enabled
-        if self.uncertainty_handler and self.config.auto_detect_contradictions:
-            try:
-                # Extract entity IDs from the added items
-                entity_ids = []
-                if hasattr(self.knowledge_store, 'graph_store'):
-                    # Get the entity IDs from the knowledge store's graph store
-                    for item_id in item_ids:
-                        entity_data = self.knowledge_store.get_knowledge_item(item_id)
-                        if entity_data and 'entity_id' in entity_data:
-                            entity_ids.append(entity_data['entity_id'])
-                
-                # Check for contradictions for each entity
-                for entity_id in entity_ids:
-                    contradictions = self.uncertainty_handler.detect_contradictions(entity_id=entity_id)
+        if self.uncertainty_handler:
+            # Support both old and new config structure
+            auto_detect = False
+            contradiction_strategy = "weighted"
+            
+            # Try new config structure first
+            if hasattr(self.config, 'uncertainty') and hasattr(self.config.uncertainty, 'auto_detect_contradictions'):
+                auto_detect = self.config.uncertainty.auto_detect_contradictions
+                contradiction_strategy = self.config.uncertainty.default_contradiction_strategy
+            # Fall back to old config structure
+            elif hasattr(self.config, 'auto_detect_contradictions'):
+                auto_detect = self.config.auto_detect_contradictions
+                contradiction_strategy = self.config.default_contradiction_strategy
+            
+            if auto_detect:
+                try:
+                    # Extract entity IDs from the added items
+                    entity_ids = []
+                    if hasattr(self.knowledge_store, 'graph_store'):
+                        # Get the entity IDs from the knowledge store's graph store
+                        for item_id in item_ids:
+                            entity_data = self.knowledge_store.get_knowledge_item(item_id)
+                            if entity_data and 'entity_id' in entity_data:
+                                entity_ids.append(entity_data['entity_id'])
                     
-                    # Auto-resolve contradictions if found
-                    for contradiction in contradictions:
-                        logger.info(f"Detected contradiction for entity {contradiction.get('entity')}: "
-                                  f"{contradiction.get('target1')} vs {contradiction.get('target2')}")
+                    # Check for contradictions for each entity
+                    for entity_id in entity_ids:
+                        contradictions = self.uncertainty_handler.detect_contradictions(entity_id=entity_id)
                         
-                        # Resolve using the configured strategy
-                        resolution = self.uncertainty_handler.resolve_contradiction(
-                            contradiction, 
-                            strategy=self.config.default_contradiction_strategy
-                        )
-                        
-                        logger.info(f"Resolved contradiction using {resolution.get('strategy_used')} strategy: "
-                                  f"Selected '{resolution.get('resolved_value')}' with confidence {resolution.get('confidence')}")
-            except Exception as e:
-                logger.error(f"Error detecting contradictions: {e}")
-                
+                        # Auto-resolve contradictions if found
+                        for contradiction in contradictions:
+                            logger.info(f"Detected contradiction for entity {contradiction.get('entity')}: "
+                                      f"{contradiction.get('target1')} vs {contradiction.get('target2')}")
+                            
+                            # Resolve using the configured strategy
+                            resolution = self.uncertainty_handler.resolve_contradiction(
+                                contradiction, 
+                                strategy=contradiction_strategy
+                            )
+                            
+                            logger.info(f"Resolved contradiction using {resolution.get('strategy_used')} strategy: "
+                                      f"Selected '{resolution.get('resolved_value')}' with confidence {resolution.get('confidence')}")
+                except Exception as e:
+                    logger.error(f"Error detecting contradictions: {e}")
+                    
         return item_ids
             
     def detect_contradictions(self, entity_id=None, relation_type=None, 

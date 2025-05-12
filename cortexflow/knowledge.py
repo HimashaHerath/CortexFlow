@@ -2,6 +2,23 @@
 CortexFlow Knowledge module.
 
 This module provides the knowledge storage and retrieval system for CortexFlow.
+
+Migration Guide for CortexFlow 0.5.0 Knowledge Module Changes:
+-----------------------------------------------------------------
+1. API Changes:
+   - Added `add_knowledge()` method which replaces `remember_knowledge()`
+   - The `remember_knowledge()` method is now deprecated and will be removed in a future version
+   
+2. Migration steps:
+   - Replace `knowledge_store.remember_knowledge(text, source)` with `knowledge_store.add_knowledge(text, source)`
+   - Replace `manager.remember_knowledge(text, source)` with `manager.add_knowledge(text, source)`
+   
+3. Benefits of new API:
+   - More intuitive naming that better reflects the method's purpose
+   - Better documentation of low-level vs high-level methods
+   - Clearer distinction between interface methods and implementation details
+
+For any issues or questions, please refer to the documentation or open an issue on the GitHub repository.
 """
 
 import os
@@ -16,6 +33,7 @@ import logging
 from collections import defaultdict
 import random
 from contextlib import contextmanager
+import warnings
 
 # Import sentence-transformers for vector embeddings
 try:
@@ -1524,7 +1542,14 @@ class KnowledgeStore(KnowledgeStoreInterface):
     
     def remember_explicit(self, text: str, source: str = "user_command", confidence: float = 0.95) -> List[int]:
         """
-        Explicitly add knowledge to the knowledge store.
+        Explicitly add knowledge to the knowledge store, with special handling for facts marked with a trust marker.
+        
+        This is a low-level implementation method that handles:
+        1. Parsing for facts prefixed with trust markers to extract triples
+        2. Building knowledge graph relations
+        3. Storing raw text as knowledge items when no structured data is extracted
+        
+        Most callers should use remember() or add_knowledge() instead, which provide a simpler interface.
         
         Args:
             text: The text to add
@@ -1653,9 +1678,25 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return item_id
     
+    def add_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> List[int]:
+        """
+        Add knowledge to the system, the primary method for adding knowledge programmatically.
+        
+        Args:
+            text: Text to remember
+            source: Source of the knowledge, defaults to "system" if None
+            confidence: Confidence score for the facts
+            
+        Returns:
+            List of IDs for stored facts
+        """
+        return self.remember_explicit(text, source or "system", confidence)
+    
     def remember_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> List[int]:
         """
         Remember knowledge from text.
+        
+        DEPRECATED: Use add_knowledge() instead.
         
         Args:
             text: Text to remember
@@ -1665,7 +1706,12 @@ class KnowledgeStore(KnowledgeStoreInterface):
         Returns:
             List of IDs for stored facts
         """
-        return self.remember_explicit(text, source, confidence)
+        import warnings
+        warnings.warn(
+            "remember_knowledge() is deprecated; use add_knowledge() instead",
+            DeprecationWarning, stacklevel=2
+        )
+        return self.add_knowledge(text, source, confidence)
     
     def _expand_query(self, query: str) -> List[str]:
         """
@@ -1874,7 +1920,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         Returns:
             List of IDs for the stored knowledge
         """
-        return self.remember_knowledge(text, source)
+        return self.add_knowledge(text, source)
     
     def retrieve(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """
