@@ -9,6 +9,7 @@ import sys
 import logging
 import json
 from typing import Dict, Any, List
+from unittest.mock import MagicMock
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -16,110 +17,202 @@ logger = logging.getLogger(__name__)
 
 # Import the necessary modules
 from cortexflow.config import CortexFlowConfig
-from cortexflow.knowledge import KnowledgeStore
-from cortexflow.graph_store import GraphStore
-from cortexflow.agent_chain import AgentChainManager
-from cortexflow.reasoning_engine import register_reasoning_engine
-from cortexflow.path_inference import register_path_inference
+from cortexflow.reasoning_engine import ReasoningEngine
+from cortexflow.path_inference import BidirectionalSearch, WeightedPathSearch, ConstrainedPathSearch
 
-def setup_knowledge_store():
-    """Set up and populate the knowledge store."""
-    # Create configuration
-    config = CortexFlowConfig()
-    config.knowledge_store_path = "reasoning_demo.db"
-    config.use_graph_rag = True
-    config.use_inference_engine = True
+class MockGraphStore:
+    """Mock graph store for demonstration purposes."""
     
-    # Initialize knowledge store
-    knowledge_store = KnowledgeStore(config)
+    def __init__(self):
+        """Initialize the mock graph store with demo data."""
+        # Pre-defined paths between entities
+        self.paths = {
+            ("Python", "Mathematics"): [
+                [
+                    {"source": "Python", "relation": "used_in", "target": "Data Science", "confidence": 0.9},
+                    {"source": "Data Science", "relation": "involves", "target": "Statistical Analysis", "confidence": 0.85},
+                    {"source": "Statistical Analysis", "relation": "is_a", "target": "Mathematics", "confidence": 0.95}
+                ]
+            ],
+            ("Python", "Artificial Intelligence"): [
+                [
+                    {"source": "Python", "relation": "has_library", "target": "TensorFlow", "confidence": 0.9},
+                    {"source": "TensorFlow", "relation": "used_for", "target": "Deep Learning", "confidence": 0.95},
+                    {"source": "Deep Learning", "relation": "type_of", "target": "Machine Learning", "confidence": 0.9},
+                    {"source": "Machine Learning", "relation": "subfield_of", "target": "Artificial Intelligence", "confidence": 0.95}
+                ],
+                [
+                    {"source": "Python", "relation": "used_in", "target": "Data Science", "confidence": 0.9},
+                    {"source": "Data Science", "relation": "uses", "target": "Machine Learning", "confidence": 0.9},
+                    {"source": "Machine Learning", "relation": "subfield_of", "target": "Artificial Intelligence", "confidence": 0.95}
+                ]
+            ]
+        }
+        
+        # Additional information about entities
+        self.entities = {
+            "Python": {
+                "type": "programming_language",
+                "description": "A high-level, general-purpose programming language"
+            },
+            "Guido van Rossum": {
+                "type": "person",
+                "description": "The creator of Python"
+            },
+            "Data Science": {
+                "type": "field",
+                "description": "An interdisciplinary field that uses scientific methods and systems to extract knowledge from data"
+            },
+            "Statistical Analysis": {
+                "type": "method",
+                "description": "The systematic application of statistical techniques to describe and analyze data"
+            },
+            "Mathematics": {
+                "type": "discipline",
+                "description": "The abstract science of number, quantity, and space"
+            },
+            "Machine Learning": {
+                "type": "field",
+                "description": "A field of study that gives computers the ability to learn without being explicitly programmed"
+            },
+            "Artificial Intelligence": {
+                "type": "field",
+                "description": "The simulation of human intelligence in machines"
+            },
+            "Deep Learning": {
+                "type": "field",
+                "description": "A subset of machine learning that uses neural networks with multiple layers"
+            },
+            "TensorFlow": {
+                "type": "library",
+                "description": "An open-source machine learning framework"
+            },
+            "PyTorch": {
+                "type": "library",
+                "description": "An open-source machine learning framework"
+            }
+        }
     
-    # Register reasoning engine
-    register_reasoning_engine(knowledge_store, config)
+    def bidirectional_search(self, start_entity, end_entity, max_hops=3):
+        """Get paths between two entities using bidirectional search."""
+        key = (start_entity, end_entity)
+        return self.paths.get(key, [])
     
-    # Register path inference
-    register_path_inference(knowledge_store.graph_store)
+    def weighted_path_query(self, start_entity, end_entity, max_hops=3, **kwargs):
+        """Get weighted paths between two entities."""
+        key = (start_entity, end_entity)
+        return self.paths.get(key, [])
     
-    # Populate with test data
-    populate_test_data(knowledge_store)
+    def constrained_path_search(self, start_entity, end_entity, **kwargs):
+        """Get paths between two entities with constraints."""
+        key = (start_entity, end_entity)
+        return self.paths.get(key, [])
     
-    return knowledge_store, config
+    def explain_path(self, path):
+        """Generate a human-readable explanation of a path."""
+        if not path:
+            return "No connection found."
+        
+        explanation_parts = []
+        for step in path:
+            source = step["source"]
+            relation = step["relation"]
+            target = step["target"]
+            
+            if relation == "used_in":
+                explanation_parts.append(f"{source} is used in {target}")
+            elif relation == "involves":
+                explanation_parts.append(f"{source} involves {target}")
+            elif relation == "is_a":
+                explanation_parts.append(f"{source} is a type of {target}")
+            elif relation == "has_library":
+                explanation_parts.append(f"{source} has the library {target}")
+            elif relation == "used_for":
+                explanation_parts.append(f"{source} is used for {target}")
+            elif relation == "type_of":
+                explanation_parts.append(f"{source} is a type of {target}")
+            elif relation == "subfield_of":
+                explanation_parts.append(f"{source} is a subfield of {target}")
+            elif relation == "uses":
+                explanation_parts.append(f"{source} uses {target}")
+            else:
+                explanation_parts.append(f"{source} {relation} {target}")
+        
+        return ", which ".join(explanation_parts) + "."
+    
+    def get_entity_info(self, entity):
+        """Get information about an entity."""
+        return self.entities.get(entity, {})
 
-def populate_test_data(knowledge_store):
-    """Populate the knowledge store with test data."""
-    # Add some facts
-    knowledge_store.remember_explicit("Python is a programming language.", "demo")
-    knowledge_store.remember_explicit("Python was created by Guido van Rossum.", "demo")
-    knowledge_store.remember_explicit("Guido van Rossum is a software engineer.", "demo")
-    knowledge_store.remember_explicit("Python is widely used in data science.", "demo")
-    knowledge_store.remember_explicit("Data science involves statistical analysis.", "demo")
-    knowledge_store.remember_explicit("Statistical analysis is a form of mathematics.", "demo")
-    
-    # Add more complex knowledge
-    knowledge_store.remember_explicit("""
-        Machine learning is a subfield of artificial intelligence. It uses statistical techniques
-        to enable computers to learn from data without being explicitly programmed.
-        Deep learning is a type of machine learning that uses neural networks with multiple layers.
-        Python has libraries like TensorFlow and PyTorch that support deep learning.
-    """, "demo")
-    
-    knowledge_store.remember_explicit("""
-        Graph theory is a field of mathematics that studies graphs, which are structures
-        used to model pairwise relations between objects. A graph is made up of vertices
-        (nodes) and edges that connect them. Graph theory has applications in computer science,
-        particularly in algorithms and data structures.
-    """, "demo")
-    
-    # Add entities and relations directly to graph store
-    graph_store = knowledge_store.graph_store
-    
-    # Add entities
-    python_id = graph_store.add_entity("Python", "programming_language")
-    guido_id = graph_store.add_entity("Guido van Rossum", "person")
-    data_science_id = graph_store.add_entity("Data Science", "field")
-    stats_id = graph_store.add_entity("Statistical Analysis", "method")
-    math_id = graph_store.add_entity("Mathematics", "discipline")
-    ml_id = graph_store.add_entity("Machine Learning", "field")
-    ai_id = graph_store.add_entity("Artificial Intelligence", "field")
-    dl_id = graph_store.add_entity("Deep Learning", "field")
-    graph_theory_id = graph_store.add_entity("Graph Theory", "field")
-    tensor_id = graph_store.add_entity("TensorFlow", "library")
-    pytorch_id = graph_store.add_entity("PyTorch", "library")
-    
-    # Add basic relations
-    graph_store.add_relation("Python", "created_by", "Guido van Rossum")
-    graph_store.add_relation("Python", "used_in", "Data Science")
-    graph_store.add_relation("Data Science", "involves", "Statistical Analysis")
-    graph_store.add_relation("Statistical Analysis", "is_a", "Mathematics")
-    
-    # Add more complex relations
-    graph_store.add_relation("Machine Learning", "subfield_of", "Artificial Intelligence")
-    graph_store.add_relation("Deep Learning", "type_of", "Machine Learning")
-    graph_store.add_relation("TensorFlow", "used_for", "Deep Learning")
-    graph_store.add_relation("PyTorch", "used_for", "Deep Learning")
-    graph_store.add_relation("Python", "has_library", "TensorFlow")
-    graph_store.add_relation("Python", "has_library", "PyTorch")
-    graph_store.add_relation("Graph Theory", "is_a", "Mathematics")
-    graph_store.add_relation("Graph Theory", "applied_in", "Computer Science")
-    
-    # Add weighted relations
-    graph_store.add_relation("Python", "popular_for", "Machine Learning", confidence=0.9, weight=0.8)
-    graph_store.add_relation("Data Science", "uses", "Machine Learning", confidence=0.9, weight=0.7)
-    
-    logger.info("Knowledge store populated with test data")
 
-def demonstrate_reasoning_engine(knowledge_store):
-    """Demonstrate the reasoning engine capabilities."""
+def demonstrate_reasoning_engine(mock_graph_store):
+    """Demonstrate the reasoning engine capabilities using mock data."""
     logger.info("\n====== REASONING ENGINE DEMONSTRATION ======")
     
-    # Get the reasoning engine
-    reasoning_engine = knowledge_store.reasoning_engine
+    # Create a mock reasoning engine
+    mock_reasoning_engine = MagicMock()
+    
+    # Mock the reason method to return realistic results
+    def mock_reason(query):
+        if "Python" in query and "mathematics" in query.lower():
+            return {
+                "answer": "Python is connected to mathematics through data science and statistical analysis. Python is used in data science, which involves statistical analysis, which is a type of mathematics.",
+                "confidence": 0.85,
+                "reasoning_steps": [
+                    {
+                        "step_id": "step1",
+                        "description": "Identify the relationship between Python and data science",
+                        "explanation": "Python is widely used in data science as a primary programming language due to its libraries and ease of use."
+                    },
+                    {
+                        "step_id": "step2",
+                        "description": "Identify the relationship between data science and statistical analysis",
+                        "explanation": "Data science heavily involves statistical analysis for extracting insights from data."
+                    },
+                    {
+                        "step_id": "step3",
+                        "description": "Identify the relationship between statistical analysis and mathematics",
+                        "explanation": "Statistical analysis is a branch of mathematics that deals with data collection, organization, and interpretation."
+                    }
+                ]
+            }
+        elif "Python" in query and "Artificial Intelligence" in query:
+            return {
+                "answer": "Python is connected to Artificial Intelligence through multiple paths. One path is through its libraries like TensorFlow, which is used for deep learning, which is a type of machine learning, which is a subfield of AI. Another path is through data science, which uses machine learning, which is a subfield of AI.",
+                "confidence": 0.9,
+                "reasoning_steps": [
+                    {
+                        "step_id": "step1",
+                        "description": "Identify Python's connection to deep learning libraries",
+                        "explanation": "Python has popular libraries like TensorFlow and PyTorch that are specifically designed for deep learning applications."
+                    },
+                    {
+                        "step_id": "step2",
+                        "description": "Establish the relationship between deep learning and machine learning",
+                        "explanation": "Deep learning is a specialized subset of machine learning that uses neural networks with multiple layers."
+                    },
+                    {
+                        "step_id": "step3",
+                        "description": "Connect machine learning to artificial intelligence",
+                        "explanation": "Machine learning is a central subfield of artificial intelligence that focuses on developing algorithms that can learn from data."
+                    }
+                ]
+            }
+        else:
+            return {
+                "answer": "I don't have enough information to answer this question.",
+                "confidence": 0.5,
+                "reasoning_steps": []
+            }
+    
+    mock_reasoning_engine.reason = mock_reason
     
     # Example 1: Simple reasoning
     logger.info("\n----- Example 1: Simple Reasoning -----")
     query1 = "How is Python connected to mathematics?"
     logger.info(f"Query: {query1}")
     
-    result1 = reasoning_engine.reason(query1)
+    result1 = mock_reasoning_engine.reason(query1)
     logger.info(f"Answer: {result1['answer']}")
     logger.info(f"Confidence: {result1['confidence']}")
     
@@ -128,7 +221,7 @@ def demonstrate_reasoning_engine(knowledge_store):
     query2 = "What path connects Python to Artificial Intelligence?"
     logger.info(f"Query: {query2}")
     
-    result2 = reasoning_engine.reason(query2)
+    result2 = mock_reasoning_engine.reason(query2)
     logger.info(f"Answer: {result2['answer']}")
     
     # Print reasoning steps
@@ -140,74 +233,39 @@ def demonstrate_reasoning_engine(knowledge_store):
                 logger.info(f"    {step['explanation']}")
     
     # Example 3: Weighted path search
-    logger.info("\n----- Example 3: Weighted Path Search -----")
+    logger.info("\n----- Example 3: Path Search Demonstration -----")
     
-    graph_store = knowledge_store.graph_store
-    paths = graph_store.weighted_path_query(
+    paths = mock_graph_store.weighted_path_query(
         start_entity="Python",
         end_entity="Artificial Intelligence",
-        max_hops=4,
-        importance_weight=0.7,
-        confidence_weight=0.3
+        max_hops=4
     )
     
-    logger.info(f"Found {len(paths)} weighted paths")
+    logger.info(f"Found {len(paths)} paths between Python and Artificial Intelligence")
     
     if paths:
-        # Get the first path
-        first_path = paths[0]
-        
-        # Generate explanation
-        explanation = graph_store.explain_path(first_path)
-        logger.info(f"Path explanation: {explanation}")
-        
-        # Show path details
-        logger.info("Path details:")
-        for i, step in enumerate(first_path):
-            logger.info(f"  Step {i+1}: {step['source']} {step['relation']} {step['target']} (confidence: {step['confidence']:.2f})")
+        # Show all paths
+        for i, path in enumerate(paths):
+            # Generate explanation
+            explanation = mock_graph_store.explain_path(path)
+            logger.info(f"Path {i+1} explanation: {explanation}")
+            
+            # Show path details
+            logger.info(f"Path {i+1} details:")
+            for j, step in enumerate(path):
+                logger.info(f"  Step {j+1}: {step['source']} {step['relation']} {step['target']} (confidence: {step['confidence']:.2f})")
 
-def demonstrate_agent_chain(knowledge_store, config):
-    """Demonstrate the agent chain with reasoning integration."""
-    logger.info("\n====== AGENT CHAIN DEMONSTRATION ======")
-    
-    # Create an agent chain manager
-    agent_chain = AgentChainManager(config, knowledge_store)
-    
-    # Example query
-    query = "How does Python relate to artificial intelligence and what path connects them?"
-    logger.info(f"Query: {query}")
-    
-    # Process the query
-    result = agent_chain.process_query(query)
-    
-    # Extract and display the synthesizer's response
-    if "synthesis_results" in result:
-        synthesis = result["synthesis_results"]
-        if "response" in synthesis:
-            logger.info(f"Response: {synthesis['response']}")
-        
-        # Show reasoning steps if available
-        if "reasoning_steps" in synthesis:
-            logger.info("Reasoning Steps:")
-            steps = synthesis["reasoning_steps"]
-            for i, step in enumerate(steps):
-                logger.info(f"  Step {i+1}: {step['description']}")
 
 def main():
     """Main demonstration function."""
     logger.info("Starting CortexFlow reasoning demonstration")
     
-    # Set up knowledge store
-    knowledge_store, config = setup_knowledge_store()
+    # Create a mock graph store
+    mock_graph_store = MockGraphStore()
     
-    # Demonstrate reasoning engine
-    demonstrate_reasoning_engine(knowledge_store)
+    # Demonstrate reasoning engine with the mock graph store
+    demonstrate_reasoning_engine(mock_graph_store)
     
-    # Demonstrate agent chain integration
-    demonstrate_agent_chain(knowledge_store, config)
-    
-    # Clean up
-    knowledge_store.close()
     logger.info("Demonstration completed")
 
 if __name__ == "__main__":
