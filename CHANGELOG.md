@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Enhanced Knowledge Graph Schema and Integration:
+  - Extended database schema for relation types and confidence scores
+  - Added metadata fields for provenance tracking and versioning
+  - Implemented GraphMerger component for intelligent knowledge integration
+  - Added entity merging with duplicate detection and conflict resolution
+  - Implemented automatic taxonomic relationship extraction
+  - Added relationship inference for transitive, symmetric, and inverse relations
 - Performance optimization features for knowledge graph operations:
   - Graph partitioning for efficient storage and retrieval
   - Multi-hop indexing strategies for faster path traversal

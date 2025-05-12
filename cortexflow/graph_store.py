@@ -625,7 +625,30 @@ class GraphStore:
             metadata TEXT,
             embedding BLOB,
             timestamp REAL,
+            provenance TEXT,
+            confidence REAL DEFAULT 0.8,
+            temporal_start TEXT,
+            temporal_end TEXT,
+            extraction_method TEXT,
+            version INTEGER DEFAULT 1,
+            last_updated REAL,
             UNIQUE(entity)
+        )
+        ''')
+        
+        # Create relation_types table for proper relation type ontology
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS relation_types (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            parent_type TEXT,
+            description TEXT,
+            symmetric BOOLEAN DEFAULT 0,
+            transitive BOOLEAN DEFAULT 0,
+            inverse_relation TEXT,
+            taxonomy_level INTEGER DEFAULT 0,
+            metadata TEXT,
+            UNIQUE(name)
         )
         ''')
         
@@ -639,9 +662,63 @@ class GraphStore:
             weight REAL,
             metadata TEXT,
             timestamp REAL,
+            provenance TEXT,
+            confidence REAL DEFAULT 0.5,
+            temporal_start TEXT,
+            temporal_end TEXT,
+            extraction_method TEXT,
+            version INTEGER DEFAULT 1,
+            last_updated REAL,
             FOREIGN KEY (source_id) REFERENCES graph_entities (id),
             FOREIGN KEY (target_id) REFERENCES graph_entities (id),
+            FOREIGN KEY (relation_type) REFERENCES relation_types (name),
             UNIQUE(source_id, target_id, relation_type)
+        )
+        ''')
+        
+        # Create entity_versions table for tracking entity changes
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS entity_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_id INTEGER NOT NULL,
+            entity TEXT NOT NULL,
+            entity_type TEXT,
+            metadata TEXT,
+            provenance TEXT,
+            confidence REAL,
+            temporal_start TEXT,
+            temporal_end TEXT,
+            extraction_method TEXT,
+            version INTEGER NOT NULL,
+            timestamp REAL NOT NULL,
+            change_type TEXT NOT NULL,
+            changed_by TEXT,
+            FOREIGN KEY (entity_id) REFERENCES graph_entities (id)
+        )
+        ''')
+        
+        # Create relationship_versions table for tracking relationship changes
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS relationship_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            relationship_id INTEGER NOT NULL,
+            source_id INTEGER NOT NULL,
+            target_id INTEGER NOT NULL,
+            relation_type TEXT NOT NULL,
+            weight REAL,
+            metadata TEXT,
+            provenance TEXT,
+            confidence REAL,
+            temporal_start TEXT,
+            temporal_end TEXT,
+            extraction_method TEXT,
+            version INTEGER NOT NULL,
+            timestamp REAL NOT NULL,
+            change_type TEXT NOT NULL,
+            changed_by TEXT,
+            FOREIGN KEY (relationship_id) REFERENCES graph_relationships (id),
+            FOREIGN KEY (source_id) REFERENCES graph_entities (id),
+            FOREIGN KEY (target_id) REFERENCES graph_entities (id)
         )
         ''')
         
@@ -653,7 +730,11 @@ class GraphStore:
             metadata TEXT,
             provenance TEXT,
             confidence REAL,
-            timestamp REAL
+            extraction_method TEXT,
+            version INTEGER DEFAULT 1,
+            timestamp REAL,
+            last_updated REAL,
+            FOREIGN KEY (relation_type) REFERENCES relation_types (name)
         )
         ''')
         
@@ -672,56 +753,94 @@ class GraphStore:
         )
         ''')
         
-        # Create index for faster lookups
+        # Create indexes for faster lookups
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity ON graph_entities(entity)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_type ON graph_entities(entity_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version ON graph_entities(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_provenance ON graph_entities(provenance)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_extraction ON graph_entities(extraction_method)')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_type_name ON relation_types(name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_type_parent ON relation_types(parent_type)')
+        
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_source ON graph_relationships(source_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_target ON graph_relationships(target_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation ON graph_relationships(relation_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_version ON graph_relationships(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_provenance ON graph_relationships(provenance)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_extraction ON graph_relationships(extraction_method)')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_entity ON entity_versions(entity_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_number ON entity_versions(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_type ON entity_versions(change_type)')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_rel ON relationship_versions(relationship_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_number ON relationship_versions(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_type ON relationship_versions(change_type)')
+        
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_type ON nary_relationships(relation_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_extraction ON nary_relationships(extraction_method)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_version ON nary_relationships(version)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_participant ON nary_participants(relationship_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_entity ON nary_participants(entity_id)')
         
+        # Insert basic relation types if not exist
+        basic_relation_types = [
+            ('is_a', None, 'Taxonomic relationship', 0, 0, None, 1),
+            ('part_of', None, 'Meronymic relationship', 0, 1, 'contains', 1),
+            ('located_in', None, 'Spatial relationship', 0, 1, 'contains', 1),
+            ('has_property', None, 'Attributional relationship', 0, 0, 'is_property_of', 1),
+            ('causes', None, 'Causal relationship', 0, 0, 'caused_by', 1),
+            ('related_to', None, 'Generic relationship', 1, 0, 'related_to', 0),
+            ('same_as', None, 'Identity relationship', 1, 1, 'same_as', 1),
+            ('temporal_before', None, 'Temporal relationship', 0, 1, 'temporal_after', 1),
+            ('temporal_after', None, 'Temporal relationship', 0, 1, 'temporal_before', 1),
+            ('contains', None, 'Containment relationship', 0, 0, 'part_of', 1),
+            ('created_by', None, 'Creative relationship', 0, 0, 'created', 1),
+            ('instance_of', 'is_a', 'Instance relationship', 0, 0, 'has_instance', 2),
+            ('subclass_of', 'is_a', 'Subclass relationship', 0, 1, 'has_subclass', 2)
+        ]
+        
+        for relation in basic_relation_types:
+            cursor.execute('''
+                INSERT OR IGNORE INTO relation_types 
+                (name, parent_type, description, symmetric, transitive, inverse_relation, taxonomy_level) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', relation)
+        
         # Alter existing tables to add new metadata columns if they don't exist
         try:
-            # Check if provenance column exists in graph_relationships
+            # Check if extraction_method column exists in graph_relationships
             cursor.execute("PRAGMA table_info(graph_relationships)")
             columns = [info[1] for info in cursor.fetchall()]
             
-            # Add provenance column if it doesn't exist
-            if "provenance" not in columns:
-                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN provenance TEXT")
+            # Add extraction_method column if it doesn't exist
+            if "extraction_method" not in columns:
+                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN extraction_method TEXT")
                 
-            # Add confidence column if it doesn't exist
-            if "confidence" not in columns:
-                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN confidence REAL DEFAULT 0.5")
+            # Add version column if it doesn't exist
+            if "version" not in columns:
+                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN version INTEGER DEFAULT 1")
                 
-            # Add temporal_start column if it doesn't exist
-            if "temporal_start" not in columns:
-                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN temporal_start TEXT")
-                
-            # Add temporal_end column if it doesn't exist
-            if "temporal_end" not in columns:
-                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN temporal_end TEXT")
+            # Add last_updated column if it doesn't exist
+            if "last_updated" not in columns:
+                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN last_updated REAL")
                 
             # Check if similar columns need to be added to graph_entities
             cursor.execute("PRAGMA table_info(graph_entities)")
             columns = [info[1] for info in cursor.fetchall()]
             
-            # Add provenance column if it doesn't exist
-            if "provenance" not in columns:
-                cursor.execute("ALTER TABLE graph_entities ADD COLUMN provenance TEXT")
+            # Add extraction_method column if it doesn't exist
+            if "extraction_method" not in columns:
+                cursor.execute("ALTER TABLE graph_entities ADD COLUMN extraction_method TEXT")
                 
-            # Add confidence column if it doesn't exist
-            if "confidence" not in columns:
-                cursor.execute("ALTER TABLE graph_entities ADD COLUMN confidence REAL DEFAULT 0.8")
+            # Add version column if it doesn't exist
+            if "version" not in columns:
+                cursor.execute("ALTER TABLE graph_entities ADD COLUMN version INTEGER DEFAULT 1")
                 
-            # Add temporal_start column if it doesn't exist
-            if "temporal_start" not in columns:
-                cursor.execute("ALTER TABLE graph_entities ADD COLUMN temporal_start TEXT")
-                
-            # Add temporal_end column if it doesn't exist
-            if "temporal_end" not in columns:
-                cursor.execute("ALTER TABLE graph_entities ADD COLUMN temporal_end TEXT")
+            # Add last_updated column if it doesn't exist
+            if "last_updated" not in columns:
+                cursor.execute("ALTER TABLE graph_entities ADD COLUMN last_updated REAL")
                 
         except sqlite3.OperationalError as e:
             logging.error(f"Error adding metadata columns: {e}")
@@ -1503,132 +1622,174 @@ class GraphStore:
     
     def add_entity(self, entity: str, entity_type: str = None, metadata: Dict[str, Any] = None,
                   provenance: str = None, confidence: float = 0.8,
-                  temporal_start: str = None, temporal_end: str = None) -> int:
+                  temporal_start: str = None, temporal_end: str = None,
+                  extraction_method: str = None, changed_by: str = None) -> int:
         """
-        Add entity to knowledge graph.
+        Add an entity to the graph with enhanced metadata and versioning.
         
         Args:
             entity: Entity text
-            entity_type: Entity type or category
+            entity_type: Type of entity (e.g., PERSON, LOCATION)
             metadata: Additional entity metadata
-            provenance: Source of the entity
-            confidence: Confidence score (0.0-1.0)
-            temporal_start: Start of temporal validity
-            temporal_end: End of temporal validity
+            provenance: Source of the entity information
+            confidence: Confidence score for this entity (0.0 to 1.0)
+            temporal_start: Start time/date for temporal validity
+            temporal_end: End time/date for temporal validity
+            extraction_method: Method used to extract this entity
+            changed_by: Identifier of who/what made this change
             
         Returns:
-            Entity ID
+            ID of the created entity
         """
-        if metadata is None:
-            metadata = {}
-        
-        # Check if entity already exists by canonical form
-        existing_entity = self.get_entity_id(entity)
-        if existing_entity is not None:
-            entity_id = existing_entity['id']
-            
-            # Update metadata if provided
-            if metadata:
-                if self.conn is not None:
-                    conn = self.conn
-                else:
-                    conn = sqlite3.connect(self.db_path)
-                
-                cursor = conn.cursor()
-                
-                # Get existing metadata
-                cursor.execute(
-                    'SELECT metadata FROM graph_entities WHERE id = ?', 
-                    (entity_id,)
-                )
-                result = cursor.fetchone()
-                
-                if result and result[0]:
-                    try:
-                        existing_metadata = json.loads(result[0])
-                        # Merge metadata
-                        existing_metadata.update(metadata)
-                        # Update in database
-                        cursor.execute(
-                            'UPDATE graph_entities SET metadata = ? WHERE id = ?',
-                            (json.dumps(existing_metadata), entity_id)
-                        )
-                        conn.commit()
-                    except Exception as e:
-                        logging.error(f"Error updating entity metadata: {e}")
-                        
-                if self.conn is None:
-                    conn.close()
-            
-            return entity_id
-        
-        # Add the entity to the database
         if self.conn is not None:
             conn = self.conn
         else:
             conn = sqlite3.connect(self.db_path)
             
         cursor = conn.cursor()
+        timestamp = time.time()
         
         try:
-            # Insert the entity
-            cursor.execute(
-                '''
-                INSERT INTO graph_entities 
-                (entity, entity_type, metadata, timestamp, provenance, confidence, temporal_start, temporal_end)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''',
-                (
-                    entity, 
-                    entity_type, 
+            # Check if entity already exists
+            cursor.execute('SELECT id, version FROM graph_entities WHERE entity = ?', (entity,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                # Get the current entity data for version history
+                cursor.execute('''
+                    SELECT entity, entity_type, metadata, provenance, confidence, 
+                    temporal_start, temporal_end, extraction_method
+                    FROM graph_entities WHERE id = ?
+                ''', (existing[0],))
+                current_data = cursor.fetchone()
+                
+                # Store the current version in version history
+                new_version = existing[1] + 1
+                cursor.execute('''
+                    INSERT INTO entity_versions 
+                    (entity_id, entity, entity_type, metadata, provenance, confidence, 
+                     temporal_start, temporal_end, extraction_method, version, timestamp, change_type, changed_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    existing[0],
+                    current_data[0],
+                    current_data[1],
+                    current_data[2],
+                    current_data[3],
+                    current_data[4],
+                    current_data[5],
+                    current_data[6],
+                    current_data[7],
+                    existing[1],
+                    timestamp,
+                    "UPDATE",
+                    changed_by
+                ))
+                
+                # Update the entity with new data
+                cursor.execute('''
+                    UPDATE graph_entities 
+                    SET entity_type = COALESCE(?, entity_type),
+                        metadata = COALESCE(?, metadata),
+                        provenance = COALESCE(?, provenance),
+                        confidence = COALESCE(?, confidence),
+                        temporal_start = COALESCE(?, temporal_start),
+                        temporal_end = COALESCE(?, temporal_end),
+                        extraction_method = COALESCE(?, extraction_method),
+                        version = ?,
+                        last_updated = ?
+                    WHERE id = ?
+                ''', (
+                    entity_type,
                     json.dumps(metadata) if metadata else None,
-                    time.time(),
                     provenance,
                     confidence,
                     temporal_start,
-                    temporal_end
-                )
-            )
-            
-            # Get the entity ID
-            entity_id = cursor.lastrowid
-            
-            # Add to NetworkX graph if available
-            if NETWORKX_ENABLED and self.graph is not None:
-                self.graph.add_node(
-                    entity_id, 
-                    name=entity,
-                    entity_type=entity_type,
-                    **metadata
-                )
-            
-            # Also add to entity linking database
-            self.entity_db[entity] = {
-                'id': entity_id,
-                'type': entity_type,
-                'metadata': metadata,
-                'aliases': metadata.get('aliases', [])
-            }
-            
-            # Add any aliases from metadata
-            if 'aliases' in metadata and isinstance(metadata['aliases'], list):
-                for alias in metadata['aliases']:
-                    self.entity_db[alias] = {
-                        'canonical': entity,
-                        'id': entity_id
-                    }
+                    temporal_end,
+                    extraction_method,
+                    new_version,
+                    timestamp,
+                    existing[0]
+                ))
+                
+                entity_id = existing[0]
+            else:
+                # Insert new entity
+                cursor.execute('''
+                    INSERT INTO graph_entities 
+                    (entity, entity_type, metadata, timestamp, provenance, confidence, 
+                     temporal_start, temporal_end, extraction_method, version, last_updated) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    entity,
+                    entity_type,
+                    json.dumps(metadata) if metadata else None,
+                    timestamp,
+                    provenance,
+                    confidence,
+                    temporal_start,
+                    temporal_end,
+                    extraction_method,
+                    1,  # Initial version
+                    timestamp
+                ))
+                
+                entity_id = cursor.lastrowid
+                
+                # Add to version history
+                cursor.execute('''
+                    INSERT INTO entity_versions 
+                    (entity_id, entity, entity_type, metadata, provenance, confidence,
+                     temporal_start, temporal_end, extraction_method, version, timestamp, change_type, changed_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    entity_id,
+                    entity,
+                    entity_type,
+                    json.dumps(metadata) if metadata else None,
+                    provenance,
+                    confidence,
+                    temporal_start,
+                    temporal_end,
+                    extraction_method,
+                    1,  # Initial version
+                    timestamp,
+                    "CREATE",
+                    changed_by
+                ))
             
             conn.commit()
+            
+            # Add to NetworkX graph if enabled
+            if NETWORKX_ENABLED and self.graph is not None:
+                node_attrs = {
+                    'name': entity,
+                    'entity_type': entity_type,
+                    'provenance': provenance,
+                    'confidence': confidence,
+                    'temporal_start': temporal_start,
+                    'temporal_end': temporal_end,
+                    'extraction_method': extraction_method,
+                    'version': 1 if existing is None else existing[1] + 1,
+                    'timestamp': timestamp
+                }
+                
+                if metadata:
+                    node_attrs.update(metadata)
+                    
+                self.graph.add_node(entity_id, **node_attrs)
+            
             return entity_id
             
         except Exception as e:
             logging.error(f"Error adding entity: {e}")
             conn.rollback()
             return -1
+            
         finally:
-            if self.conn is None:
+            if self.conn is None and conn:
                 conn.close()
-                
+    
     def add_entity_alias(self, entity_id: int, alias: str, confidence: float = 0.8) -> bool:
         """
         Add an alias to an existing entity for entity linking.
@@ -1712,20 +1873,23 @@ class GraphStore:
     def add_relation(self, source_entity: str, relation_type: str, target_entity: str, 
                      weight: float = 1.0, metadata: Dict[str, Any] = None,
                      provenance: str = None, confidence: float = 0.5,
-                     temporal_start: str = None, temporal_end: str = None) -> bool:
+                     temporal_start: str = None, temporal_end: str = None,
+                     extraction_method: str = None, changed_by: str = None) -> bool:
         """
-        Add a relation between two entities with enhanced metadata.
+        Add a relation between two entities with enhanced metadata and versioning.
         
         Args:
             source_entity: Source entity text
             relation_type: Type of relation
             target_entity: Target entity text
-            weight: Weight/confidence of the relation
+            weight: Weight/importance of the relation
             metadata: Additional relation metadata
             provenance: Source of the relation information
             confidence: Confidence score for this relation (0.0 to 1.0)
             temporal_start: Start time/date for temporal validity
             temporal_end: End time/date for temporal validity
+            extraction_method: Method used to extract this relation
+            changed_by: Identifier of who/what made this change
             
         Returns:
             True if relation was added successfully
@@ -1739,6 +1903,31 @@ class GraphStore:
         timestamp = time.time()
         
         try:
+            # Verify relation type exists
+            cursor.execute('SELECT id, symmetric, transitive, inverse_relation FROM relation_types WHERE name = ?', (relation_type,))
+            relation_type_data = cursor.fetchone()
+            
+            if not relation_type_data:
+                # Add the relation type dynamically
+                logging.info(f"Adding new relation type: {relation_type}")
+                cursor.execute('''
+                    INSERT INTO relation_types (name, parent_type, description, metadata) 
+                    VALUES (?, 'related_to', ?, ?)
+                ''', (
+                    relation_type,
+                    f"Dynamically added relation type: {relation_type}",
+                    json.dumps({"automatic": True, "added_at": timestamp})
+                ))
+                
+                # Get symmetry and transitivity for new relation type
+                is_symmetric = False
+                is_transitive = False
+                inverse_relation = None
+            else:
+                is_symmetric = bool(relation_type_data[1])
+                is_transitive = bool(relation_type_data[2])
+                inverse_relation = relation_type_data[3]
+                
             # Get source entity ID
             cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (source_entity,))
             source = cursor.fetchone()
@@ -1749,62 +1938,104 @@ class GraphStore:
             
             # If either entity doesn't exist, create them
             if not source:
-                source_id = self.add_entity(source_entity, provenance=provenance, confidence=confidence)
+                source_id = self.add_entity(
+                    source_entity, 
+                    provenance=provenance, 
+                    confidence=confidence, 
+                    extraction_method=extraction_method,
+                    changed_by=changed_by
+                )
             else:
                 source_id = source[0]
                 
             if not target:
-                target_id = self.add_entity(target_entity, provenance=provenance, confidence=confidence)
+                target_id = self.add_entity(
+                    target_entity, 
+                    provenance=provenance, 
+                    confidence=confidence, 
+                    extraction_method=extraction_method,
+                    changed_by=changed_by
+                )
             else:
                 target_id = target[0]
             
-            # If ontology is enabled, check the relation type in the ontology
-            if ONTOLOGY_ENABLED and self.ontology:
-                if not self.ontology.get_relation_type(relation_type):
-                    # Try to suggest a new relation type
-                    suggested_relation = self.ontology.suggest_new_relation_type(
-                        source_entity=source_entity,
-                        relation=relation_type,
-                        target_entity=target_entity
-                    )
-                    
-                    if suggested_relation:
-                        # Add the suggested relation type to the ontology
-                        self.ontology.add_relation_type(suggested_relation)
-                        logging.info(f"Added suggested ontology relation type: {relation_type}")
-            
             # Check if relation already exists
             cursor.execute('''
-                SELECT id FROM graph_relationships 
+                SELECT id, version FROM graph_relationships 
                 WHERE source_id = ? AND target_id = ? AND relation_type = ?
             ''', (source_id, target_id, relation_type))
             existing = cursor.fetchone()
             
             if existing:
+                # Get the current relation data for version history
+                cursor.execute('''
+                    SELECT source_id, target_id, relation_type, weight, metadata, 
+                    provenance, confidence, temporal_start, temporal_end, extraction_method
+                    FROM graph_relationships WHERE id = ?
+                ''', (existing[0],))
+                current_data = cursor.fetchone()
+                
+                # Store the current version in version history
+                new_version = existing[1] + 1
+                cursor.execute('''
+                    INSERT INTO relationship_versions 
+                    (relationship_id, source_id, target_id, relation_type, weight, metadata, 
+                     provenance, confidence, temporal_start, temporal_end, extraction_method, 
+                     version, timestamp, change_type, changed_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    existing[0],
+                    current_data[0],
+                    current_data[1],
+                    current_data[2],
+                    current_data[3],
+                    current_data[4],
+                    current_data[5],
+                    current_data[6],
+                    current_data[7],
+                    current_data[8],
+                    current_data[9],
+                    existing[1],
+                    timestamp,
+                    "UPDATE",
+                    changed_by
+                ))
+                
                 # Update existing relation
                 cursor.execute('''
                     UPDATE graph_relationships 
-                    SET weight = ?, metadata = ?, timestamp = ?,
-                        provenance = ?, confidence = ?,
-                        temporal_start = ?, temporal_end = ?
+                    SET weight = COALESCE(?, weight),
+                        metadata = COALESCE(?, metadata),
+                        provenance = COALESCE(?, provenance),
+                        confidence = COALESCE(?, confidence),
+                        temporal_start = COALESCE(?, temporal_start),
+                        temporal_end = COALESCE(?, temporal_end),
+                        extraction_method = COALESCE(?, extraction_method),
+                        version = ?,
+                        last_updated = ?
                     WHERE id = ?
                 ''', (
                     weight,
                     json.dumps(metadata) if metadata else None,
-                    timestamp,
                     provenance,
                     confidence,
                     temporal_start,
                     temporal_end,
+                    extraction_method,
+                    new_version,
+                    timestamp,
                     existing[0]
                 ))
+                
+                relation_id = existing[0]
             else:
                 # Insert new relation
                 cursor.execute('''
                     INSERT INTO graph_relationships 
                     (source_id, target_id, relation_type, weight, metadata, timestamp,
-                     provenance, confidence, temporal_start, temporal_end) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     provenance, confidence, temporal_start, temporal_end, extraction_method, 
+                     version, last_updated) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     source_id, 
                     target_id, 
@@ -1815,8 +2046,147 @@ class GraphStore:
                     provenance,
                     confidence,
                     temporal_start,
-                    temporal_end
+                    temporal_end,
+                    extraction_method,
+                    1,  # Initial version
+                    timestamp
                 ))
+                
+                relation_id = cursor.lastrowid
+                
+                # Add to version history
+                cursor.execute('''
+                    INSERT INTO relationship_versions 
+                    (relationship_id, source_id, target_id, relation_type, weight, metadata, 
+                     provenance, confidence, temporal_start, temporal_end, extraction_method, 
+                     version, timestamp, change_type, changed_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    relation_id,
+                    source_id,
+                    target_id,
+                    relation_type,
+                    weight,
+                    json.dumps(metadata) if metadata else None,
+                    provenance,
+                    confidence,
+                    temporal_start,
+                    temporal_end,
+                    extraction_method,
+                    1,  # Initial version
+                    timestamp,
+                    "CREATE",
+                    changed_by
+                ))
+                
+                # If relation is symmetric, add the reverse relation
+                if is_symmetric and source_id != target_id:
+                    cursor.execute('''
+                        INSERT INTO graph_relationships 
+                        (source_id, target_id, relation_type, weight, metadata, timestamp,
+                         provenance, confidence, temporal_start, temporal_end, extraction_method, 
+                         version, last_updated) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        target_id, 
+                        source_id, 
+                        relation_type,
+                        weight,
+                        json.dumps({**(metadata or {}), "symmetric_of": relation_id}),
+                        timestamp,
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        1,  # Initial version
+                        timestamp
+                    ))
+                    
+                    symmetric_id = cursor.lastrowid
+                    
+                    # Add symmetric relation to version history
+                    cursor.execute('''
+                        INSERT INTO relationship_versions 
+                        (relationship_id, source_id, target_id, relation_type, weight, metadata, 
+                         provenance, confidence, temporal_start, temporal_end, extraction_method, 
+                         version, timestamp, change_type, changed_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        symmetric_id,
+                        target_id,
+                        source_id,
+                        relation_type,
+                        weight,
+                        json.dumps({**(metadata or {}), "symmetric_of": relation_id}),
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        1,  # Initial version
+                        timestamp,
+                        "CREATE_SYMMETRIC",
+                        changed_by
+                    ))
+                
+                # If inverse relation is defined, add the inverse relation
+                if inverse_relation and source_id != target_id:
+                    cursor.execute('''
+                        INSERT INTO graph_relationships 
+                        (source_id, target_id, relation_type, weight, metadata, timestamp,
+                         provenance, confidence, temporal_start, temporal_end, extraction_method, 
+                         version, last_updated) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        target_id, 
+                        source_id, 
+                        inverse_relation,
+                        weight,
+                        json.dumps({**(metadata or {}), "inverse_of": relation_id}),
+                        timestamp,
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        1,  # Initial version
+                        timestamp
+                    ))
+                    
+                    inverse_id = cursor.lastrowid
+                    
+                    # Add inverse relation to version history
+                    cursor.execute('''
+                        INSERT INTO relationship_versions 
+                        (relationship_id, source_id, target_id, relation_type, weight, metadata, 
+                         provenance, confidence, temporal_start, temporal_end, extraction_method, 
+                         version, timestamp, change_type, changed_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        inverse_id,
+                        target_id,
+                        source_id,
+                        inverse_relation,
+                        weight,
+                        json.dumps({**(metadata or {}), "inverse_of": relation_id}),
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        1,  # Initial version
+                        timestamp,
+                        "CREATE_INVERSE",
+                        changed_by
+                    ))
+                
+                # If relation is transitive, check for implied transitive relations
+                if is_transitive:
+                    self._add_transitive_relations(
+                        source_id, target_id, relation_type, 
+                        weight, provenance, confidence, extraction_method, changed_by
+                    )
             
             conn.commit()
             
@@ -1829,24 +2199,214 @@ class GraphStore:
                     'confidence': confidence,
                     'temporal_start': temporal_start,
                     'temporal_end': temporal_end,
-                    'timestamp': timestamp
+                    'extraction_method': extraction_method,
+                    'timestamp': timestamp,
+                    'version': 1 if existing is None else existing[1] + 1
                 }
                 
                 if metadata:
                     edge_attrs.update(metadata)
                     
                 self.graph.add_edge(source_id, target_id, **edge_attrs)
+                
+                # Add symmetric and inverse edges to NetworkX if applicable
+                if is_symmetric and source_id != target_id:
+                    self.graph.add_edge(target_id, source_id, **{
+                        **edge_attrs,
+                        'symmetric_of': relation_id
+                    })
+                    
+                if inverse_relation and source_id != target_id:
+                    self.graph.add_edge(target_id, source_id, **{
+                        **edge_attrs,
+                        'relation': inverse_relation,
+                        'inverse_of': relation_id
+                    })
             
             return True
             
         except Exception as e:
             logging.error(f"Error adding relation: {e}")
+            import traceback
+            logging.error(f"Traceback: {traceback.format_exc()}")
             conn.rollback()
             return False
             
         finally:
             if self.conn is None:
                 conn.close()
+    
+    def _add_transitive_relations(self, source_id: int, target_id: int, relation_type: str,
+                                weight: float, provenance: str, confidence: float,
+                                extraction_method: str, changed_by: str) -> None:
+        """
+        Add implied transitive relations.
+        
+        For example, if A related_to B and B related_to C, then A related_to C 
+        for transitive relations like "is_a" or "part_of".
+        
+        Args:
+            source_id: Source entity ID
+            target_id: Target entity ID
+            relation_type: Type of relation
+            weight: Weight of the relation
+            provenance: Source of the relation information
+            confidence: Confidence score for this relation
+            extraction_method: Method used to extract this relation
+            changed_by: Identifier of who/what made this change
+        """
+        if self.conn is None:
+            return
+            
+        cursor = self.conn.cursor()
+        timestamp = time.time()
+        
+        try:
+            # Find all entities that the source is related to with this relation
+            cursor.execute('''
+                SELECT target_id FROM graph_relationships
+                WHERE source_id = ? AND relation_type = ?
+            ''', (source_id, relation_type))
+            sources_targets = cursor.fetchall()
+            
+            # Find all entities that have this relation to the target
+            cursor.execute('''
+                SELECT source_id FROM graph_relationships
+                WHERE target_id = ? AND relation_type = ?
+            ''', (target_id, relation_type))
+            targets_sources = cursor.fetchall()
+            
+            # Add transitive relations: source -> target's sources
+            for row in targets_sources:
+                third_id = row[0]
+                if third_id != source_id:  # Avoid self-relations
+                    # Check if this relation already exists
+                    cursor.execute('''
+                        SELECT id FROM graph_relationships
+                        WHERE source_id = ? AND target_id = ? AND relation_type = ?
+                    ''', (source_id, third_id, relation_type))
+                    if not cursor.fetchone():
+                        # Add the transitive relation with reduced confidence
+                        new_confidence = confidence * 0.9  # Reduce confidence for transitive inference
+                        
+                        # Add the relation
+                        transitive_metadata = {
+                            "transitive": True,
+                            "via_entity": target_id,
+                            "inference_type": "transitive_relation"
+                        }
+                        
+                        cursor.execute('''
+                            INSERT INTO graph_relationships
+                            (source_id, target_id, relation_type, weight, metadata, timestamp,
+                             provenance, confidence, extraction_method, version, last_updated)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            source_id,
+                            third_id,
+                            relation_type,
+                            weight * 0.8,  # Reduce weight for transitive relations
+                            json.dumps(transitive_metadata),
+                            timestamp,
+                            provenance,
+                            new_confidence,
+                            "transitive_inference",
+                            1,
+                            timestamp
+                        ))
+                        
+                        transitive_id = cursor.lastrowid
+                        
+                        # Add to version history
+                        cursor.execute('''
+                            INSERT INTO relationship_versions
+                            (relationship_id, source_id, target_id, relation_type, weight, metadata, 
+                             provenance, confidence, extraction_method, version, timestamp, change_type, changed_by)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            transitive_id,
+                            source_id,
+                            third_id,
+                            relation_type,
+                            weight * 0.8,
+                            json.dumps(transitive_metadata),
+                            provenance,
+                            new_confidence,
+                            "transitive_inference",
+                            1,
+                            timestamp,
+                            "CREATE_TRANSITIVE",
+                            changed_by
+                        ))
+            
+            # Add transitive relations: source's sources -> target
+            for row in sources_targets:
+                third_id = row[0]
+                if third_id != target_id:  # Avoid self-relations
+                    # Check if this relation already exists
+                    cursor.execute('''
+                        SELECT id FROM graph_relationships
+                        WHERE source_id = ? AND target_id = ? AND relation_type = ?
+                    ''', (third_id, target_id, relation_type))
+                    if not cursor.fetchone():
+                        # Add the transitive relation with reduced confidence
+                        new_confidence = confidence * 0.9  # Reduce confidence for transitive inference
+                        
+                        # Add the relation
+                        transitive_metadata = {
+                            "transitive": True,
+                            "via_entity": source_id,
+                            "inference_type": "transitive_relation"
+                        }
+                        
+                        cursor.execute('''
+                            INSERT INTO graph_relationships
+                            (source_id, target_id, relation_type, weight, metadata, timestamp,
+                             provenance, confidence, extraction_method, version, last_updated)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            third_id,
+                            target_id,
+                            relation_type,
+                            weight * 0.8,  # Reduce weight for transitive relations
+                            json.dumps(transitive_metadata),
+                            timestamp,
+                            provenance,
+                            new_confidence,
+                            "transitive_inference",
+                            1,
+                            timestamp
+                        ))
+                        
+                        transitive_id = cursor.lastrowid
+                        
+                        # Add to version history
+                        cursor.execute('''
+                            INSERT INTO relationship_versions
+                            (relationship_id, source_id, target_id, relation_type, weight, metadata, 
+                             provenance, confidence, extraction_method, version, timestamp, change_type, changed_by)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            transitive_id,
+                            third_id,
+                            target_id,
+                            relation_type,
+                            weight * 0.8,
+                            json.dumps(transitive_metadata),
+                            provenance,
+                            new_confidence,
+                            "transitive_inference",
+                            1,
+                            timestamp,
+                            "CREATE_TRANSITIVE",
+                            changed_by
+                        ))
+                        
+        except Exception as e:
+            logging.error(f"Error adding transitive relations: {e}")
+            import traceback
+            logging.error(f"Traceback: {traceback.format_exc()}")
+            # Don't raise - this is a best-effort operation
     
     def add_nary_relation(self, relation_type: str, participants: Dict[str, str], 
                         metadata: Dict[str, Any] = None, provenance: str = None, 
@@ -3980,3 +4540,689 @@ class GraphStore:
     def __del__(self):
         """Destructor to clean up resources."""
         self.close() 
+
+class GraphMerger:
+    """
+    GraphMerger component for intelligently combining new information from multiple sources
+    into the existing knowledge graph, with conflict detection and resolution strategies.
+    """
+    
+    def __init__(self, graph_store):
+        """
+        Initialize the graph merger.
+        
+        Args:
+            graph_store: The GraphStore instance to work with
+        """
+        self.graph_store = graph_store
+        self.conn = graph_store.conn if graph_store.conn else sqlite3.connect(graph_store.db_path)
+        self.cursor = self.conn.cursor()
+        
+        # Track statistics
+        self.stats = {
+            "entities_added": 0,
+            "entities_updated": 0,
+            "entities_merged": 0,
+            "relations_added": 0,
+            "relations_updated": 0,
+            "relations_inferred": 0,
+            "conflicts_detected": 0,
+            "conflicts_resolved": 0
+        }
+    
+    def merge_entity(self, entity: str, entity_type: str = None, metadata: Dict[str, Any] = None,
+                    provenance: str = None, confidence: float = 0.8,
+                    temporal_start: str = None, temporal_end: str = None,
+                    extraction_method: str = None) -> int:
+        """
+        Intelligently merge an entity with existing entities, handling duplicates and conflicts.
+        
+        Args:
+            entity: Entity text to merge
+            entity_type: Type of entity (e.g., PERSON, LOCATION)
+            metadata: Additional entity metadata
+            provenance: Source of the entity information
+            confidence: Confidence score for this entity (0.0 to 1.0)
+            temporal_start: Start time/date for temporal validity
+            temporal_end: End time/date for temporal validity
+            extraction_method: Method used to extract this entity
+            
+        Returns:
+            ID of the merged entity
+        """
+        # Check for exact match
+        self.cursor.execute('SELECT id, entity_type, metadata, confidence FROM graph_entities WHERE entity = ?', (entity,))
+        exact_match = self.cursor.fetchone()
+        
+        # Check for fuzzy matches if no exact match
+        fuzzy_matches = []
+        if not exact_match and FUZZY_MATCHING_ENABLED:
+            self.cursor.execute('SELECT id, entity, entity_type, metadata, confidence FROM graph_entities')
+            all_entities = self.cursor.fetchall()
+            
+            # Find potential matches using fuzzy string matching
+            for row in all_entities:
+                similarity = fuzz.ratio(entity.lower(), row[1].lower())
+                if similarity >= 85:  # Threshold for fuzzy matching
+                    fuzzy_matches.append({
+                        'id': row[0],
+                        'entity': row[1],
+                        'entity_type': row[2],
+                        'metadata': json.loads(row[3]) if row[3] else {},
+                        'confidence': row[4],
+                        'similarity': similarity
+                    })
+            
+            # Sort by similarity
+            fuzzy_matches.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        if exact_match:
+            entity_id = exact_match[0]
+            existing_type = exact_match[1]
+            existing_metadata_str = exact_match[2]
+            existing_confidence = exact_match[3]
+            
+            # Parse existing metadata
+            if existing_metadata_str:
+                try:
+                    existing_metadata = json.loads(existing_metadata_str)
+                except (TypeError, json.JSONDecodeError):
+                    existing_metadata = {}
+            else:
+                existing_metadata = {}
+            
+            # Determine if we need to update the existing entity
+            should_update = False
+            merged_metadata = dict(existing_metadata)  # Make a copy to modify
+            
+            # Only update if the new information has higher confidence or adds new metadata
+            if confidence > existing_confidence:
+                should_update = True
+                
+            if metadata:
+                # Check if new metadata contains keys not in existing metadata or better values
+                for key, value in metadata.items():
+                    if key not in existing_metadata:
+                        merged_metadata[key] = value
+                        should_update = True
+                    elif isinstance(value, list) and isinstance(existing_metadata[key], list):
+                        # Merge lists
+                        combined = list(set(existing_metadata[key] + value))
+                        if len(combined) > len(existing_metadata[key]):
+                            merged_metadata[key] = combined
+                            should_update = True
+                    elif confidence > existing_confidence:
+                        # Replace with higher confidence value
+                        merged_metadata[key] = value
+                        should_update = True
+                        # Record the conflict
+                        self.stats["conflicts_detected"] += 1
+                        self.stats["conflicts_resolved"] += 1
+            
+            if should_update:
+                # Update the existing entity
+                try:
+                    result = self.graph_store.add_entity(
+                        entity=entity,
+                        entity_type=entity_type or existing_type,
+                        metadata=merged_metadata,
+                        provenance=provenance,
+                        confidence=max(confidence, existing_confidence),
+                        temporal_start=temporal_start,
+                        temporal_end=temporal_end,
+                        extraction_method=extraction_method,
+                        changed_by="graph_merger"
+                    )
+                    self.stats["entities_updated"] += 1
+                except Exception as e:
+                    logging.error(f"Error updating entity: {e}")
+            
+            return entity_id
+            
+        elif fuzzy_matches:
+            # Use the best fuzzy match
+            best_match = fuzzy_matches[0]
+            entity_id = best_match['id']
+            
+            # Also update the entity with any new metadata
+            merged_metadata = dict(best_match['metadata'])  # Start with existing metadata
+            
+            if metadata:
+                # Merge metadata
+                for key, value in metadata.items():
+                    if key not in merged_metadata:
+                        merged_metadata[key] = value
+                    elif isinstance(value, list) and isinstance(merged_metadata[key], list):
+                        merged_metadata[key] = list(set(merged_metadata[key] + value))
+                    elif confidence > best_match['confidence']:
+                        merged_metadata[key] = value
+            
+            # Add the current entity name as an alias
+            merged_metadata['aliases'] = list(set(merged_metadata.get('aliases', []) + [entity]))
+            
+            # Track entity merger event
+            merged_metadata['merged_with'] = merged_metadata.get('merged_with', []) + [{
+                'entity': entity,
+                'similarity': best_match['similarity'],
+                'timestamp': time.time(),
+                'provenance': provenance
+            }]
+            
+            # Add as an alias to the best match
+            try:
+                alias_added = self.graph_store.add_entity_alias(
+                    entity_id=entity_id, 
+                    alias=entity, 
+                    confidence=confidence * (best_match['similarity'] / 100.0)
+                )
+            except Exception as e:
+                logging.warning(f"Couldn't add alias, but continuing: {e}")
+            
+            # Update the entity with merged metadata
+            try:
+                self.graph_store.add_entity(
+                    entity=best_match['entity'],
+                    entity_type=entity_type or best_match['entity_type'],
+                    metadata=merged_metadata,
+                    provenance=provenance,
+                    confidence=max(confidence, best_match['confidence']),
+                    temporal_start=temporal_start,
+                    temporal_end=temporal_end,
+                    extraction_method=extraction_method,
+                    changed_by="graph_merger"
+                )
+            except Exception as e:
+                logging.error(f"Error updating entity with merged metadata: {e}")
+                
+            self.stats["entities_merged"] += 1
+            return entity_id
+            
+        else:
+            # No match found, add as new entity
+            try:
+                entity_id = self.graph_store.add_entity(
+                    entity=entity,
+                    entity_type=entity_type,
+                    metadata=metadata,
+                    provenance=provenance,
+                    confidence=confidence,
+                    temporal_start=temporal_start,
+                    temporal_end=temporal_end,
+                    extraction_method=extraction_method,
+                    changed_by="graph_merger"
+                )
+                self.stats["entities_added"] += 1
+                return entity_id
+            except Exception as e:
+                logging.error(f"Error adding new entity: {e}")
+                return -1
+    
+    def merge_relation(self, source_entity: str, relation_type: str, target_entity: str,
+                      weight: float = 1.0, metadata: Dict[str, Any] = None,
+                      provenance: str = None, confidence: float = 0.5,
+                      temporal_start: str = None, temporal_end: str = None,
+                      extraction_method: str = None) -> bool:
+        """
+        Intelligently merge a relation with existing relations, handling duplicates and conflicts.
+        
+        Args:
+            source_entity: Source entity text
+            relation_type: Type of relation
+            target_entity: Target entity text
+            weight: Weight/importance of the relation
+            metadata: Additional relation metadata
+            provenance: Source of the relation information
+            confidence: Confidence score for this relation (0.0 to 1.0)
+            temporal_start: Start time/date for temporal validity
+            temporal_end: End time/date for temporal validity
+            extraction_method: Method used to extract this relation
+            
+        Returns:
+            True if relation was merged successfully
+        """
+        # First, get or merge the source and target entities
+        source_id = self.merge_entity(
+            entity=source_entity,
+            provenance=provenance,
+            confidence=confidence,
+            extraction_method=extraction_method
+        )
+        
+        target_id = self.merge_entity(
+            entity=target_entity,
+            provenance=provenance,
+            confidence=confidence,
+            extraction_method=extraction_method
+        )
+        
+        # Check if relation already exists
+        self.cursor.execute('''
+            SELECT id, weight, metadata, confidence 
+            FROM graph_relationships 
+            WHERE source_id = ? AND target_id = ? AND relation_type = ?
+        ''', (source_id, target_id, relation_type))
+        existing = self.cursor.fetchone()
+        
+        if existing:
+            relation_id = existing[0]
+            existing_weight = existing[1]
+            existing_metadata = json.loads(existing[2]) if existing[2] else {}
+            existing_confidence = existing[3]
+            
+            # Detect conflicts and determine if we should update
+            should_update = False
+            
+            # Higher confidence or new metadata
+            if confidence > existing_confidence:
+                should_update = True
+            elif metadata:
+                # Check for new keys in metadata
+                new_keys = set(metadata.keys()) - set(existing_metadata.keys())
+                if new_keys:
+                    should_update = True
+                    
+                    # Merge metadata
+                    for key in metadata:
+                        if key in existing_metadata:
+                            # If conflicting values, record conflict and resolve based on confidence
+                            if metadata[key] != existing_metadata[key]:
+                                self.stats["conflicts_detected"] += 1
+                                
+                                # If both are lists, merge them
+                                if isinstance(metadata[key], list) and isinstance(existing_metadata[key], list):
+                                    existing_metadata[key] = list(set(existing_metadata[key] + metadata[key]))
+                                    self.stats["conflicts_resolved"] += 1
+                                elif confidence > existing_confidence:
+                                    existing_metadata[key] = metadata[key]
+                                    self.stats["conflicts_resolved"] += 1
+                                # Otherwise keep existing value (implicitly)
+                        else:
+                            existing_metadata[key] = metadata[key]
+                    
+                    metadata = existing_metadata
+            
+            if should_update:
+                # Update with the merged information
+                result = self.graph_store.add_relation(
+                    source_entity=source_entity,
+                    relation_type=relation_type,
+                    target_entity=target_entity,
+                    weight=max(weight, existing_weight),
+                    metadata=metadata,
+                    provenance=provenance,
+                    confidence=max(confidence, existing_confidence),
+                    temporal_start=temporal_start,
+                    temporal_end=temporal_end,
+                    extraction_method=extraction_method,
+                    changed_by="graph_merger"
+                )
+                self.stats["relations_updated"] += 1
+            else:
+                result = True  # No update needed
+                
+            return result
+        else:
+            # Add new relation
+            result = self.graph_store.add_relation(
+                source_entity=source_entity,
+                relation_type=relation_type,
+                target_entity=target_entity,
+                weight=weight,
+                metadata=metadata,
+                provenance=provenance,
+                confidence=confidence,
+                temporal_start=temporal_start,
+                temporal_end=temporal_end,
+                extraction_method=extraction_method,
+                changed_by="graph_merger"
+            )
+            self.stats["relations_added"] += 1
+            return result
+    
+    def discover_taxonomic_relationships(self) -> int:
+        """
+        Automatically detect and extract hierarchical relationships (is_a, part_of) from existing entities.
+        
+        Returns:
+            Number of taxonomic relationships discovered
+        """
+        # Find all entities
+        self.cursor.execute('SELECT id, entity, entity_type FROM graph_entities')
+        all_entities = self.cursor.fetchall()
+        
+        # Build entity type index
+        type_index = {}
+        for row in all_entities:
+            ent_id, ent_text, ent_type = row
+            if ent_type:
+                if ent_type not in type_index:
+                    type_index[ent_type] = []
+                type_index[ent_type].append((ent_id, ent_text))
+        
+        discovered = 0
+        
+        # Look for patterns suggesting taxonomic relationships
+        for row in all_entities:
+            ent_id, ent_text, ent_type = row
+            # Check if this entity name contains another entity name
+            # e.g., "Machine Learning Algorithm" contains "Algorithm"
+            words = ent_text.lower().split()
+            if len(words) > 1:
+                for other_row in all_entities:
+                    other_id, other_text, other_type = other_row
+                    if other_id != ent_id and len(other_text.split()) == 1 and other_text.lower() in words:
+                        # Check if this looks like an is_a relationship
+                        # If entity type matches, it's more likely to be an is_a relationship
+                        if ent_type == other_text:
+                            self._add_taxonomic_relation(
+                                ent_id, ent_text, other_id, other_text, "instance_of",
+                                confidence=0.85, provenance="taxonomic_discovery"
+                            )
+                            discovered += 1
+                        else:
+                            self._add_taxonomic_relation(
+                                ent_id, ent_text, other_id, other_text, "is_a",
+                                confidence=0.7, provenance="taxonomic_discovery"
+                            )
+                            discovered += 1
+        
+        # Discover instance_of relationships from entity types
+        for ent_type, type_entities in type_index.items():
+            # Find if the type exists as an entity
+            self.cursor.execute('SELECT id, entity FROM graph_entities WHERE entity = ?', (ent_type,))
+            type_entity = self.cursor.fetchone()
+            
+            if type_entity:
+                type_id, type_text = type_entity
+                # Add instance_of relationship for all entities of this type
+                for ent_id, ent_text in type_entities:
+                    self._add_taxonomic_relation(
+                        ent_id, ent_text, type_id, type_text, "instance_of",
+                        confidence=0.9, provenance="type_based_taxonomy"
+                    )
+                    discovered += 1
+            else:
+                # Create a new entity for this type
+                type_id = self.graph_store.add_entity(
+                    entity=ent_type,
+                    entity_type="TYPE",
+                    metadata={"automatic": True, "is_type": True},
+                    confidence=0.85,
+                    extraction_method="taxonomic_discovery",
+                    changed_by="graph_merger"
+                )
+                
+                # Add instance_of relationship for all entities of this type
+                for ent_id, ent_text in type_entities:
+                    self._add_taxonomic_relation(
+                        ent_id, ent_text, type_id, ent_type, "instance_of",
+                        confidence=0.85, provenance="type_based_taxonomy"
+                    )
+                    discovered += 1
+        
+        self.stats["relations_inferred"] += discovered
+        return discovered
+    
+    def _add_taxonomic_relation(self, source_id: int, source_text: str, 
+                              target_id: int, target_text: str, relation_type: str,
+                              confidence: float, provenance: str) -> bool:
+        """
+        Helper method to add a taxonomic relationship if it doesn't exist.
+        
+        Args:
+            source_id: Source entity ID
+            source_text: Source entity text
+            target_id: Target entity ID
+            target_text: Target entity text
+            relation_type: Type of taxonomic relation (is_a, part_of, etc.)
+            confidence: Confidence score
+            provenance: Source of this taxonomic relationship
+            
+        Returns:
+            True if relation was added
+        """
+        # Check if this relation already exists
+        self.cursor.execute('''
+            SELECT id FROM graph_relationships 
+            WHERE source_id = ? AND target_id = ? AND relation_type = ?
+        ''', (source_id, target_id, relation_type))
+        
+        if not self.cursor.fetchone():
+            # Add the relation
+            self.graph_store.add_relation(
+                source_entity=source_text,
+                relation_type=relation_type,
+                target_entity=target_text,
+                confidence=confidence,
+                provenance=provenance,
+                extraction_method="taxonomic_inference",
+                changed_by="graph_merger",
+                metadata={"automatic": True, "taxonomic": True}
+            )
+            return True
+        
+        return False
+    
+    def merge_from_text(self, text: str, source: str) -> Dict[str, int]:
+        """
+        Process text to extract entities and relations, then merge them into the graph.
+        
+        Args:
+            text: Text to process
+            source: Source of the text
+            
+        Returns:
+            Dictionary with count of entities and relations merged
+        """
+        # Extract entities
+        entities = self.graph_store.extract_entities(text)
+        
+        # Extract relations
+        relations = self.graph_store.extract_relations(text)
+        
+        # Merge entities
+        processed_entities = {}
+        for entity in entities:
+            entity_id = self.merge_entity(
+                entity=entity['text'],
+                entity_type=entity['type'],
+                metadata=entity.get('metadata', {}),
+                provenance=source,
+                confidence=entity.get('confidence', 0.8),
+                extraction_method=entity.get('source', 'text_extraction')
+            )
+            processed_entities[entity['text']] = entity_id
+        
+        # Merge relations
+        processed_relations = 0
+        for subj, pred, obj in relations:
+            if self.merge_relation(
+                source_entity=subj,
+                relation_type=pred,
+                target_entity=obj,
+                provenance=source,
+                confidence=0.7,  # Default confidence for extracted relations
+                extraction_method='text_extraction'
+            ):
+                processed_relations += 1
+        
+        return {
+            "entities": len(processed_entities),
+            "relations": processed_relations
+        }
+    
+    def detect_conflicts(self) -> List[Dict[str, Any]]:
+        """
+        Detect conflicting information in the knowledge graph.
+        
+        Returns:
+            List of detected conflicts
+        """
+        conflicts = []
+        
+        # Find relationship conflicts (contradictory relationships)
+        # e.g., A is_a B and B is_a A (cycle in taxonomy)
+        self.cursor.execute('''
+            SELECT r1.source_id, r1.target_id, r1.relation_type, r1.id,
+                   r2.source_id, r2.target_id, r2.relation_type, r2.id
+            FROM graph_relationships r1
+            JOIN graph_relationships r2 ON r1.target_id = r2.source_id 
+                                       AND r2.target_id = r1.source_id
+                                       AND r1.relation_type = r2.relation_type
+            WHERE r1.relation_type IN ('is_a', 'subclass_of', 'instance_of')
+              AND r1.source_id < r2.target_id  -- Avoid duplicates
+        ''')
+        
+        for row in self.cursor.fetchall():
+            # Get entity names
+            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[0],))
+            source1 = self.cursor.fetchone()[0]
+            
+            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[1],))
+            target1 = self.cursor.fetchone()[0]
+            
+            conflicts.append({
+                'type': 'cycle',
+                'description': f"Taxonomic cycle detected: {source1} {row[2]} {target1} and {target1} {row[6]} {source1}",
+                'relation_ids': [row[3], row[7]],
+                'entities': [source1, target1],
+                'relation_type': row[2]
+            })
+        
+        # Find attribute conflicts (different values for the same attribute)
+        self.cursor.execute('''
+            SELECT r1.source_id, r1.relation_type, r1.target_id, r1.confidence, r1.id,
+                   r2.target_id, r2.confidence, r2.id
+            FROM graph_relationships r1
+            JOIN graph_relationships r2 ON r1.source_id = r2.source_id 
+                                       AND r1.relation_type = r2.relation_type
+                                       AND r1.target_id != r2.target_id
+            WHERE r1.relation_type LIKE 'has_%'
+              AND r1.id < r2.id  -- Avoid duplicates
+        ''')
+        
+        for row in self.cursor.fetchall():
+            # Get entity names
+            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[0],))
+            source = self.cursor.fetchone()[0]
+            
+            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[2],))
+            target1 = self.cursor.fetchone()[0]
+            
+            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[5],))
+            target2 = self.cursor.fetchone()[0]
+            
+            conflicts.append({
+                'type': 'attribute',
+                'description': f"Attribute conflict: {source} {row[1]} {target1} (confidence: {row[3]}) vs {source} {row[1]} {target2} (confidence: {row[6]})",
+                'relation_ids': [row[4], row[7]],
+                'entities': [source, target1, target2],
+                'relation_type': row[1]
+            })
+        
+        return conflicts
+    
+    def resolve_conflicts(self, conflict_resolution: str = 'confidence') -> int:
+        """
+        Automatically resolve detected conflicts in the knowledge graph.
+        
+        Args:
+            conflict_resolution: Strategy for resolving conflicts:
+                - 'confidence': Keep the relation with higher confidence
+                - 'recency': Keep the more recent relation
+                - 'provenance': Prioritize by source reliability
+                
+        Returns:
+            Number of conflicts resolved
+        """
+        conflicts = self.detect_conflicts()
+        resolved = 0
+        
+        for conflict in conflicts:
+            if conflict['type'] == 'cycle':
+                # For taxonomy cycles, keep the relation with higher confidence or recency
+                self.cursor.execute('''
+                    SELECT id, confidence, timestamp, provenance FROM graph_relationships
+                    WHERE id IN (?, ?)
+                ''', (conflict['relation_ids'][0], conflict['relation_ids'][1]))
+                
+                relations = self.cursor.fetchall()
+                
+                if conflict_resolution == 'confidence':
+                    # Keep the relation with higher confidence
+                    if relations[0][1] >= relations[1][1]:
+                        relation_to_remove = relations[1][0]
+                    else:
+                        relation_to_remove = relations[0][0]
+                        
+                elif conflict_resolution == 'recency':
+                    # Keep the more recent relation
+                    if relations[0][2] >= relations[1][2]:
+                        relation_to_remove = relations[1][0]
+                    else:
+                        relation_to_remove = relations[0][0]
+                        
+                elif conflict_resolution == 'provenance':
+                    # Keep the relation from more reliable source
+                    # This is a placeholder - implement source reliability logic
+                    relation_to_remove = relations[1][0]
+                
+                # Delete the relation to be removed
+                self.cursor.execute('''
+                    DELETE FROM graph_relationships WHERE id = ?
+                ''', (relation_to_remove,))
+                
+                resolved += 1
+                
+            elif conflict['type'] == 'attribute':
+                # For attribute conflicts, keep the attribute with higher confidence
+                self.cursor.execute('''
+                    SELECT id, confidence FROM graph_relationships
+                    WHERE id IN (?, ?)
+                ''', (conflict['relation_ids'][0], conflict['relation_ids'][1]))
+                
+                relations = self.cursor.fetchall()
+                
+                if conflict_resolution == 'confidence':
+                    # Keep the relation with higher confidence
+                    if relations[0][1] >= relations[1][1]:
+                        relation_to_remove = relations[1][0]
+                    else:
+                        relation_to_remove = relations[0][0]
+                        
+                elif conflict_resolution == 'recency':
+                    # Similar logic as above
+                    self.cursor.execute('''
+                        SELECT id, timestamp FROM graph_relationships
+                        WHERE id IN (?, ?)
+                    ''', (conflict['relation_ids'][0], conflict['relation_ids'][1]))
+                    
+                    recency_data = self.cursor.fetchall()
+                    if recency_data[0][1] >= recency_data[1][1]:
+                        relation_to_remove = recency_data[1][0]
+                    else:
+                        relation_to_remove = recency_data[0][0]
+                        
+                elif conflict_resolution == 'provenance':
+                    # Placeholder for source reliability
+                    relation_to_remove = relations[1][0]
+                
+                # Delete the relation to be removed
+                self.cursor.execute('''
+                    DELETE FROM graph_relationships WHERE id = ?
+                ''', (relation_to_remove,))
+                
+                resolved += 1
+        
+        self.conn.commit()
+        self.stats["conflicts_resolved"] += resolved
+        return resolved
+    
+    def get_stats(self) -> Dict[str, int]:
+        """
+        Get statistics about the merging operations.
+        
+        Returns:
+            Dictionary with counts of various operations
+        """
+        return self.stats
