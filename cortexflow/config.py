@@ -1,3 +1,9 @@
+"""
+CortexFlow Configuration module.
+
+This module provides the configuration class for the CortexFlow system.
+"""
+
 import os
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List

@@ -1,9 +1,16 @@
+"""
+CortexFlow Memory module.
+
+This module provides the memory management system for the CortexFlow.
+"""
+
 import time
 import logging
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 
 from .config import CortexFlowConfig
+from .interfaces import MemoryTierInterface
 
 logger = logging.getLogger('cortexflow')
 
@@ -27,8 +34,8 @@ class ContextSegment:
         return time.time() - self.timestamp
 
 
-class MemoryTier:
-    """Base class for memory tiers."""
+class MemoryTier(MemoryTierInterface):
+    """Base class for memory tiers implementing the MemoryTierInterface."""
     
     def __init__(self, name: str, max_tokens: int):
         """
@@ -42,6 +49,30 @@ class MemoryTier:
         self.max_tokens = max_tokens
         self.segments: List[ContextSegment] = []
         self.current_token_count = 0
+    
+    def add_content(self, content: Any, importance: float) -> bool:
+        """
+        Add content to this tier as required by MemoryTierInterface.
+        
+        Args:
+            content: Content to add (typically a ContextSegment)
+            importance: Importance of the content
+            
+        Returns:
+            True if content was added successfully
+        """
+        if isinstance(content, ContextSegment):
+            return self.add_segment(content)
+        else:
+            # Create a segment from generic content
+            segment = ContextSegment(
+                content=str(content),
+                importance=importance,
+                timestamp=time.time(),
+                token_count=len(str(content).split()),  # Simple token count estimation
+                segment_type="generic"
+            )
+            return self.add_segment(segment)
     
     def add_segment(self, segment: ContextSegment) -> bool:
         """
@@ -85,6 +116,18 @@ class MemoryTier:
         """
         return "\n".join(segment.content for segment in self.segments)
     
+    def update_size(self, new_size: int) -> bool:
+        """
+        Update the size/capacity of this tier as required by MemoryTierInterface.
+        
+        Args:
+            new_size: New size/capacity
+            
+        Returns:
+            True if size was updated successfully
+        """
+        return self.update_token_limit(new_size)
+        
     def get_segments_by_importance(self, threshold: float) -> List[ContextSegment]:
         """
         Get segments with importance greater than or equal to the threshold.
@@ -211,15 +254,18 @@ class ArchiveTier(MemoryTier):
 
 class ConversationMemory:
     """
-    Manages conversation history and memory for the adaptive context system.
+    Main memory management system for CortexFlow.
+    
+    Manages a multi-tier memory system with active, working, and archive tiers.
+    Handles the movement of context between tiers based on importance and recency.
     """
     
     def __init__(self, config: CortexFlowConfig):
         """
-        Initialize the conversation memory with configuration.
+        Initialize the ConversationMemory with provided configuration.
         
         Args:
-            config: Configuration for the conversation memory
+            config: Configuration for the memory system
         """
         self.config = config
         self.active_token_limit = config.active_token_limit if hasattr(config, 'active_token_limit') else 4096

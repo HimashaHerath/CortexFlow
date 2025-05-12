@@ -1,10 +1,7 @@
 """
-Dynamic Memory Tier Weighting for AdaptiveContext.
+CortexFlow Dynamic Weighting module.
 
-This module implements adaptive token allocation between memory tiers based on:
-1. Query complexity
-2. Document type
-3. Historical patterns
+This module provides dynamic memory allocation for CortexFlow.
 """
 
 import logging
@@ -14,7 +11,7 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 from collections import deque
 
-from adaptive_context.config import CortexFlowConfig
+from cortexflow.config import CortexFlowConfig
 
 logger = logging.getLogger('cortexflow')
 

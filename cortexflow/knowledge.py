@@ -1,3 +1,9 @@
+"""
+CortexFlow Knowledge module.
+
+This module provides the knowledge storage and retrieval system for CortexFlow.
+"""
+
 import os
 import time
 import json
@@ -26,10 +32,11 @@ except ImportError:
     BM25_ENABLED = False
     logging.warning("rank_bm25 not found. BM25 keyword scoring will be disabled.")
 
-from adaptive_context.config import CortexFlowConfig
-from adaptive_context.graph_store import GraphStore
+from cortexflow.config import CortexFlowConfig
+from cortexflow.graph_store import GraphStore
+from cortexflow.interfaces import KnowledgeStoreInterface
 
-class KnowledgeStore:
+class KnowledgeStore(KnowledgeStoreInterface):
     """Persistent storage for important facts and retrievable context."""
     
     def __init__(self, config: CortexFlowConfig):
@@ -1644,4 +1651,72 @@ class KnowledgeStore:
         try:
             self.close()
         except Exception as e:
-            logging.error(f"Error in __del__: {e}") 
+            logging.error(f"Error in __del__: {e}")
+
+    # Implement methods required by KnowledgeStoreInterface
+    def remember(self, text: str, source: Optional[str] = None) -> List[int]:
+        """
+        Store knowledge in the system as required by KnowledgeStoreInterface.
+        
+        Args:
+            text: Text to remember
+            source: Optional source information
+            
+        Returns:
+            List of IDs for the stored knowledge
+        """
+        return self.remember_knowledge(text, source)
+    
+    def retrieve(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+        """
+        Retrieve knowledge relevant to the query as required by KnowledgeStoreInterface.
+        
+        Args:
+            query: Query text
+            max_results: Maximum number of results
+            
+        Returns:
+            List of relevant knowledge items
+        """
+        return self.get_relevant_knowledge(query, max_results)
+    
+    def clear(self) -> None:
+        """
+        Clear all stored knowledge as required by KnowledgeStoreInterface.
+        """
+        # Implementation of knowledge clearing
+        if hasattr(self, 'conn') and self.conn is not None:
+            conn = self.conn
+        else:
+            conn = sqlite3.connect(self.db_path)
+            
+        cursor = conn.cursor()
+        
+        try:
+            # Clear all tables
+            cursor.execute("DELETE FROM fact_triples")
+            cursor.execute("DELETE FROM knowledge_items")
+            cursor.execute("DELETE FROM graph_entities")
+            cursor.execute("DELETE FROM graph_relationships")
+            
+            conn.commit()
+            
+            # Reset in-memory stores
+            self.bm25_corpus = []
+            self.bm25_doc_ids = []
+            self.vector_ids = []
+            self.vector_store = {}
+            self.embedding_cache = {}
+            
+            # Clear summaries
+            if hasattr(self, 'summaries') and self.summaries is not None:
+                self.summaries.clear()
+                
+            logging.info("Knowledge store cleared")
+            
+        except Exception as e:
+            logging.error(f"Error clearing knowledge store: {e}")
+            conn.rollback()
+        finally:
+            if self.conn is None and conn is not None:
+                conn.close() 

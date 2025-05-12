@@ -1,3 +1,9 @@
+"""
+CortexFlow Graph Store module.
+
+This module provides graph-based knowledge representation for CortexFlow.
+"""
+
 import os
 import sqlite3
 import logging
@@ -23,7 +29,7 @@ except ImportError:
     SPACY_ENABLED = False
     logging.warning("spacy not found. Automatic entity extraction will be limited.")
 
-from adaptive_context.config import CortexFlowConfig
+from cortexflow.config import CortexFlowConfig
 
 class GraphStore:
     """Knowledge graph storage and query functionality for GraphRAG."""
@@ -33,7 +39,7 @@ class GraphStore:
         Initialize graph store.
         
         Args:
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration
         """
         self.config = config
         self.db_path = config.knowledge_store_path

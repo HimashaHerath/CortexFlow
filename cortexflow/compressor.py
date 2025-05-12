@@ -1,9 +1,15 @@
+"""
+CortexFlow Compressor module.
+
+This module provides context compression functionality for CortexFlow.
+"""
+
 import re
 import requests
 from typing import List, Dict, Any, Optional, Tuple
 
-from adaptive_context.config import CortexFlowConfig
-from adaptive_context.memory import ContextSegment
+from cortexflow.config import CortexFlowConfig
+from cortexflow.memory import ContextSegment
 
 class TruncationCompressor:
     """Simple truncation-based context compressor."""

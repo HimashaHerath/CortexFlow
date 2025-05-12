@@ -1,3 +1,9 @@
+"""
+CortexFlow Classifier module.
+
+This module provides content classification functionality for CortexFlow.
+"""
+
 import os
 import pickle
 import time
@@ -9,8 +15,8 @@ import re
 import json
 import requests
 
-from adaptive_context.config import CortexFlowConfig
-from adaptive_context.memory import ContextSegment
+from cortexflow.config import CortexFlowConfig
+from cortexflow.memory import ContextSegment
 
 class RuleBasedClassifier:
     """

@@ -1,8 +1,7 @@
 """
-Self-Reflection and Self-Correction module for AdaptiveContext.
+CortexFlow Reflection module.
 
-This module implements mechanisms for verifying knowledge relevance,
-checking response consistency, and revising answers based on detected issues.
+This module provides self-reflection capabilities for CortexFlow.
 """
 
 import logging
@@ -13,8 +12,8 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 
 import requests
 
-from adaptive_context.config import CortexFlowConfig
-from adaptive_context.knowledge import KnowledgeStore
+from cortexflow.config import CortexFlowConfig
+from cortexflow.knowledge import KnowledgeStore
 
 logger = logging.getLogger('cortexflow')
 

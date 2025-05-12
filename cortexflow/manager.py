@@ -1,3 +1,9 @@
+"""
+CortexFlow Manager module.
+
+This module provides the main manager class for the CortexFlow system.
+"""
+
 import time
 import json
 import logging
@@ -5,8 +11,9 @@ import requests
 import traceback
 from typing import List, Dict, Any, Optional, Union, Iterator
 
-from adaptive_context.config import CortexFlowConfig
-from adaptive_context.memory import (
+from cortexflow.interfaces import ContextProvider
+from cortexflow.config import CortexFlowConfig
+from cortexflow.memory import (
     ContextSegment, 
     MemoryTier, 
     ActiveTier, 
@@ -14,13 +21,13 @@ from adaptive_context.memory import (
     ArchiveTier,
     ConversationMemory
 )
-from adaptive_context.classifier import ImportanceClassifier, ContentClassifier
-from adaptive_context.compressor import ContextCompressor
-from adaptive_context.knowledge import KnowledgeStore
+from cortexflow.classifier import ImportanceClassifier, ContentClassifier
+from cortexflow.compressor import ContextCompressor
+from cortexflow.knowledge import KnowledgeStore
 
 # Add import for Chain of Agents
 try:
-    from adaptive_context.agent_chain import AgentChainManager
+    from cortexflow.agent_chain import AgentChainManager
     AGENT_CHAIN_ENABLED = True
 except ImportError:
     AGENT_CHAIN_ENABLED = False
@@ -29,7 +36,7 @@ except ImportError:
 
 # Add import for Self-Reflection
 try:
-    from adaptive_context.reflection import ReflectionEngine
+    from cortexflow.reflection import ReflectionEngine
     REFLECTION_ENABLED = True
 except ImportError:
     REFLECTION_ENABLED = False
@@ -38,7 +45,7 @@ except ImportError:
 
 # Add import for Dynamic Weighting
 try:
-    from adaptive_context.dynamic_weighting import DynamicWeightingEngine
+    from cortexflow.dynamic_weighting import DynamicWeightingEngine
     DYNAMIC_WEIGHTING_ENABLED = True
 except ImportError:
     DYNAMIC_WEIGHTING_ENABLED = False
@@ -53,7 +60,7 @@ logging.basicConfig(
 logger = logging.getLogger('cortexflow')
 
 def configure_logging(verbose: bool = False):
-    """Configure logging for the adaptive_context module."""
+    """Configure logging for the cortexflow module."""
     level = logging.DEBUG if verbose else logging.INFO
     
     logging.basicConfig(
@@ -61,10 +68,11 @@ def configure_logging(verbose: bool = False):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-class CortexFlowManager:
+class CortexFlowManager(ContextProvider):
     """
-    Main manager class for AdaptiveContext system.
+    Main manager class for CortexFlow system.
     Coordinates between components for memory, knowledge, and external integrations.
+    Implements the ContextProvider interface.
     """
     
     def __init__(self, config=None):
@@ -570,4 +578,12 @@ class CortexFlowManager:
     
     def __del__(self) -> None:
         """Clean up on deletion."""
-        self.close() 
+        self.close()
+
+    def get_context(self) -> Dict[str, Any]:
+        """Get the current context for model consumption."""
+        return self.get_conversation_context()
+        
+    def clear_context(self) -> None:
+        """Clear all context data."""
+        self.clear_memory() 

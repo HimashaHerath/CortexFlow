@@ -1,4 +1,8 @@
 """
+CortexFlow Agent Chain module.
+
+This module provides multi-agent collaboration for CortexFlow.
+
 Chain of Agents (CoA) Framework for AdaptiveContext.
 
 This module implements the Chain of Agents approach for complex query processing,
@@ -17,8 +21,8 @@ import traceback
 
 import requests
 
-from adaptive_context.config import CortexFlowConfig
-from adaptive_context.knowledge import KnowledgeStore
+from cortexflow.config import CortexFlowConfig
+from cortexflow.knowledge import KnowledgeStore
 
 logger = logging.getLogger('cortexflow')
 
