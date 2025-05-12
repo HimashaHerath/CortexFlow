@@ -109,6 +109,71 @@ CortexFlow provides enhanced entity and relation extraction capabilities:
 
 These features enable building more robust knowledge graphs for improved reasoning.
 
+## Advanced Graph Traversal
+
+CortexFlow now includes sophisticated knowledge graph traversal capabilities:
+
+- **Weighted Path Algorithms**: Find paths that prioritize relation importance and confidence scores
+- **Bidirectional Search**: Efficiently find connections between entities in large graphs
+- **Constrained Path Finding**: Search for paths with specific relation type requirements
+- **Graph Contraction**: Handle large knowledge graphs efficiently through smart compression techniques
+- **Hierarchical Graph Abstraction**: Create simplified representations of complex graphs for faster traversal
+
+Example usage:
+
+```python
+from cortexflow import CortexFlowManager, CortexFlowConfig
+
+# Configure with graph features enabled
+config = CortexFlowConfig(
+    use_graph_rag=True,
+    knowledge_store_path="knowledge.db"
+)
+manager = CortexFlowManager(config)
+
+# Add some knowledge to the graph
+manager.knowledge_store.remember_knowledge(
+    "Marie Curie discovered radium and polonium. She worked at the University of Paris."
+)
+
+# Find weighted paths considering relation importance and confidence
+paths = manager.knowledge_store.graph_store.weighted_path_query(
+    start_entity="Marie Curie", 
+    end_entity="University of Paris",
+    importance_weight=0.7,
+    confidence_weight=0.3
+)
+
+# Find paths through specific relation types
+paths = manager.knowledge_store.graph_store.constrained_path_search(
+    start_entity="Marie Curie",
+    end_entity="radium",
+    allowed_relations=["discovered", "researched", "studied"]
+)
+
+# Use bidirectional search for efficiency in large graphs
+paths = manager.knowledge_store.graph_store.bidirectional_search(
+    start_entity="Marie Curie",
+    end_entity="polonium"
+)
+
+# Contract the graph to handle large knowledge graphs efficiently
+stats = manager.knowledge_store.graph_store.contract_graph(
+    min_edge_weight=0.3,
+    min_confidence=0.4,
+    combine_parallel_edges=True
+)
+
+# Create hierarchical abstraction for large graph traversal
+abstraction = manager.knowledge_store.graph_store.create_graph_abstraction()
+
+# Use the abstracted graph for efficient path finding
+paths = manager.knowledge_store.graph_store.path_query_with_abstraction(
+    start_entity="Marie Curie",
+    end_entity="University of Paris"
+)
+```
+
 ## Documentation
 
 For full documentation, visit [cortexflow.readthedocs.io](https://cortexflow.readthedocs.io).

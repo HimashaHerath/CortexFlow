@@ -2,6 +2,7 @@
 numpy>=1.19.5
 scipy>=1.7.0
 networkx>=2.5
+python-louvain>=0.16  # For graph community detection and hierarchical abstraction
 
 # NLP and text processing
 spacy>=3.2.0
