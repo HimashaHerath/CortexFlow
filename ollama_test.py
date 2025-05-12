@@ -9,7 +9,7 @@ import time
 import json
 import requests
 import argparse
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 def test_ollama_available(host="http://localhost:11434", model="llama3"):
     """Check if Ollama is available with the specified model."""
@@ -46,7 +46,7 @@ def test_with_ollama():
     print(f"Testing AdaptiveContext with Ollama using model {args.model}...")
     
     # Initialize with in-memory storage
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_token_limit=args.active_tokens,
         working_token_limit=args.working_tokens,
         archive_token_limit=args.archive_tokens,
@@ -65,7 +65,7 @@ def test_with_ollama():
         print("Note: networkx or spacy not installed. Some graph functionality will be limited.")
         graph_packages_available = False
     
-    context_manager = AdaptiveContextManager(config)
+    context_manager = CortexFlowManager(config)
     
     try:
         # Add system message

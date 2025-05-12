@@ -8,7 +8,7 @@ This script tests the Chain of Agents functionality in AdaptiveContext.
 import argparse
 import json
 import time
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 def test_chain_of_agents():
     """Test the Chain of Agents functionality."""
@@ -24,7 +24,7 @@ def test_chain_of_agents():
     print(f"Testing AdaptiveContext Chain of Agents with model {args.model}...")
     
     # Initialize with in-memory storage and Chain of Agents enabled
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_token_limit=args.active_tokens,
         working_token_limit=args.working_tokens,
         archive_token_limit=args.archive_tokens,
@@ -45,7 +45,7 @@ def test_chain_of_agents():
         print("Note: networkx or spacy not installed. Some graph functionality will be limited.")
         graph_packages_available = False
     
-    context_manager = AdaptiveContextManager(config)
+    context_manager = CortexFlowManager(config)
     
     try:
         # Set up system message

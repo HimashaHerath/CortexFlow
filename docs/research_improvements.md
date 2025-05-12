@@ -13,7 +13,7 @@ This document tracks research-based improvements for the AdaptiveContext system,
   - Analyzer Agent: Examines relationships between facts
   - Synthesizer Agent: Generates comprehensive answers
 - Sequential processing for complex multi-hop reasoning
-- Integration with AdaptiveContextManager
+- Integration with CortexFlowManager
 - Configuration options for controlling when to engage agents
 
 **Benefits:**

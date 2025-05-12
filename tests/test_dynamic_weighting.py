@@ -2,14 +2,14 @@ import pytest
 import time
 from unittest.mock import MagicMock, patch
 from adaptive_context.dynamic_weighting import DynamicWeightingEngine
-from adaptive_context.config import AdaptiveContextConfig
+from adaptive_context.config import CortexFlowConfig
 
 class TestDynamicWeightingEngine:
     """Tests for the DynamicWeightingEngine class"""
     
     def test_init(self):
         """Test initialization of DynamicWeightingEngine"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=1000,
             working_token_limit=2000,
             archive_token_limit=3000,
@@ -29,7 +29,7 @@ class TestDynamicWeightingEngine:
         
     def test_analyze_query_complexity(self):
         """Test query complexity analysis"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=1000,
             working_token_limit=2000,
             archive_token_limit=3000
@@ -66,7 +66,7 @@ class TestDynamicWeightingEngine:
         
     def test_analyze_document_type(self):
         """Test document type analysis"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=1000,
             working_token_limit=2000,
             archive_token_limit=3000
@@ -153,7 +153,7 @@ class TestDynamicWeightingEngine:
         
     def test_calculate_optimal_weights(self):
         """Test optimal weight calculation"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=1000,
             working_token_limit=2000,
             archive_token_limit=3000
@@ -187,7 +187,7 @@ class TestDynamicWeightingEngine:
         
     def test_update_tier_allocations(self):
         """Test updating tier allocations"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=1000,
             working_token_limit=2000,
             archive_token_limit=3000
@@ -230,7 +230,7 @@ class TestDynamicWeightingEngine:
         
     def test_process_query(self):
         """Test processing a query and updating allocations"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=1000,
             working_token_limit=2000,
             archive_token_limit=3000,
@@ -269,7 +269,7 @@ class TestDynamicWeightingEngine:
         
     def test_get_stats(self):
         """Test getting statistics"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=1000,
             working_token_limit=2000,
             archive_token_limit=3000
@@ -293,7 +293,7 @@ class TestDynamicWeightingEngine:
         
     def test_reset_to_defaults(self):
         """Test resetting weights to defaults"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=1000,
             working_token_limit=2000,
             archive_token_limit=3000,
@@ -318,7 +318,7 @@ class TestDynamicWeightingEngine:
 
 @pytest.fixture
 def mock_engine():
-    """Create a mock DynamicWeightingEngine for testing with AdaptiveContextManager"""
+    """Create a mock DynamicWeightingEngine for testing with CortexFlowManager"""
     engine = MagicMock()
     engine.process_query.return_value = {
         "active": 1500,
@@ -340,14 +340,14 @@ def mock_engine():
 
 @patch("adaptive_context.manager.DynamicWeightingEngine")  # Fix the patch path
 def test_manager_integration(mock_engine_class, mock_engine):
-    """Test integration with AdaptiveContextManager"""
-    from adaptive_context.manager import AdaptiveContextManager
+    """Test integration with CortexFlowManager"""
+    from adaptive_context.manager import CortexFlowManager
     
     # Set up the mock engine
     mock_engine_class.return_value = mock_engine
     
     # Create configuration
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_token_limit=1000,
         working_token_limit=2000,
         archive_token_limit=3000,

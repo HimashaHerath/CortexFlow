@@ -11,8 +11,8 @@ import requests
 import json
 from typing import Dict, Any, List
 
-from adaptive_context import AdaptiveContextManager
-from adaptive_context.config import AdaptiveContextConfig
+from adaptive_context import CortexFlowManager
+from adaptive_context.config import CortexFlowConfig
 from adaptive_context.graph_store import GraphStore
 
 # Configure logging
@@ -68,7 +68,7 @@ def test_graph_rag():
         os.remove(test_db_path)
     
     # Initialize config with GraphRAG enabled
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         knowledge_store_path=test_db_path,
         use_graph_rag=True,
         graph_weight=0.3,
@@ -78,7 +78,7 @@ def test_graph_rag():
     )
     
     # Initialize manager
-    manager = AdaptiveContextManager(config)
+    manager = CortexFlowManager(config)
     
     print("\n" + "="*80)
     print("Testing GraphRAG Functionality")

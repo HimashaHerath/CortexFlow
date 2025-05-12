@@ -60,7 +60,7 @@ class Agent:
         self, 
         name: str, 
         role: str, 
-        config: AdaptiveContextConfig,
+        config: CortexFlowConfig,
         knowledge_store: Optional[KnowledgeStore] = None
     ):
         # Initialize agent with name, role, and configuration
@@ -80,18 +80,18 @@ The `AgentChainManager` coordinates the sequential execution of agents:
 
 ```python
 class AgentChainManager:
-    def __init__(self, config: AdaptiveContextConfig, knowledge_store: KnowledgeStore):
+    def __init__(self, config: CortexFlowConfig, knowledge_store: KnowledgeStore):
         # Initialize the agent chain
         
     def process_query(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         # Process a query through the chain of agents
 ```
 
-### Integration with AdaptiveContextManager
+### Integration with CortexFlowManager
 
-The Chain of Agents is integrated with the main `AdaptiveContextManager` through:
+The Chain of Agents is integrated with the main `CortexFlowManager` through:
 
-1. Configuration options in `AdaptiveContextConfig`
+1. Configuration options in `CortexFlowConfig`
 2. Automatic engagement for complex queries
 3. Fallback to standard processing when needed
 
@@ -102,17 +102,17 @@ The Chain of Agents is integrated with the main `AdaptiveContextManager` through
 Enable and use the Chain of Agents in your application:
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 # Configure with Chain of Agents enabled
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     use_chain_of_agents=True,
     chain_complexity_threshold=5,  # Only use for reasonably complex queries
     # ... other config options
 )
 
 # Create the manager
-manager = AdaptiveContextManager(config)
+manager = CortexFlowManager(config)
 
 # Add system message
 manager.add_message("system", "You are a helpful AI assistant.")

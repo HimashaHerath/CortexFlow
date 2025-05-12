@@ -52,10 +52,10 @@ The Dynamic Weighting process follows these steps:
 
 ## Configuration
 
-Dynamic Memory Tier Weighting can be enabled and configured in the AdaptiveContextConfig:
+Dynamic Memory Tier Weighting can be enabled and configured in the CortexFlowConfig:
 
 ```python
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     # Enable Dynamic Weighting
     use_dynamic_weighting=True,
     
@@ -78,8 +78,8 @@ config = AdaptiveContextConfig(
 
 The Dynamic Weighting functionality is integrated with the core AdaptiveContext system at these key points:
 
-1. In `AdaptiveContextManager.__init__()`, where the DynamicWeightingEngine is initialized
-2. In `AdaptiveContextManager.add_message()`, where user queries trigger dynamic weighting updates
+1. In `CortexFlowManager.__init__()`, where the DynamicWeightingEngine is initialized
+2. In `CortexFlowManager.add_message()`, where user queries trigger dynamic weighting updates
 3. In `ConversationMemory.update_tier_limits()`, where memory tier limits are adjusted
 
 ## Example Usage
@@ -87,10 +87,10 @@ The Dynamic Weighting functionality is integrated with the core AdaptiveContext 
 Here's how to use Dynamic Memory Tier Weighting with AdaptiveContext:
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 # Create a configuration with Dynamic Weighting enabled
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     active_token_limit=4000,
     working_token_limit=8000,
     archive_token_limit=12000,
@@ -98,8 +98,8 @@ config = AdaptiveContextConfig(
     dynamic_weighting_learning_rate=0.1
 )
 
-# Initialize AdaptiveContextManager with this configuration
-context_manager = AdaptiveContextManager(config)
+# Initialize CortexFlowManager with this configuration
+context_manager = CortexFlowManager(config)
 
 # Add a system message
 context_manager.add_message("system", "You are a helpful AI assistant.")

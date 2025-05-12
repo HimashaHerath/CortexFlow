@@ -6,7 +6,7 @@ This demonstrates the improved semantic search capabilities.
 
 import sys
 import time
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 def print_divider():
     print("\n" + "="*70 + "\n")
@@ -16,7 +16,7 @@ def main():
     print_divider()
     
     # Initialize with vector search enabled
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_tier_tokens=1000,
         working_tier_tokens=2000,
         archive_tier_tokens=3000,
@@ -24,7 +24,7 @@ def main():
         use_vector_search=True
     )
     
-    manager = AdaptiveContextManager(config)
+    manager = CortexFlowManager(config)
     
     # Store some facts explicitly
     print("Storing facts...")

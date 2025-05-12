@@ -8,7 +8,7 @@ This script tests the Self-Reflection functionality in AdaptiveContext.
 import argparse
 import json
 import time
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 def test_self_reflection():
     """Test the Self-Reflection functionality."""
@@ -24,7 +24,7 @@ def test_self_reflection():
     print(f"Testing AdaptiveContext Self-Reflection with model {args.model}...")
     
     # Initialize with in-memory storage and Self-Reflection enabled
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_token_limit=args.active_tokens,
         working_token_limit=args.working_tokens,
         archive_token_limit=args.archive_tokens,
@@ -37,7 +37,7 @@ def test_self_reflection():
         verbose_logging=args.verbose
     )
     
-    context_manager = AdaptiveContextManager(config)
+    context_manager = CortexFlowManager(config)
     
     try:
         # Set up system message

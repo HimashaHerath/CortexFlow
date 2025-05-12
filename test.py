@@ -7,20 +7,20 @@ This script performs basic testing of the AdaptiveContext functionality.
 
 import time
 import json
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 def test_basic_functionality():
     print("Testing basic AdaptiveContext functionality...")
     
     # Initialize with in-memory storage
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_tier_tokens=500,
         working_tier_tokens=1000,
         archive_tier_tokens=1500,
         knowledge_store_path="test_memory.db"
     )
     
-    context_manager = AdaptiveContextManager(config)
+    context_manager = CortexFlowManager(config)
     
     # Test adding messages
     print("\nAdding messages to context...")

@@ -8,7 +8,7 @@ from adaptive_context.memory import (
     ArchiveTier,
     ConversationMemory
 )
-from adaptive_context.config import AdaptiveContextConfig
+from adaptive_context.config import CortexFlowConfig
 
 class TestContextSegment:
     """Tests for the ContextSegment class"""
@@ -400,7 +400,7 @@ class TestConversationMemory:
     
     def test_init(self):
         """Test ConversationMemory initialization"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
@@ -416,7 +416,7 @@ class TestConversationMemory:
         
     def test_update_tier_limits(self):
         """Test updating memory tier limits"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
@@ -442,7 +442,7 @@ class TestConversationMemory:
         
     def test_add_message(self):
         """Test adding messages to memory"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
@@ -476,7 +476,7 @@ class TestConversationMemory:
         
     def test_get_context_messages(self):
         """Test getting context messages"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
@@ -502,7 +502,7 @@ class TestConversationMemory:
         
     def test_get_messages_by_role(self):
         """Test filtering messages by role"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
@@ -538,7 +538,7 @@ class TestConversationMemory:
         
     def test_get_last_message(self):
         """Test getting the last message"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
@@ -560,7 +560,7 @@ class TestConversationMemory:
         
     def test_get_conversation_summary(self):
         """Test getting conversation summary"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
@@ -585,7 +585,7 @@ class TestConversationMemory:
         
     def test_clear_memory(self):
         """Test clearing memory"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
@@ -611,7 +611,7 @@ class TestConversationMemory:
         
     def test_serialization(self):
         """Test serialization and deserialization"""
-        config = AdaptiveContextConfig(
+        config = CortexFlowConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300

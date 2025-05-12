@@ -10,7 +10,7 @@ import time
 import requests
 import argparse
 
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 def send_to_ollama(prompt, model="llama3", ollama_host="http://localhost:11434"):
     """Send a prompt to Ollama API and return the response."""
@@ -43,7 +43,7 @@ def main():
     args = parser.parse_args()
     
     # Configure AdaptiveContext
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_tier_tokens=args.active_tokens,
         working_tier_tokens=args.working_tokens,
         archive_tier_tokens=args.archive_tokens,
@@ -53,7 +53,7 @@ def main():
     )
     
     # Initialize context manager
-    context_manager = AdaptiveContextManager(config)
+    context_manager = CortexFlowManager(config)
     
     print(f"AdaptiveContext initialized with model {args.model}")
     print("Type 'exit' to quit, 'stats' to see memory stats, 'flush' to clear context")

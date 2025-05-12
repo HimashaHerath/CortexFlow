@@ -1,11 +1,11 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="adaptive_context",
+    name="cortexflow",
     version="0.1.0",
     description="Memory optimization system for local LLMs running via Ollama",
-    author="AdaptiveContext Team",
-    author_email="adaptivecontext@example.com",
+    author="CortexFlow Team",
+    author_email="cortexflow@example.com",
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[

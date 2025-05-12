@@ -22,8 +22,8 @@ except ImportError:
     REQUESTS_AVAILABLE = False
     print("Warning: requests library not available. Ollama integration will be disabled.")
 
-from adaptive_context import AdaptiveContextManager
-from adaptive_context.config import AdaptiveContextConfig
+from adaptive_context import CortexFlowManager
+from adaptive_context.config import CortexFlowConfig
 from metrics_utils import (
     calculate_precision, calculate_recall, calculate_f1, 
     calculate_mrr, calculate_path_accuracy, evaluate_hop_accuracy,
@@ -102,7 +102,7 @@ class GraphRAGBenchmark:
             os.remove(self.test_db_path)
         
         # Initialize config with GraphRAG enabled
-        self.config = AdaptiveContextConfig(
+        self.config = CortexFlowConfig(
             knowledge_store_path=self.test_db_path,
             use_graph_rag=True,
             graph_weight=args.graph_weight,
@@ -112,7 +112,7 @@ class GraphRAGBenchmark:
         )
         
         # Initialize manager
-        self.manager = AdaptiveContextManager(self.config)
+        self.manager = CortexFlowManager(self.config)
         
         # Initialize conn attribute to None for database access
         self.conn = None

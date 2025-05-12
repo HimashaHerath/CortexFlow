@@ -9,7 +9,7 @@ import argparse
 import json
 import time
 import matplotlib.pyplot as plt
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 def test_dynamic_weighting():
     """Test the Dynamic Memory Weighting functionality."""
@@ -26,7 +26,7 @@ def test_dynamic_weighting():
     print(f"Testing AdaptiveContext Dynamic Memory Weighting with model {args.model}...")
     
     # Initialize with in-memory storage and Dynamic Weighting enabled
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_token_limit=args.active_tokens,
         working_token_limit=args.working_tokens,
         archive_token_limit=args.archive_tokens,
@@ -38,7 +38,7 @@ def test_dynamic_weighting():
         verbose_logging=args.verbose
     )
     
-    context_manager = AdaptiveContextManager(config)
+    context_manager = CortexFlowManager(config)
     
     try:
         # Set up system message

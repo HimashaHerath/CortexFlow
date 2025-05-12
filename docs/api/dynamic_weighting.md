@@ -10,10 +10,10 @@ The Dynamic Weighting module provides functionality to adaptively allocate token
 
 ```python
 from adaptive_context.dynamic_weighting import DynamicWeightingEngine
-from adaptive_context.config import AdaptiveContextConfig
+from adaptive_context.config import CortexFlowConfig
 
 # Create a configuration
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     use_dynamic_weighting=True,
     dynamic_weighting_learning_rate=0.1,
     dynamic_weighting_min_tier_size=1000
@@ -113,15 +113,15 @@ Resets weighting to default values.
 engine.reset_to_defaults()
 ```
 
-## Integration with AdaptiveContextManager
+## Integration with CortexFlowManager
 
-The DynamicWeightingEngine is integrated with AdaptiveContextManager and can be used as follows:
+The DynamicWeightingEngine is integrated with CortexFlowManager and can be used as follows:
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 # Enable Dynamic Weighting in configuration
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     active_token_limit=4000,
     working_token_limit=8000, 
     archive_token_limit=12000,
@@ -130,7 +130,7 @@ config = AdaptiveContextConfig(
 )
 
 # Create the context manager with this configuration
-manager = AdaptiveContextManager(config)
+manager = CortexFlowManager(config)
 
 # Add a message - this will trigger dynamic weighting analysis
 manager.add_message("user", "What is the capital of France?")
@@ -195,10 +195,10 @@ Weights are gradually adjusted using the learning rate to avoid abrupt changes.
 Here's a detailed example of using dynamic weighting:
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 # Create configuration with Dynamic Weighting enabled
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     active_token_limit=4000,
     working_token_limit=8000,
     archive_token_limit=12000,
@@ -207,7 +207,7 @@ config = AdaptiveContextConfig(
 )
 
 # Initialize the manager
-manager = AdaptiveContextManager(config)
+manager = CortexFlowManager(config)
 
 # Add a system message
 manager.add_message("system", "You are a helpful AI assistant with dynamic memory capabilities.")

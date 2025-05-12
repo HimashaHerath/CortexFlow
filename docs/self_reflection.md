@@ -44,10 +44,10 @@ The Self-Reflection process follows these steps:
 
 ## Configuration
 
-Self-Reflection can be enabled and configured in the AdaptiveContextConfig:
+Self-Reflection can be enabled and configured in the CortexFlowConfig:
 
 ```python
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     # Enable Self-Reflection
     use_self_reflection=True,
     
@@ -63,25 +63,25 @@ config = AdaptiveContextConfig(
 
 The Self-Reflection functionality is integrated with the core AdaptiveContext system at two key points:
 
-1. In `AdaptiveContextManager.get_conversation_context()`, where knowledge relevance verification is applied
-2. In `AdaptiveContextManager.generate_response()`, where response consistency checking and revision are applied
+1. In `CortexFlowManager.get_conversation_context()`, where knowledge relevance verification is applied
+2. In `CortexFlowManager.generate_response()`, where response consistency checking and revision are applied
 
 ## Example Usage
 
 Here's how to use Self-Reflection with AdaptiveContext:
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 # Create a configuration with Self-Reflection enabled
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     use_self_reflection=True,
     reflection_relevance_threshold=0.6,
     reflection_confidence_threshold=0.7
 )
 
-# Initialize AdaptiveContextManager with this configuration
-context_manager = AdaptiveContextManager(config)
+# Initialize CortexFlowManager with this configuration
+context_manager = CortexFlowManager(config)
 
 # Add some knowledge that includes contradictions
 context_manager.remember_knowledge("The Eiffel Tower is 330 meters tall.")

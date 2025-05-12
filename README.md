@@ -1,10 +1,10 @@
-# AdaptiveContext
+# CortexFlow
 
 A memory optimization system for local LLMs running via Ollama that implements a multi-tier memory architecture inspired by human cognition and recent AI research (TITANS and Transformer²).
 
 ## Overview
 
-AdaptiveContext dynamically manages context information, retaining important elements while discarding less relevant ones to maximize effective context window utilization without increasing memory requirements. The system uses a multi-tier memory approach:
+CortexFlow dynamically manages context information, retaining important elements while discarding less relevant ones to maximize effective context window utilization without increasing memory requirements. The system uses a multi-tier memory approach:
 
 - **Active Tier**: Holds the most recent and important context
 - **Working Tier**: Medium-term storage with moderate compression
@@ -56,10 +56,10 @@ pip install -r requirements.txt
 ## Quick Start
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Configure with custom settings
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     active_tier_tokens=2000,
     working_tier_tokens=4000,
     archive_tier_tokens=6000,
@@ -67,7 +67,7 @@ config = AdaptiveContextConfig(
 )
 
 # Create the context manager
-context_manager = AdaptiveContextManager(config)
+context_manager = CortexFlowManager(config)
 
 # Add messages to the context
 context_manager.add_message("You are a helpful AI assistant.", segment_type="system")
@@ -171,10 +171,10 @@ pip install pytest pytest-cov
 pytest tests/
 
 # Generate test coverage report
-pytest --cov=adaptive_context tests/
+pytest --cov=cortexflow tests/
 
 # Generate HTML coverage report
-pytest --cov=adaptive_context --cov-report=html tests/
+pytest --cov=cortexflow --cov-report=html tests/
 ```
 
 For more information on running tests, see [tests/README.md](tests/README.md).
@@ -254,14 +254,14 @@ This multi-agent approach follows research from Google's "Chain of Agents: Large
 To use the Chain of Agents framework:
 ```python
 # Enable Chain of Agents in your configuration
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     use_chain_of_agents=True,
     chain_complexity_threshold=5,  # Only use for reasonably complex queries
     # ... other config options
 )
 
 # Create the manager with this configuration
-manager = AdaptiveContextManager(config)
+manager = CortexFlowManager(config)
 
 # Regular usage - CoA is automatically engaged for complex queries
 manager.add_message("user", "What connection exists between X and Y?")
@@ -285,7 +285,7 @@ The Self-Reflection mechanism is particularly effective for:
 To use the Self-Reflection functionality:
 ```python
 # Enable Self-Reflection in your configuration
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     use_self_reflection=True,
     reflection_relevance_threshold=0.6,  # Minimum score for knowledge relevance
     reflection_confidence_threshold=0.7,  # Minimum confidence for consistency
@@ -293,7 +293,7 @@ config = AdaptiveContextConfig(
 )
 
 # Create the manager with this configuration
-manager = AdaptiveContextManager(config)
+manager = CortexFlowManager(config)
 
 # Regular usage - Self-Reflection is automatically applied
 manager.add_message("user", "What is X?")
@@ -319,7 +319,7 @@ The Dynamic Weighting mechanism is particularly effective for:
 To use the Dynamic Weighting functionality:
 ```python
 # Enable Dynamic Weighting in your configuration
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     use_dynamic_weighting=True,
     dynamic_weighting_learning_rate=0.1,  # Learning rate for weight adjustments
     dynamic_weighting_min_tier_size=1000,  # Minimum token size for any tier
@@ -327,7 +327,7 @@ config = AdaptiveContextConfig(
 )
 
 # Create the manager with this configuration
-manager = AdaptiveContextManager(config)
+manager = CortexFlowManager(config)
 
 # Regular usage - Dynamic Weighting is automatically applied
 manager.add_message("user", "What is X?")
@@ -345,10 +345,10 @@ For more details on Dynamic Weighting, see [docs/dynamic_weighting.md](docs/dyna
 
 ## Configuration Options
 
-AdaptiveContext is highly configurable. Key configuration options include:
+CortexFlow is highly configurable. Key configuration options include:
 
 ```python
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     # Memory tier settings
     active_tier_tokens=4096,     # Maximum tokens in active memory tier
     working_tier_tokens=8192,    # Maximum tokens in working memory tier
@@ -378,8 +378,8 @@ config = AdaptiveContextConfig(
     default_model="gemma3:1b",    # Default Ollama model to use
     
     # Persistence paths
-    storage_path="~/.adaptive_context",  # Base storage path
-    knowledge_store_path="~/.adaptive_context/knowledge.db",  # Knowledge DB path
+    storage_path="~/.cortexflow",  # Base storage path
+    knowledge_store_path="~/.cortexflow/knowledge.db",  # Knowledge DB path
     
     # Retrieval settings
     use_vector_embeddings=True,   # Whether to use vector embeddings
@@ -464,19 +464,17 @@ python graph_rag_benchmark.py --verbose --keep-db
 ## Project Structure
 
 ```
-adaptivecontext/
-├── adaptive_context/      # Main package
-│   ├── __init__.py        # Package initialization
-│   ├── manager.py         # AdaptiveContextManager
-│   ├── memory.py          # Memory tiers implementation
-│   ├── classifier.py      # Importance classification
-│   ├── compressor.py      # Context compression
-│   ├── knowledge.py       # Knowledge store
-│   ├── config.py          # Configuration
-│   ├── graph_store.py     # Knowledge graph store
-│   ├── agent_chain.py     # Chain of Agents implementation
-│   ├── reflection.py      # Self-Reflection implementation
-│   └── dynamic_weighting.py # Dynamic Memory Weighting implementation
+cortexflow/
+├── cortexflow/      # Main package
+│   ├── __init__.py
+│   ├── manager.py   # Core context manager
+│   ├── memory.py    # Memory tier implementations
+│   ├── config.py    # Configuration
+│   ├── classifier.py# Importance classification
+│   ├── compressor.py# Context compression
+│   ├── knowledge.py # Knowledge store
+│   ├── graph_store.py # Graph storage for complex info
+│   └── reflection.py  # Self-reflection capabilities
 ├── examples/              # Example scripts
 │   └── chat_example.py    # Interactive chat example
 ├── tests/                 # Test scripts
@@ -516,3 +514,30 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+# Advanced Usage
+
+## Custom Behavior
+
+You can further customize behavior by subclassing core components:
+
+```python
+from cortexflow import CortexFlowManager, CortexFlowConfig
+from cortexflow.classifier import ImportanceClassifier
+```
+
+## Project Structure
+
+```
+cortexflow/
+├── cortexflow/      # Main package
+│   ├── __init__.py
+│   ├── manager.py   # Core context manager
+│   ├── memory.py    # Memory tier implementations
+│   ├── config.py    # Configuration
+│   ├── classifier.py# Importance classification
+│   ├── compressor.py# Context compression
+│   ├── knowledge.py # Knowledge store
+│   ├── graph_store.py # Graph storage for complex info
+│   └── reflection.py  # Self-reflection capabilities
+```

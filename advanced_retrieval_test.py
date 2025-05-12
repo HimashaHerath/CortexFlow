@@ -7,7 +7,7 @@ This demonstrates hybrid search (BM25 + vector), sparse-dense fusion, and re-ran
 import sys
 import time
 import json
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 def print_divider():
     print("\n" + "="*70 + "\n")
@@ -72,7 +72,7 @@ def main():
     print_divider()
     
     # Initialize with all advanced retrieval features enabled
-    config = AdaptiveContextConfig(
+    config = CortexFlowConfig(
         active_tier_tokens=1000,
         working_tier_tokens=2000,
         archive_tier_tokens=3000,
@@ -84,7 +84,7 @@ def main():
         rerank_top_k=20
     )
     
-    manager = AdaptiveContextManager(config)
+    manager = CortexFlowManager(config)
     
     # Store some test facts
     print("Storing sample facts...")

@@ -4,7 +4,7 @@ This section provides detailed API documentation for the AdaptiveContext system.
 
 ## Core Modules
 
-- [AdaptiveContextManager](manager.md) - The main manager class for the system
+- [CortexFlowManager](manager.md) - The main manager class for the system
 - [ConversationMemory](memory.md) - Memory system with multi-tier architecture
 - [KnowledgeStore](knowledge.md) - Long-term knowledge storage
 - [GraphStore](graph_store.md) - Knowledge graph storage for complex queries
@@ -26,10 +26,10 @@ This section provides detailed API documentation for the AdaptiveContext system.
 ### Basic Usage
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
 # Configure with custom settings
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     active_token_limit=4000,
     working_token_limit=8000, 
     archive_token_limit=12000,
@@ -40,7 +40,7 @@ config = AdaptiveContextConfig(
 )
 
 # Create the context manager
-manager = AdaptiveContextManager(config)
+manager = CortexFlowManager(config)
 
 # Add messages to the context
 manager.add_message("system", "You are a helpful AI assistant.")
@@ -59,10 +59,10 @@ manager.close()
 ### Knowledge Store Usage
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
-config = AdaptiveContextConfig(knowledge_store_path="my_knowledge.db")
-manager = AdaptiveContextManager(config)
+config = CortexFlowConfig(knowledge_store_path="my_knowledge.db")
+manager = CortexFlowManager(config)
 
 # Add knowledge to the store
 manager.remember_knowledge(
@@ -81,9 +81,9 @@ for item in knowledge:
 ### Dynamic Weighting Usage
 
 ```python
-from adaptive_context import AdaptiveContextManager, AdaptiveContextConfig
+from adaptive_context import CortexFlowManager, CortexFlowConfig
 
-config = AdaptiveContextConfig(
+config = CortexFlowConfig(
     active_token_limit=4000,
     working_token_limit=8000, 
     archive_token_limit=12000,
@@ -91,7 +91,7 @@ config = AdaptiveContextConfig(
     dynamic_weighting_learning_rate=0.1
 )
 
-manager = AdaptiveContextManager(config)
+manager = CortexFlowManager(config)
 
 # Use the system - dynamic weighting happens automatically
 manager.add_message("user", "What is quantum computing?")

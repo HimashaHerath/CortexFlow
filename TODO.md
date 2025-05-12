@@ -7,8 +7,8 @@ This document outlines planned enhancements for the Chain of Agents framework in
 ✅ Base Agent class with required interfaces  
 ✅ Three specialized agents (Explorer, Analyzer, Synthesizer)  
 ✅ AgentChainManager for coordinating sequential agent processing  
-✅ Integration with AdaptiveContextManager  
-✅ Configuration options in AdaptiveContextConfig  
+✅ Integration with CortexFlowManager  
+✅ Configuration options in CortexFlowConfig  
 ✅ Testing with coa_test.py  
 
 ## Planned Enhancements
