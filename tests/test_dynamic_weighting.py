@@ -1,8 +1,10 @@
 import pytest
 import time
 from unittest.mock import MagicMock, patch
-from adaptive_context.dynamic_weighting import DynamicWeightingEngine
-from adaptive_context.config import CortexFlowConfig
+from cortexflow.dynamic_weighting import DynamicWeightingEngine
+from cortexflow.config import CortexFlowConfig
+import unittest
+import random
 
 class TestDynamicWeightingEngine:
     """Tests for the DynamicWeightingEngine class"""
@@ -338,10 +340,10 @@ def mock_engine():
     return engine
 
 
-@patch("adaptive_context.manager.DynamicWeightingEngine")  # Fix the patch path
+@patch("cortexflow.manager.DynamicWeightingEngine")  # Fix the patch path
 def test_manager_integration(mock_engine_class, mock_engine):
     """Test integration with CortexFlowManager"""
-    from adaptive_context.manager import CortexFlowManager
+    from cortexflow.manager import CortexFlowManager
     
     # Set up the mock engine
     mock_engine_class.return_value = mock_engine

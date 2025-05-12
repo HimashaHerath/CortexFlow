@@ -1,6 +1,8 @@
 import pytest
 import time
-from adaptive_context.memory import (
+import unittest
+from unittest.mock import MagicMock, patch
+from cortexflow.memory import (
     ContextSegment, 
     MemoryTier, 
     ActiveTier, 
@@ -8,7 +10,7 @@ from adaptive_context.memory import (
     ArchiveTier,
     ConversationMemory
 )
-from adaptive_context.config import CortexFlowConfig
+from cortexflow.config import CortexFlowConfig
 
 class TestContextSegment:
     """Tests for the ContextSegment class"""
@@ -643,4 +645,24 @@ class TestConversationMemory:
         assert new_memory.next_message_id == 4
         assert new_memory.active_token_limit == 100
         assert new_memory.working_token_limit == 200
-        assert new_memory.archive_token_limit == 300 
+        assert new_memory.archive_token_limit == 300
+
+    def test_memory_tiers(self):
+        """Test memory tier initialization and behavior"""
+        config = CortexFlowConfig(
+            active_token_limit=100,
+            working_token_limit=200,
+            archive_token_limit=300
+        )
+        
+        memory = ConversationMemory(config)
+        
+        # Check tier creation
+        assert isinstance(memory.active_tier, ActiveTier)
+        assert isinstance(memory.working_tier, WorkingTier)
+        assert isinstance(memory.archive_tier, ArchiveTier)
+        
+        # Check token limits
+        assert memory.active_tier.max_tokens == 100
+        assert memory.working_tier.max_tokens == 200
+        assert memory.archive_tier.max_tokens == 300 
