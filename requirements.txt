@@ -1,27 +1,28 @@
 # Core dependencies
-numpy>=1.19.5
-scipy>=1.7.0
-networkx>=2.5
-python-louvain>=0.16  # For graph community detection and hierarchical abstraction
-scikit-learn>=1.0.0  # For spectral clustering in graph partitioning
+spacy>=3.7.2
+networkx>=3.1
+sqlitedict>=2.1.0
+numpy>=1.24.3
+tqdm>=4.65.0
 
-# NLP and text processing
-spacy>=3.2.0
-sentence-transformers>=2.2.0
-rank_bm25>=0.2.2
-nltk>=3.6.5
-
-# Database and storage
-sqlitedict>=1.7.0
-
-# Enhanced entity and relation extraction
+# NLP models
+flair>=0.13.0
+torch>=2.0.1
+transformers>=4.35.0
+allennlp>=2.10.1
 neuralcoref>=4.0
-allennlp>=2.9.0
-allennlp-models>=2.9.0
 
-# Optional: download spaCy models with these commands:
+# Entity matching
+thefuzz>=0.19.0
+python-Levenshtein>=0.21.1
+
+# Vector embeddings 
+sentence-transformers>=2.2.2
+rank_bm25>=0.2.2
+
+# Install spaCy models
 # python -m spacy download en_core_web_sm
-# python -m spacy download en_core_web_md
+# python -m spacy download en_core_web_lg
 
 # For development and testing
 pytest>=6.2.5

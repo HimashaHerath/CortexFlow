@@ -29,6 +29,32 @@ except ImportError:
     SPACY_ENABLED = False
     logging.warning("spacy not found. Automatic entity extraction will be limited.")
 
+# Try importing Flair for advanced NER
+try:
+    from flair.data import Sentence
+    from flair.models import SequenceTagger
+    FLAIR_ENABLED = True
+except ImportError:
+    FLAIR_ENABLED = False
+    logging.warning("flair not found. Advanced entity recognition will be limited.")
+
+# Try importing SpanBERT for entity recognition
+try:
+    import torch
+    from transformers import AutoTokenizer, AutoModelForTokenClassification
+    SPANBERT_ENABLED = True
+except ImportError:
+    SPANBERT_ENABLED = False
+    logging.warning("transformers/torch not found. SpanBERT entity recognition will be disabled.")
+
+# Try importing libraries for fuzzy matching
+try:
+    from thefuzz import fuzz, process
+    FUZZY_MATCHING_ENABLED = True
+except ImportError:
+    FUZZY_MATCHING_ENABLED = False
+    logging.warning("thefuzz not found. Fuzzy entity matching will be disabled.")
+
 from cortexflow.config import CortexFlowConfig
 try:
     from cortexflow.ontology import Ontology
@@ -36,6 +62,426 @@ try:
 except ImportError:
     ONTOLOGY_ENABLED = False
     logging.warning("Ontology module not found. Advanced knowledge graph capabilities will be limited.")
+
+class RelationExtractor:
+    """
+    Dedicated relation extraction class for CortexFlow knowledge graph.
+    Provides advanced relation extraction capabilities using dependency parsing,
+    semantic role labeling, and relation classification.
+    """
+    
+    def __init__(self, nlp=None):
+        """
+        Initialize relation extractor.
+        
+        Args:
+            nlp: spaCy language model, or None to create a new one
+        """
+        # Initialize spaCy model if needed
+        self.nlp = nlp
+        if SPACY_ENABLED and not self.nlp:
+            try:
+                # Use a model with dependency parsing for relation extraction
+                self.nlp = spacy.load("en_core_web_sm")
+                logging.info("Relation Extractor: spaCy model loaded successfully")
+            except Exception as e:
+                logging.error(f"Error loading spaCy model for relation extraction: {e}")
+                self.nlp = None
+        
+        # Initialize SRL (Semantic Role Labeling) components
+        self.srl_predictor = None
+        try:
+            from allennlp.predictors.predictor import Predictor
+            self.srl_predictor = Predictor.from_path(
+                "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz")
+            logging.info("SRL model loaded successfully")
+        except ImportError:
+            logging.debug("AllenNLP SRL not available. Semantic role extraction will be limited.")
+        except Exception as e:
+            logging.error(f"Error loading SRL model: {e}")
+        
+        # Initialize relation classification model
+        self.relation_classifier = None
+        try:
+            self.relation_classifier = AutoModelForTokenClassification.from_pretrained("Babelscape/rebel-large")
+            self.relation_tokenizer = AutoTokenizer.from_pretrained("Babelscape/rebel-large")
+            logging.info("Relation classification model loaded successfully")
+        except ImportError:
+            logging.debug("Relation classification model not available")
+        except Exception as e:
+            logging.error(f"Error loading relation classification model: {e}")
+        
+        # Define relation patterns and templates
+        self.relation_patterns = self._init_relation_patterns()
+    
+    def _init_relation_patterns(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Initialize common relation patterns for rule-based extraction.
+        
+        Returns:
+            Dictionary of relation patterns
+        """
+        patterns = {
+            "is_a": [
+                {"pattern": r"([^\s]+) is (?:a|an) ([^\s]+)", "groups": (1, 2)},
+                {"pattern": r"([^\s]+) are ([^\s]+)", "groups": (1, 2)},
+                {"pattern": r"([^\s]+) classified as ([^\s]+)", "groups": (1, 2)},
+            ],
+            "part_of": [
+                {"pattern": r"([^\s]+) is part of ([^\s]+)", "groups": (1, 2)},
+                {"pattern": r"([^\s]+) belongs to ([^\s]+)", "groups": (1, 2)},
+                {"pattern": r"([^\s]+) contains ([^\s]+)", "groups": (2, 1)},
+            ],
+            "located_in": [
+                {"pattern": r"([^\s]+) is (?:in|at|on) ([^\s]+)", "groups": (1, 2)},
+                {"pattern": r"([^\s]+) is located (?:in|at|on) ([^\s]+)", "groups": (1, 2)},
+            ],
+            "has_property": [
+                {"pattern": r"([^\s]+) has (?:a|an)? ([^\s]+)", "groups": (1, 2)},
+                {"pattern": r"([^\s]+) with (?:a|an)? ([^\s]+)", "groups": (1, 2)},
+            ],
+            "causes": [
+                {"pattern": r"([^\s]+) causes ([^\s]+)", "groups": (1, 2)},
+                {"pattern": r"([^\s]+) leads to ([^\s]+)", "groups": (1, 2)},
+                {"pattern": r"([^\s]+) results in ([^\s]+)", "groups": (1, 2)},
+            ],
+        }
+        return patterns
+    
+    def extract_relations(self, text: str) -> List[Tuple[str, str, str]]:
+        """
+        Extract subject-predicate-object triples from text using multiple techniques.
+        
+        Args:
+            text: Input text to extract relations from
+            
+        Returns:
+            List of (subject, predicate, object) tuples
+        """
+        relations = []
+        
+        if SPACY_ENABLED and self.nlp is not None:
+            try:
+                doc = self.nlp(text)
+                
+                # 1. Extract relations using dependency parsing
+                dep_relations = self.extract_svo_from_dependency(doc)
+                relations.extend(dep_relations)
+                
+                # 2. Extract prepositional relations
+                prep_relations = self.extract_prep_relations(doc)
+                relations.extend(prep_relations)
+                
+                # 3. Extract relations using semantic role labeling
+                if self.srl_predictor:
+                    srl_relations = self.extract_with_semantic_roles(text)
+                    relations.extend(srl_relations)
+                
+                # 4. Apply relation classification if available
+                if self.relation_classifier:
+                    classified_relations = self.classify_relations(text)
+                    relations.extend(classified_relations)
+                
+                # 5. Extract relations using pattern matching
+                pattern_relations = self.extract_with_patterns(text)
+                relations.extend(pattern_relations)
+                
+            except Exception as e:
+                logging.error(f"Error in relation extraction: {e}")
+                import traceback
+                logging.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Deduplicate relations
+        unique_relations = []
+        relation_strings = set()
+        
+        for subj, pred, obj in relations:
+            rel_str = f"{subj.lower()}|{pred.lower()}|{obj.lower()}"
+            if rel_str not in relation_strings:
+                relation_strings.add(rel_str)
+                unique_relations.append((subj, pred, obj))
+        
+        return unique_relations
+    
+    def extract_svo_from_dependency(self, doc) -> List[Tuple[str, str, str]]:
+        """
+        Extract Subject-Verb-Object triples from a document using dependency parsing.
+        
+        Args:
+            doc: spaCy document
+            
+        Returns:
+            List of (subject, predicate, object) tuples
+        """
+        triples = []
+        
+        for sent in doc.sents:
+            # Find root verbs in the sentence
+            root_verbs = [token for token in sent if token.dep_ == "ROOT" and token.pos_ == "VERB"]
+            if not root_verbs:
+                # If no root verb, find any verb
+                root_verbs = [token for token in sent if token.pos_ == "VERB"]
+            
+            for verb in root_verbs:
+                # Find potential subjects
+                subjects = []
+                for token in sent:
+                    # Check if token is a subject dependent on our verb
+                    if token.dep_ in ["nsubj", "nsubjpass", "csubj", "csubjpass", "agent"] and token.head == verb:
+                        # Get full noun phrase
+                        subject_span = self._get_span_text(token)
+                        subjects.append(subject_span)
+                
+                # Find potential objects
+                objects = []
+                for token in sent:
+                    # Check if token is an object dependent on our verb
+                    if token.dep_ in ["dobj", "pobj", "iobj", "obj"] and token.head == verb:
+                        object_span = self._get_span_text(token)
+                        objects.append(object_span)
+                    # Handle prep phrases like "to the store" connected to our verb
+                    elif token.dep_ == "prep" and token.head == verb:
+                        for child in token.children:
+                            if child.dep_ == "pobj":
+                                # Include the preposition in the relation
+                                pred = f"{verb.lemma_} {token.text}"
+                                object_span = self._get_span_text(child)
+                                objects.append((pred, object_span))
+                
+                # Create triples for all subject-object pairs
+                for subject in subjects:
+                    for obj in objects:
+                        if isinstance(obj, tuple):
+                            # Handle special case of prep phrases
+                            pred, obj_text = obj
+                            triples.append((subject, pred, obj_text))
+                        else:
+                            triples.append((subject, verb.lemma_, obj))
+        
+        return triples
+    
+    def extract_prep_relations(self, doc) -> List[Tuple[str, str, str]]:
+        """
+        Extract relations based on prepositional phrases like "X in Y".
+        
+        Args:
+            doc: spaCy document
+            
+        Returns:
+            List of (entity1, preposition, entity2) tuples
+        """
+        prep_relations = []
+        
+        for sent in doc.sents:
+            for token in sent:
+                if token.dep_ == "prep" and token.head.pos_ in ["NOUN", "PROPN"]:
+                    # Get the head (the first entity)
+                    head_span = self._get_span_text(token.head)
+                    
+                    # Get the object of the preposition (the second entity)
+                    for child in token.children:
+                        if child.dep_ == "pobj":
+                            object_span = self._get_span_text(child)
+                            # Create relation with the preposition as predicate
+                            prep_relations.append((head_span, token.text, object_span))
+        
+        return prep_relations
+    
+    def extract_with_semantic_roles(self, text: str) -> List[Tuple[str, str, str]]:
+        """
+        Extract relations using semantic role labeling (SRL).
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            List of (subject, predicate, object) tuples
+        """
+        if not self.srl_predictor:
+            return []
+            
+        try:
+            srl_output = self.srl_predictor.predict(sentence=text)
+            
+            # Extract relations from SRL output
+            relations = []
+            for verb_data in srl_output.get('verbs', []):
+                predicate = verb_data['verb']
+                
+                # Process tagged spans to extract arguments
+                arg0 = None
+                arg1 = None
+                arg2 = None
+                loc = None
+                tmp = None
+                
+                # Extract arguments from tags
+                tagged_string = verb_data['description']
+                current_arg = None
+                current_text = ""
+                
+                for part in tagged_string.split():
+                    if part.startswith('['):
+                        # Start of new argument
+                        if current_arg and current_text:
+                            if current_arg == 'ARG0':
+                                arg0 = current_text.strip()
+                            elif current_arg == 'ARG1':
+                                arg1 = current_text.strip()
+                            elif current_arg == 'ARG2':
+                                arg2 = current_text.strip()
+                            elif current_arg.startswith('ARGM-LOC'):
+                                loc = current_text.strip()
+                            elif current_arg.startswith('ARGM-TMP'):
+                                tmp = current_text.strip()
+                                
+                        # Set new current argument
+                        if '*' in part:
+                            label_end = part.find('*')
+                            current_arg = part[1:label_end]
+                            current_text = part[label_end+1:]
+                            if part.endswith(']'):
+                                current_text = current_text[:-1]
+                    elif part.endswith(']'):
+                        # End of current argument
+                        current_text += " " + part[:-1]
+                        
+                        if current_arg == 'ARG0':
+                            arg0 = current_text.strip()
+                        elif current_arg == 'ARG1':
+                            arg1 = current_text.strip()
+                        elif current_arg == 'ARG2':
+                            arg2 = current_text.strip()
+                        elif current_arg.startswith('ARGM-LOC'):
+                            loc = current_text.strip()
+                        elif current_arg.startswith('ARGM-TMP'):
+                            tmp = current_text.strip()
+                            
+                        current_arg = None
+                        current_text = ""
+                    elif current_arg:
+                        # Continue current argument
+                        current_text += " " + part
+                
+                # Create relations from arguments
+                if arg0 and arg1:
+                    relations.append((arg0, predicate, arg1))
+                if arg0 and arg2:
+                    relations.append((arg0, predicate + " to", arg2))
+                if arg1 and loc:
+                    relations.append((arg1, "located in", loc))
+                if arg0 and loc:
+                    relations.append((arg0, "located in", loc))
+                if arg0 and tmp:
+                    relations.append((arg0, "at time", tmp))
+            
+            return relations
+            
+        except Exception as e:
+            logging.error(f"Error in semantic role labeling: {e}")
+            return []
+    
+    def classify_relations(self, text: str) -> List[Tuple[str, str, str]]:
+        """
+        Use a pretrained model to classify relationship types between entities.
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            List of (subject, relation, object) tuples
+        """
+        if not self.relation_classifier or not SPANBERT_ENABLED:
+            return []
+            
+        try:
+            # Tokenize the text
+            inputs = self.relation_tokenizer(text, return_tensors="pt")
+            
+            # Get model predictions
+            with torch.no_grad():
+                outputs = self.relation_classifier(**inputs)
+            
+            # Process the outputs to extract relations
+            # Note: This is a simplified implementation and would need to be
+            # adapted based on the specific relation classification model used
+            relations = []
+            
+            # Process model outputs to extract structured relations
+            # Actual implementation depends on the specific model's output format
+            
+            return relations
+            
+        except Exception as e:
+            logging.error(f"Error in relation classification: {e}")
+            return []
+    
+    def extract_with_patterns(self, text: str) -> List[Tuple[str, str, str]]:
+        """
+        Extract relations using pattern-based rules.
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            List of (subject, relation, object) tuples
+        """
+        relations = []
+        
+        # Apply each relation pattern
+        for relation_type, patterns in self.relation_patterns.items():
+            for pattern_info in patterns:
+                pattern = pattern_info["pattern"]
+                group_indices = pattern_info["groups"]
+                
+                # Find matches in text
+                for match in re.finditer(pattern, text, re.IGNORECASE):
+                    try:
+                        # Extract subject and object from specified groups
+                        subject = match.group(group_indices[0]).strip()
+                        obj = match.group(group_indices[1]).strip()
+                        
+                        # Add to relations
+                        relations.append((subject, relation_type, obj))
+                    except IndexError:
+                        continue
+        
+        return relations
+    
+    def _get_span_text(self, token) -> str:
+        """
+        Get the text of the full noun phrase for a token.
+        
+        Args:
+            token: spaCy token
+            
+        Returns:
+            Text of the full noun phrase
+        """
+        # If token is part of a compound, get the full compound
+        if token.pos_ in ["NOUN", "PROPN"]:
+            # Start with the token itself
+            start = token
+            # Traverse left children to find compound parts
+            lefts = list(token.lefts)
+            for left in lefts:
+                if left.dep_ in ["compound", "amod", "det", "nummod"]:
+                    if left.i < start.i:
+                        start = left
+            
+            # Traverse right children to find the end of the noun phrase
+            end = token
+            rights = list(token.rights)
+            for right in rights:
+                if right.dep_ in ["compound", "amod"]:
+                    if right.i > end.i:
+                        end = right
+            
+            # Get the full span text
+            span_tokens = [t for t in start.doc if start.i <= t.i <= end.i]
+            return " ".join([t.text for t in span_tokens])
+        
+        return token.text
 
 class GraphStore:
     """Knowledge graph storage and query functionality for GraphRAG."""
@@ -69,6 +515,35 @@ class GraphStore:
             except Exception as e:
                 logging.error(f"Error loading Spacy model: {e}")
         
+        # Initialize advanced NER models if available
+        self.flair_ner = None
+        if FLAIR_ENABLED:
+            try:
+                # Load Flair NER model
+                self.flair_ner = SequenceTagger.load("flair/ner-english-ontonotes-large")
+                logging.info("Flair NER model loaded successfully")
+            except Exception as e:
+                logging.error(f"Error loading Flair model: {e}")
+                
+        # Initialize SpanBERT model if available
+        self.spanbert_tokenizer = None
+        self.spanbert_model = None
+        if SPANBERT_ENABLED:
+            try:
+                # Load SpanBERT model for entity recognition
+                self.spanbert_tokenizer = AutoTokenizer.from_pretrained("SpanBERT/spanbert-base-cased")
+                self.spanbert_model = AutoModelForTokenClassification.from_pretrained("SpanBERT/spanbert-base-cased")
+                logging.info("SpanBERT model loaded successfully")
+            except Exception as e:
+                logging.error(f"Error loading SpanBERT model: {e}")
+        
+        # Initialize entity linking system
+        self.entity_db = {}  # Map of canonical entities
+        self.entity_embeddings = {}  # For semantic similarity between entities
+        
+        # Initialize relation extractor
+        self.relation_extractor = RelationExtractor(self.nlp)
+        
         # Initialize ontology if available
         self.ontology = None
         if ONTOLOGY_ENABLED:
@@ -84,7 +559,52 @@ class GraphStore:
         # Load existing graph from database
         self._load_graph_from_db()
         
-        logging.info(f"Graph store initialized with NetworkX: {NETWORKX_ENABLED}, Spacy: {SPACY_ENABLED}, Ontology: {ONTOLOGY_ENABLED}")
+        # Load entity database for entity linking
+        self._load_entity_db()
+        
+        logging.info(f"Graph store initialized with NetworkX: {NETWORKX_ENABLED}, Spacy: {SPACY_ENABLED}, Flair: {FLAIR_ENABLED}, SpanBERT: {SPANBERT_ENABLED}, Ontology: {ONTOLOGY_ENABLED}")
+    
+    def _load_entity_db(self):
+        """Load existing entity database for entity linking."""
+        if self.conn is not None:
+            conn = self.conn
+        else:
+            conn = sqlite3.connect(self.db_path)
+            
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            # Load all entities for linking
+            cursor.execute('SELECT id, entity, entity_type, metadata FROM graph_entities')
+            entities = cursor.fetchall()
+            
+            for entity in entities:
+                canonical_name = entity['entity']
+                entity_id = entity['id']
+                entity_type = entity['entity_type']
+                metadata = json.loads(entity['metadata']) if entity['metadata'] else {}
+                
+                # Store entity in the linking database
+                self.entity_db[canonical_name] = {
+                    'id': entity_id,
+                    'type': entity_type,
+                    'metadata': metadata,
+                    'aliases': metadata.get('aliases', [])
+                }
+                
+                # Add aliases to the lookup
+                for alias in metadata.get('aliases', []):
+                    self.entity_db[alias] = {
+                        'canonical': canonical_name,
+                        'id': entity_id
+                    }
+                    
+        except Exception as e:
+            logging.error(f"Error loading entity database: {e}")
+            
+        if self.conn is None:
+            conn.close()
     
     def _init_db(self):
         """Initialize the SQLite database with required tables for graph storage."""
@@ -269,7 +789,7 @@ class GraphStore:
     def extract_entities(self, text: str) -> List[Dict[str, Any]]:
         """
         Extract named entities from text using multiple techniques including
-        NER, pattern matching, noun phrases, and domain-specific entity recognition.
+        advanced NER models, entity linking, and fuzzy matching.
         
         Args:
             text: Input text to extract entities from
@@ -290,7 +810,8 @@ class GraphStore:
                         'text': ent.text,
                         'type': ent.label_,
                         'start': ent.start_char,
-                        'end': ent.end_char
+                        'end': ent.end_char,
+                        'source': 'spacy'
                     })
                     
                 # 2. Attempt coreference resolution if neuralcoref is available
@@ -329,7 +850,8 @@ class GraphStore:
                                     'type': 'COREF',
                                     'start': main_start,
                                     'end': main_end,
-                                    'mentions': [m.text for m in cluster.mentions]
+                                    'mentions': [m.text for m in cluster.mentions],
+                                    'source': 'coref'
                                 })
                 except ImportError:
                     logging.debug("neuralcoref not available, skipping coreference resolution")
@@ -338,7 +860,128 @@ class GraphStore:
             except Exception as e:
                 logging.error(f"Error in SpaCy NER: {e}")
         
-        # 3. Add pattern-based entity extraction
+        # 3. Use Flair for NER if available
+        if FLAIR_ENABLED and self.flair_ner is not None:
+            try:
+                # Create Flair sentence
+                flair_sentence = Sentence(text)
+                
+                # Run NER
+                self.flair_ner.predict(flair_sentence)
+                
+                # Extract entities
+                for entity in flair_sentence.get_spans('ner'):
+                    # Calculate character offsets
+                    start_pos = text.find(entity.text)
+                    if start_pos >= 0:
+                        end_pos = start_pos + len(entity.text)
+                        
+                        # Check for overlap with existing entities
+                        is_new_entity = True
+                        for existing_entity in entities:
+                            if (start_pos >= existing_entity['start'] and start_pos < existing_entity['end']) or \
+                               (end_pos > existing_entity['start'] and end_pos <= existing_entity['end']):
+                                is_new_entity = False
+                                break
+                                
+                        if is_new_entity:
+                            entities.append({
+                                'text': entity.text,
+                                'type': entity.tag,
+                                'start': start_pos,
+                                'end': end_pos,
+                                'score': entity.score,
+                                'source': 'flair'
+                            })
+            except Exception as e:
+                logging.error(f"Error in Flair NER: {e}")
+        
+        # 4. Use SpanBERT for NER if available
+        if SPANBERT_ENABLED and self.spanbert_model is not None and self.spanbert_tokenizer is not None:
+            try:
+                # Tokenize input
+                inputs = self.spanbert_tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+                
+                # Get model predictions
+                with torch.no_grad():
+                    outputs = self.spanbert_model(**inputs)
+                    
+                # Process predictions to extract entities
+                # This is a simplified implementation and would need to be adapted for the specific model
+                predictions = outputs.logits.argmax(-1).squeeze().tolist()
+                tokens = self.spanbert_tokenizer.convert_ids_to_tokens(inputs.input_ids.squeeze().tolist())
+                
+                # Map predictions to entity spans (simplified)
+                current_entity = None
+                current_type = None
+                current_start = 0
+                
+                # Skip special tokens like [CLS]
+                offset = 1
+                char_offset = 0
+                
+                for i, (token, prediction) in enumerate(zip(tokens[offset:], predictions[offset:])):
+                    # Skip special tokens
+                    if token.startswith("##") or token in ["[SEP]", "[PAD]"]:
+                        continue
+                        
+                    # Basic BIO scheme processing (simplification)
+                    if prediction > 0:  # Non-O tag
+                        # Get entity type (simplified mapping)
+                        entity_type = f"TYPE_{prediction}"
+                        
+                        if current_entity is None:
+                            # Start of new entity
+                            current_entity = token.replace("##", "")
+                            current_type = entity_type
+                            current_start = char_offset
+                        else:
+                            # Continue current entity
+                            current_entity += " " + token.replace("##", "")
+                    else:
+                        # End of entity
+                        if current_entity is not None:
+                            # Add entity if not already overlapping
+                            entity_end = current_start + len(current_entity)
+                            
+                            # Check for overlap
+                            is_new_entity = True
+                            for entity in entities:
+                                if (current_start >= entity['start'] and current_start < entity['end']) or \
+                                   (entity_end > entity['start'] and entity_end <= entity['end']):
+                                    is_new_entity = False
+                                    break
+                                    
+                            if is_new_entity:
+                                entities.append({
+                                    'text': current_entity,
+                                    'type': current_type,
+                                    'start': current_start,
+                                    'end': entity_end,
+                                    'source': 'spanbert'
+                                })
+                                
+                            current_entity = None
+                            current_type = None
+                            
+                    # Update character offset (simplified)
+                    char_offset += len(token) + 1
+                    
+                # Add final entity if there is one
+                if current_entity is not None:
+                    entity_end = current_start + len(current_entity)
+                    entities.append({
+                        'text': current_entity,
+                        'type': current_type,
+                        'start': current_start,
+                        'end': entity_end,
+                        'source': 'spanbert'
+                    })
+                    
+            except Exception as e:
+                logging.error(f"Error in SpanBERT NER: {e}")
+        
+        # 5. Add pattern-based entity extraction
         patterns = {
             'EMAIL': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
             'URL': r'https?://\S+',
@@ -367,10 +1010,11 @@ class GraphStore:
                         'text': match.group(0),
                         'type': entity_type,
                         'start': match.start(),
-                        'end': match.end()
+                        'end': match.end(),
+                        'source': 'pattern'
                     })
         
-        # 4. Add noun phrase extraction if no entities found yet or to supplement
+        # 6. Add noun phrase extraction if no entities found yet or to supplement
         if SPACY_ENABLED and self.nlp is not None:
             try:
                 if not 'doc' in locals():  # Only parse if we haven't already
@@ -392,7 +1036,8 @@ class GraphStore:
                                 'text': chunk.text,
                                 'type': 'NOUN_PHRASE',
                                 'start': chunk.start_char,
-                                'end': chunk.end_char
+                                'end': chunk.end_char,
+                                'source': 'noun_chunk'
                             })
                         
                 # Add proper nouns not already captured
@@ -410,12 +1055,13 @@ class GraphStore:
                                 'text': token.text,
                                 'type': 'PROPER_NOUN',
                                 'start': token.idx,
-                                'end': token.idx + len(token.text)
+                                'end': token.idx + len(token.text),
+                                'source': 'pos_tag'
                             })
             except Exception as e:
                 logging.error(f"Error extracting noun phrases: {e}")
 
-        # 5. Add domain-specific entity extraction
+        # 7. Add domain-specific entity extraction
         try:
             # Check for domain-specific patterns based on config
             domain_entities = self._extract_domain_specific_entities(text)
@@ -429,58 +1075,93 @@ class GraphStore:
                         break
                 
                 if not overlap:
+                    entity['source'] = 'domain'
                     entities.append(entity)
         except Exception as e:
             logging.error(f"Error in domain-specific entity extraction: {e}")
+            
+        # 8. Perform entity linking to connect mentions to canonical entities
+        linked_entities = []
+        for entity in entities:
+            entity_text = entity['text']
+            linked_entity = self._link_entity(entity_text)
+            
+            if linked_entity:
+                # Copy original entity and add linking information
+                linked_entity_data = entity.copy()
+                linked_entity_data['canonical'] = linked_entity['canonical'] if 'canonical' in linked_entity else entity_text
+                linked_entity_data['entity_id'] = linked_entity['id']
+                linked_entity_data['linked'] = True
                 
-        # 6. Add statistical keyword extraction (for domain-specific entities)
-        if not entities or len(entities) < 3:
-            # Simple statistical approach - find unusual words
-            words = text.split()
-            # Filter out common words
-            common_words = {"the", "a", "an", "and", "or", "but", "in", "on", "with", "for", "to", "of", "is", "are", "was", "were"}
-            uncommon_words = [word for word in words if word.lower() not in common_words and len(word) > 3]
+                # Use canonical entity type if available
+                if 'type' in linked_entity and linked_entity['type']:
+                    linked_entity_data['canonical_type'] = linked_entity['type']
+                
+                linked_entities.append(linked_entity_data)
+            else:
+                # No linking found, keep original entity
+                entity['linked'] = False
+                linked_entities.append(entity)
+                
+        return linked_entities
+    
+    def _link_entity(self, entity_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Link entity mention to canonical entity using exact, fuzzy, and embedding-based matching.
+        
+        Args:
+            entity_text: Text of the entity mention to link
             
-            # Find capitalized phrases (potential named entities)
-            capitalized_pattern = r'\b[A-Z][a-z]+(?: [A-Z][a-z]+)*\b'
-            for match in re.finditer(capitalized_pattern, text):
-                # Check for overlap with existing entities
-                overlap = False
-                for entity in entities:
-                    if (match.start() >= entity['start'] and match.start() < entity['end']) or \
-                       (match.end() > entity['start'] and match.end() <= entity['end']):
-                        overlap = True
-                        break
-                        
-                if not overlap:
-                    entities.append({
-                        'text': match.group(0),
-                        'type': 'CAPITALIZED_PHRASE',
-                        'start': match.start(),
-                        'end': match.end()
-                    })
+        Returns:
+            Dictionary with linking information or None if no match found
+        """
+        # First try exact match
+        if entity_text in self.entity_db:
+            return self.entity_db[entity_text]
             
-            # Add remaining uncommon words as entities
-            for word in uncommon_words:
-                word_start = text.find(word)
-                if word_start >= 0:
-                    # Check for overlap
-                    overlap = False
-                    for entity in entities:
-                        if (word_start >= entity['start'] and word_start < entity['end']) or \
-                           (word_start + len(word) > entity['start'] and word_start + len(word) <= entity['end']):
-                            overlap = True
-                            break
-                            
-                    if not overlap:
-                        entities.append({
-                            'text': word,
-                            'type': 'KEYWORD',
-                            'start': word_start,
-                            'end': word_start + len(word)
-                        })
-                    
-        return entities
+        # Next try case-insensitive match
+        entity_lower = entity_text.lower()
+        for key in self.entity_db:
+            if key.lower() == entity_lower:
+                return self.entity_db[key]
+                
+        # Try fuzzy matching if available
+        if FUZZY_MATCHING_ENABLED:
+            try:
+                # Get only canonical entities (not aliases)
+                canonical_entities = [key for key in self.entity_db 
+                                     if not 'canonical' in self.entity_db[key]]
+                
+                # Find closest match with threshold
+                matches = process.extractBests(entity_text, canonical_entities, 
+                                               scorer=fuzz.token_sort_ratio, 
+                                               score_cutoff=85,
+                                               limit=1)
+                                               
+                if matches and len(matches) > 0:
+                    match, score = matches[0]
+                    result = self.entity_db[match].copy()
+                    result['match_score'] = score
+                    result['match_type'] = 'fuzzy'
+                    return result
+            except Exception as e:
+                logging.error(f"Error in fuzzy entity matching: {e}")
+                
+        # No match found
+        return None
+    
+    def extract_relations(self, text: str) -> List[Tuple[str, str, str]]:
+        """
+        Extract subject-predicate-object triples from text using the RelationExtractor.
+        
+        Args:
+            text: Input text to extract relations from
+            
+        Returns:
+            List of (subject, predicate, object) tuples
+        """
+        # Use the dedicated RelationExtractor for relation extraction
+        return self.relation_extractor.extract_relations(text)
     
     def _extract_domain_specific_entities(self, text: str) -> List[Dict[str, Any]]:
         """
@@ -824,111 +1505,206 @@ class GraphStore:
                   provenance: str = None, confidence: float = 0.8,
                   temporal_start: str = None, temporal_end: str = None) -> int:
         """
-        Add an entity to the knowledge graph with enhanced metadata.
+        Add entity to knowledge graph.
         
         Args:
-            entity: Entity name/text
-            entity_type: Type of entity (e.g., person, location, etc.)
+            entity: Entity text
+            entity_type: Entity type or category
             metadata: Additional entity metadata
-            provenance: Source of the entity information
-            confidence: Confidence score for this entity (0.0 to 1.0)
-            temporal_start: Start time/date for temporal validity
-            temporal_end: End time/date for temporal validity
+            provenance: Source of the entity
+            confidence: Confidence score (0.0-1.0)
+            temporal_start: Start of temporal validity
+            temporal_end: End of temporal validity
             
         Returns:
             Entity ID
         """
+        if metadata is None:
+            metadata = {}
+        
+        # Check if entity already exists by canonical form
+        existing_entity = self.get_entity_id(entity)
+        if existing_entity is not None:
+            entity_id = existing_entity['id']
+            
+            # Update metadata if provided
+            if metadata:
+                if self.conn is not None:
+                    conn = self.conn
+                else:
+                    conn = sqlite3.connect(self.db_path)
+                
+                cursor = conn.cursor()
+                
+                # Get existing metadata
+                cursor.execute(
+                    'SELECT metadata FROM graph_entities WHERE id = ?', 
+                    (entity_id,)
+                )
+                result = cursor.fetchone()
+                
+                if result and result[0]:
+                    try:
+                        existing_metadata = json.loads(result[0])
+                        # Merge metadata
+                        existing_metadata.update(metadata)
+                        # Update in database
+                        cursor.execute(
+                            'UPDATE graph_entities SET metadata = ? WHERE id = ?',
+                            (json.dumps(existing_metadata), entity_id)
+                        )
+                        conn.commit()
+                    except Exception as e:
+                        logging.error(f"Error updating entity metadata: {e}")
+                        
+                if self.conn is None:
+                    conn.close()
+            
+            return entity_id
+        
+        # Add the entity to the database
         if self.conn is not None:
             conn = self.conn
         else:
             conn = sqlite3.connect(self.db_path)
             
         cursor = conn.cursor()
-        timestamp = time.time()
         
         try:
-            # Check if entity already exists
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity,))
-            existing = cursor.fetchone()
-            
-            # If ontology is enabled, check the entity type in the ontology
-            if ONTOLOGY_ENABLED and self.ontology and entity_type:
-                if not self.ontology.get_class(entity_type):
-                    # Try to suggest a new class
-                    suggested_class = self.ontology.suggest_new_class(
-                        entity_name=entity,
-                        entity_type=entity_type,
-                        entity_properties={}
-                    )
-                    
-                    if suggested_class:
-                        # Add the suggested class to the ontology
-                        self.ontology.add_class(suggested_class)
-                        logging.info(f"Added suggested ontology class: {entity_type}")
-            
-            if existing:
-                entity_id = existing[0]
-                # Update entity if needed
-                cursor.execute('''
-                    UPDATE graph_entities 
-                    SET entity_type = ?, metadata = ?, timestamp = ?, 
-                        provenance = ?, confidence = ?, 
-                        temporal_start = ?, temporal_end = ?
-                    WHERE id = ?
-                ''', (
-                    entity_type, 
-                    json.dumps(metadata) if metadata else None,
-                    timestamp,
-                    provenance,
-                    confidence,
-                    temporal_start,
-                    temporal_end,
-                    entity_id
-                ))
-            else:
-                # Insert new entity
-                cursor.execute('''
-                    INSERT INTO graph_entities 
-                    (entity, entity_type, metadata, timestamp, provenance, confidence, temporal_start, temporal_end) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
+            # Insert the entity
+            cursor.execute(
+                '''
+                INSERT INTO graph_entities 
+                (entity, entity_type, metadata, timestamp, provenance, confidence, temporal_start, temporal_end)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
                     entity, 
                     entity_type, 
                     json.dumps(metadata) if metadata else None,
-                    timestamp,
+                    time.time(),
                     provenance,
                     confidence,
                     temporal_start,
                     temporal_end
-                ))
-                entity_id = cursor.lastrowid
-                
-            conn.commit()
+                )
+            )
             
-            # Add to NetworkX graph if enabled
+            # Get the entity ID
+            entity_id = cursor.lastrowid
+            
+            # Add to NetworkX graph if available
             if NETWORKX_ENABLED and self.graph is not None:
-                node_attrs = {
-                    'name': entity,
-                    'entity_type': entity_type,
-                    'provenance': provenance,
-                    'confidence': confidence,
-                    'temporal_start': temporal_start,
-                    'temporal_end': temporal_end,
-                    'timestamp': timestamp
-                }
-                
-                if metadata:
-                    node_attrs.update(metadata)
-                    
-                self.graph.add_node(entity_id, **node_attrs)
+                self.graph.add_node(
+                    entity_id, 
+                    name=entity,
+                    entity_type=entity_type,
+                    **metadata
+                )
             
+            # Also add to entity linking database
+            self.entity_db[entity] = {
+                'id': entity_id,
+                'type': entity_type,
+                'metadata': metadata,
+                'aliases': metadata.get('aliases', [])
+            }
+            
+            # Add any aliases from metadata
+            if 'aliases' in metadata and isinstance(metadata['aliases'], list):
+                for alias in metadata['aliases']:
+                    self.entity_db[alias] = {
+                        'canonical': entity,
+                        'id': entity_id
+                    }
+            
+            conn.commit()
             return entity_id
             
         except Exception as e:
             logging.error(f"Error adding entity: {e}")
             conn.rollback()
             return -1
+        finally:
+            if self.conn is None:
+                conn.close()
+                
+    def add_entity_alias(self, entity_id: int, alias: str, confidence: float = 0.8) -> bool:
+        """
+        Add an alias to an existing entity for entity linking.
+        
+        Args:
+            entity_id: ID of the existing entity
+            alias: Alternative name or reference to the entity
+            confidence: Confidence score for this alias (0.0-1.0)
             
+        Returns:
+            True if successful, False otherwise
+        """
+        # Verify entity exists
+        if self.conn is not None:
+            conn = self.conn
+        else:
+            conn = sqlite3.connect(self.db_path)
+            
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            # Get entity information
+            cursor.execute('SELECT entity, metadata FROM graph_entities WHERE id = ?', (entity_id,))
+            result = cursor.fetchone()
+            
+            if not result:
+                logging.error(f"Entity with ID {entity_id} not found")
+                return False
+                
+            canonical_name = result['entity']
+            metadata_str = result['metadata']
+            
+            # Update metadata to include the new alias
+            if metadata_str:
+                metadata = json.loads(metadata_str)
+            else:
+                metadata = {}
+                
+            if 'aliases' not in metadata:
+                metadata['aliases'] = []
+                
+            # Add alias if not already present
+            if alias not in metadata['aliases']:
+                metadata['aliases'].append(alias)
+                metadata['alias_confidence'] = metadata.get('alias_confidence', {})
+                metadata['alias_confidence'][alias] = confidence
+                
+                # Update database
+                cursor.execute(
+                    'UPDATE graph_entities SET metadata = ? WHERE id = ?',
+                    (json.dumps(metadata), entity_id)
+                )
+                
+                # Update entity linking database
+                self.entity_db[canonical_name] = {
+                    'id': entity_id,
+                    'metadata': metadata,
+                    'aliases': metadata['aliases']
+                }
+                
+                self.entity_db[alias] = {
+                    'canonical': canonical_name,
+                    'id': entity_id
+                }
+                
+                conn.commit()
+                return True
+            else:
+                # Alias already exists
+                return True
+                
+        except Exception as e:
+            logging.error(f"Error adding entity alias: {e}")
+            conn.rollback()
+            return False
         finally:
             if self.conn is None:
                 conn.close()
