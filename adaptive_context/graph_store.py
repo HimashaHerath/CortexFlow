@@ -5,6 +5,7 @@ import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Set, Union
 import json
 import time
+import re
 
 # Try importing graph libraries
 try:
@@ -171,7 +172,7 @@ class GraphStore:
     
     def extract_entities(self, text: str) -> List[Dict[str, Any]]:
         """
-        Extract named entities from text using SpaCy.
+        Extract named entities from text using multiple techniques.
         
         Args:
             text: Input text to extract entities from
@@ -181,11 +182,12 @@ class GraphStore:
         """
         entities = []
         
+        # 1. First try SpaCy NER if available
         if SPACY_ENABLED and self.nlp is not None:
             try:
                 doc = self.nlp(text)
                 
-                # First try to get named entities
+                # Get named entities
                 for ent in doc.ents:
                     entities.append({
                         'text': ent.text,
@@ -193,52 +195,119 @@ class GraphStore:
                         'start': ent.start_char,
                         'end': ent.end_char
                     })
+            except Exception as e:
+                logging.error(f"Error in SpaCy NER: {e}")
+        
+        # 2. Add pattern-based entity extraction
+        patterns = {
+            'EMAIL': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+            'URL': r'https?://\S+',
+            'DATE': r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',
+            'TIME': r'\b\d{1,2}:\d{2}\b',
+            'PHONE': r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',
+            'NUMBER': r'\b\d+(?:\.\d+)?\b'
+        }
+        
+        for entity_type, pattern in patterns.items():
+            for match in re.finditer(pattern, text):
+                # Check if this match overlaps with existing entities
+                overlap = False
+                for entity in entities:
+                    if (match.start() >= entity['start'] and match.start() < entity['end']) or \
+                       (match.end() > entity['start'] and match.end() <= entity['end']):
+                        overlap = True
+                        break
                 
-                # If no entities found, try noun phrases
-                if not entities:
-                    for chunk in doc.noun_chunks:
-                        if len(chunk.text) > 2:  # Skip very short chunks
-                            entities.append({
-                                'text': chunk.text,
-                                'type': 'NOUN_PHRASE',
-                                'start': chunk.start_char,
-                                'end': chunk.end_char
-                            })
-                            
-                    # Also try proper nouns
-                    for token in doc:
-                        if token.pos_ == "PROPN" and len(token.text) > 2:
-                            # Check if this proper noun is already part of an entity
-                            is_part_of_entity = False
-                            for entity in entities:
-                                if token.idx >= entity['start'] and token.idx + len(token.text) <= entity['end']:
-                                    is_part_of_entity = True
-                                    break
-                                    
-                            if not is_part_of_entity:
-                                entities.append({
-                                    'text': token.text,
-                                    'type': 'PROPER_NOUN',
-                                    'start': token.idx,
-                                    'end': token.idx + len(token.text)
-                                })
+                if not overlap:
+                    entities.append({
+                        'text': match.group(0),
+                        'type': entity_type,
+                        'start': match.start(),
+                        'end': match.end()
+                    })
+        
+        # 3. Add noun phrase extraction if no entities found yet
+        if not entities and SPACY_ENABLED and self.nlp is not None:
+            try:
+                doc = self.nlp(text)
                 
-                # If still no entities, use important words as entities
-                if not entities:
-                    for token in doc:
-                        if token.is_alpha and not token.is_stop and len(token.text) > 3:
+                # Extract noun phrases
+                for chunk in doc.noun_chunks:
+                    if len(chunk.text) > 2:  # Skip very short chunks
+                        entities.append({
+                            'text': chunk.text,
+                            'type': 'NOUN_PHRASE',
+                            'start': chunk.start_char,
+                            'end': chunk.end_char
+                        })
+                        
+                # Add proper nouns
+                for token in doc:
+                    if token.pos_ == "PROPN" and len(token.text) > 2:
+                        # Check if already part of an entity
+                        is_part_of_entity = False
+                        for entity in entities:
+                            if token.idx >= entity['start'] and token.idx + len(token.text) <= entity['end']:
+                                is_part_of_entity = True
+                                break
+                                
+                        if not is_part_of_entity:
                             entities.append({
                                 'text': token.text,
-                                'type': token.pos_,
+                                'type': 'PROPER_NOUN',
                                 'start': token.idx,
                                 'end': token.idx + len(token.text)
                             })
-                    
             except Exception as e:
-                logging.error(f"Error extracting entities: {e}")
-                import traceback
-                logging.error(f"Traceback: {traceback.format_exc()}")
-        
+                logging.error(f"Error extracting noun phrases: {e}")
+                
+        # 4. Add statistical keyword extraction (for domain-specific entities)
+        if not entities or len(entities) < 3:
+            # Simple statistical approach - find unusual words
+            words = text.split()
+            # Filter out common words
+            common_words = {"the", "a", "an", "and", "or", "but", "in", "on", "with", "for", "to", "of", "is", "are", "was", "were"}
+            uncommon_words = [word for word in words if word.lower() not in common_words and len(word) > 3]
+            
+            # Find capitalized phrases (potential named entities)
+            capitalized_pattern = r'\b[A-Z][a-z]+(?: [A-Z][a-z]+)*\b'
+            for match in re.finditer(capitalized_pattern, text):
+                # Check for overlap with existing entities
+                overlap = False
+                for entity in entities:
+                    if (match.start() >= entity['start'] and match.start() < entity['end']) or \
+                       (match.end() > entity['start'] and match.end() <= entity['end']):
+                        overlap = True
+                        break
+                        
+                if not overlap:
+                    entities.append({
+                        'text': match.group(0),
+                        'type': 'CAPITALIZED_PHRASE',
+                        'start': match.start(),
+                        'end': match.end()
+                    })
+            
+            # Add remaining uncommon words as entities
+            for word in uncommon_words:
+                word_start = text.find(word)
+                if word_start >= 0:
+                    # Check for overlap
+                    overlap = False
+                    for entity in entities:
+                        if (word_start >= entity['start'] and word_start < entity['end']) or \
+                           (word_start + len(word) > entity['start'] and word_start + len(word) <= entity['end']):
+                            overlap = True
+                            break
+                            
+                    if not overlap:
+                        entities.append({
+                            'text': word,
+                            'type': 'KEYWORD',
+                            'start': word_start,
+                            'end': word_start + len(word)
+                        })
+                    
         return entities
     
     def extract_relations(self, text: str) -> List[Tuple[str, str, str]]:

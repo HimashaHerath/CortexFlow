@@ -79,6 +79,18 @@ class DynamicWeightingEngine:
             "archive": config.archive_token_limit
         }
         
+        # Add pattern tracking
+        self.pattern_weights = {
+            "code_heavy": {"active": 0.35, "working": 0.35, "archive": 0.30},
+            "data_heavy": {"active": 0.20, "working": 0.50, "archive": 0.30},
+            "qa_conversation": {"active": 0.30, "working": 0.30, "archive": 0.40},
+            "complex_reasoning": {"active": 0.40, "working": 0.40, "archive": 0.20}
+        }
+        
+        # Track detected patterns
+        self.detected_patterns = {pattern: 0 for pattern in self.pattern_weights}
+        self.conversation_type = "general"  # Default pattern
+        
         logger.info(f"DynamicWeightingEngine initialized with total token budget: {self.total_token_budget}")
     
     def analyze_query_complexity(self, query: str) -> float:
@@ -325,35 +337,89 @@ class DynamicWeightingEngine:
         
         return new_limits
     
+    def update_weights_from_history(self):
+        """Analyze historical patterns and adjust weights accordingly."""
+        if len(self.query_complexity_history) < 10:
+            return  # Need more history to detect patterns
+            
+        # Analyze document type distribution
+        doc_types = self.document_type_counts
+        total_docs = sum(doc_types.values())
+        
+        if total_docs == 0:
+            return
+            
+        # Calculate document type ratios
+        code_ratio = doc_types.get("code", 0) / total_docs if total_docs > 0 else 0
+        data_ratio = doc_types.get("data", 0) / total_docs if total_docs > 0 else 0
+        
+        # Calculate average complexity
+        avg_complexity = sum(self.query_complexity_history) / len(self.query_complexity_history)
+        
+        # Detect conversation patterns
+        if code_ratio > 0.3:
+            # Code-heavy conversation
+            self.detected_patterns["code_heavy"] += 1
+            self.conversation_type = "code_heavy"
+        elif data_ratio > 0.3:
+            # Data-heavy conversation
+            self.detected_patterns["data_heavy"] += 1
+            self.conversation_type = "data_heavy"
+        elif avg_complexity > 0.7:
+            # Complex reasoning conversation
+            self.detected_patterns["complex_reasoning"] += 1
+            self.conversation_type = "complex_reasoning"
+        elif avg_complexity < 0.4:
+            # Simple Q&A conversation
+            self.detected_patterns["qa_conversation"] += 1
+            self.conversation_type = "qa_conversation"
+        
+        # Apply detected pattern weights with learning rate
+        pattern_weights = self.pattern_weights.get(self.conversation_type)
+        if pattern_weights:
+            for tier in self.current_tier_weights:
+                # Blend current weights with pattern weights using learning rate
+                target = pattern_weights[tier]
+                current = self.current_tier_weights[tier]
+                self.current_tier_weights[tier] += self.learning_rate * 0.5 * (target - current)
+                
+        # Log the detected pattern
+        logger.info(f"Detected conversation pattern: {self.conversation_type}")
+        logger.info(f"Updated weights based on pattern: {self.current_tier_weights}")
+
     def process_query(self, query: str, context_content: str = None) -> Dict[str, int]:
         """
-        Process a query and update memory allocations.
+        Process a user query and update memory tier allocations.
         
         Args:
-            query: User query to analyze
-            context_content: Optional recent context content to analyze
+            query: The user's query
+            context_content: Optional context content to analyze
             
         Returns:
             Dictionary with updated token limits for each tier
         """
-        # 1. Analyze query complexity
+        # Analyze query complexity
         complexity = self.analyze_query_complexity(query)
         
-        # 2. Determine document type from context (if provided)
+        # Analyze document type if context provided
         doc_type = "text"  # Default
         if context_content:
             doc_type = self.analyze_document_type(context_content)
             
-        # 3. Calculate optimal weights
+        # Calculate optimal weights
         optimal_weights = self.calculate_optimal_weights(complexity, doc_type)
         
-        # 4. Gradually update weights with learning rate
+        # Blend current weights with optimal weights using learning rate
         for tier in self.current_tier_weights:
-            target_weight = optimal_weights[tier]
-            current_weight = self.current_tier_weights[tier]
-            self.current_tier_weights[tier] += self.learning_rate * (target_weight - current_weight)
+            current = self.current_tier_weights[tier]
+            optimal = optimal_weights[tier]
+            self.current_tier_weights[tier] += self.learning_rate * (optimal - current)
             
-        # 5. Update and return new allocations
+        # After multiple queries, analyze patterns
+        if len(self.query_complexity_history) % 5 == 0 and len(self.query_complexity_history) >= 10:
+            self.update_weights_from_history()
+            
+        # Update tier allocations based on current weights
         return self.update_tier_allocations()
     
     def get_stats(self) -> Dict[str, Any]:

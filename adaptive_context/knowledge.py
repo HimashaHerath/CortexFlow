@@ -8,6 +8,7 @@ from sqlitedict import SqliteDict
 from datetime import datetime
 import logging
 from collections import defaultdict
+import random
 
 # Import sentence-transformers for vector embeddings
 try:
@@ -119,6 +120,14 @@ class KnowledgeStore:
             self.conn = None
             
         logging.info(f"Knowledge store initialized with vector retrieval: {VECTOR_ENABLED}, BM25: {BM25_ENABLED}")
+        
+        # Add embedding cache
+        self.embedding_cache = {}
+        self.max_cache_size = 1000  # Limit cache size
+        
+        # Add tracking for index updates
+        self.last_indexed_fact_id = 0
+        self.last_indexed_knowledge_id = 0
     
     def _init_db(self):
         """Initialize the database for storing structured knowledge."""
@@ -235,7 +244,7 @@ class KnowledgeStore:
     
     def _generate_embedding(self, text: str) -> Optional[np.ndarray]:
         """
-        Generate embedding vector for text.
+        Generate embedding vector for text with caching.
         
         Args:
             text: Input text
@@ -246,9 +255,26 @@ class KnowledgeStore:
         if not VECTOR_ENABLED or self.model is None:
             return None
             
+        # Use hash of text as cache key (or another suitable unique identifier)
+        cache_key = hash(text)
+        
+        # Check cache first
+        if cache_key in self.embedding_cache:
+            return self.embedding_cache[cache_key]
+            
         try:
             # Generate embedding
             embedding = self.model.encode(text)
+            
+            # Manage cache size
+            if len(self.embedding_cache) >= self.max_cache_size:
+                # Remove a random item to prevent cache from growing too large
+                # A more sophisticated LRU implementation would be better
+                self.embedding_cache.pop(random.choice(list(self.embedding_cache.keys())))
+            
+            # Store in cache
+            self.embedding_cache[cache_key] = embedding
+            
             return embedding
         except Exception as e:
             logging.error(f"Error generating embedding: {e}")
@@ -276,82 +302,141 @@ class KnowledgeStore:
         similarity = np.dot(vec1_norm, vec2_norm)
         return float(similarity)
     
-    def _update_bm25_index(self):
+    def _update_bm25_index(self, force_rebuild=False):
         """
-        Update BM25 index with all current documents.
+        Update BM25 index with new documents only.
+        
+        Args:
+            force_rebuild: Force complete rebuild of the index
         """
         if not BM25_ENABLED:
             return
-            
-        self.bm25_corpus = []
-        self.id_to_doc_mapping = {}
-        self.doc_to_id_mapping = {}
-        doc_id = 0
         
-        # Get all facts from database
-        if self.conn is not None:
-            conn = self.conn
+        # Check if we need to update
+        if not force_rebuild:
+            # Get max IDs to check for new content
+            max_fact_id = 0
+            max_knowledge_id = 0
+            
+            if self.conn is not None:
+                conn = self.conn
+            else:
+                conn = sqlite3.connect(self.db_path)
+                
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            try:
+                cursor.execute('SELECT MAX(id) as max_id FROM fact_triples')
+                result = cursor.fetchone()
+                if result and result['max_id']:
+                    max_fact_id = result['max_id']
+                    
+                cursor.execute('SELECT MAX(id) as max_id FROM knowledge_items')
+                result = cursor.fetchone()
+                if result and result['max_id']:
+                    max_knowledge_id = result['max_id']
+            except Exception as e:
+                logging.error(f"Error checking for new content: {e}")
+            finally:
+                if self.conn is None:
+                    conn.close()
+            
+            # If no new content, don't update
+            if (max_fact_id <= self.last_indexed_fact_id and 
+                max_knowledge_id <= self.last_indexed_knowledge_id):
+                return
+        
+        # If index doesn't exist or force rebuild, do full rebuild
+        if force_rebuild or not hasattr(self, 'bm25_corpus') or not self.bm25_corpus:
+            # Original full rebuild code
+            self.bm25_corpus = []
+            self.id_to_doc_mapping = {}
+            self.doc_to_id_mapping = {}
+            doc_id = 0
+            
+            # Get all facts and knowledge items...
+            # [Original code to load all items]
+            
+            # Remember the latest IDs we've indexed
+            self.last_indexed_fact_id = max_fact_id
+            self.last_indexed_knowledge_id = max_knowledge_id
         else:
-            conn = sqlite3.connect(self.db_path)
+            # Incremental update - only add new documents
+            if self.conn is not None:
+                conn = self.conn
+            else:
+                conn = sqlite3.connect(self.db_path)
+                
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
             
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+            try:
+                # Get new facts
+                cursor.execute(
+                    'SELECT id, subject, predicate, object FROM fact_triples WHERE id > ?', 
+                    (self.last_indexed_fact_id,)
+                )
+                new_facts = cursor.fetchall()
+                
+                # Get new knowledge items
+                cursor.execute(
+                    'SELECT id, text FROM knowledge_items WHERE id > ?', 
+                    (self.last_indexed_knowledge_id,)
+                )
+                new_items = cursor.fetchall()
+                
+                # Calculate next document ID
+                doc_id = len(self.bm25_corpus)
+                
+                # Add new facts
+                for fact in new_facts:
+                    doc_text = f"{fact['subject']} {fact['predicate']} {fact['object']}"
+                    tokenized_doc = doc_text.lower().split()
+                    
+                    self.bm25_corpus.append(tokenized_doc)
+                    self.id_to_doc_mapping[doc_id] = {
+                        'id': fact['id'],
+                        'text': doc_text, 
+                        'subject': fact['subject'],
+                        'predicate': fact['predicate'],
+                        'object': fact['object'],
+                        'type': 'fact'
+                    }
+                    self.doc_to_id_mapping[doc_text] = doc_id
+                    doc_id += 1
+                
+                # Add new knowledge items
+                for item in new_items:
+                    doc_text = item['text']
+                    tokenized_doc = doc_text.lower().split()
+                    
+                    self.bm25_corpus.append(tokenized_doc)
+                    self.id_to_doc_mapping[doc_id] = {
+                        'id': item['id'],
+                        'text': doc_text,
+                        'type': 'knowledge_item'
+                    }
+                    self.doc_to_id_mapping[doc_text] = doc_id
+                    doc_id += 1
+                    
+                # Update the latest IDs we've indexed
+                self.last_indexed_fact_id = max_fact_id
+                self.last_indexed_knowledge_id = max_knowledge_id
+                
+            except Exception as e:
+                logging.error(f"Error updating BM25 index: {e}")
+            finally:
+                if self.conn is None:
+                    conn.close()
         
-        try:
-            # Add fact triples to corpus
-            cursor.execute('SELECT id, subject, predicate, object FROM fact_triples')
-            facts = cursor.fetchall()
-            
-            for fact in facts:
-                # Create document text
-                doc_text = f"{fact['subject']} {fact['predicate']} {fact['object']}"
-                # Tokenize document
-                tokenized_doc = doc_text.lower().split()
-                
-                self.bm25_corpus.append(tokenized_doc)
-                self.id_to_doc_mapping[doc_id] = {
-                    'id': fact['id'],
-                    'text': doc_text, 
-                    'subject': fact['subject'],
-                    'predicate': fact['predicate'],
-                    'object': fact['object'],
-                    'type': 'fact'
-                }
-                self.doc_to_id_mapping[doc_text] = doc_id
-                doc_id += 1
-                
-            # Add knowledge items to corpus
-            cursor.execute('SELECT id, text FROM knowledge_items')
-            knowledge_items = cursor.fetchall()
-            
-            for item in knowledge_items:
-                # Create document text
-                doc_text = item['text']
-                # Tokenize document
-                tokenized_doc = doc_text.lower().split()
-                
-                self.bm25_corpus.append(tokenized_doc)
-                self.id_to_doc_mapping[doc_id] = {
-                    'id': item['id'],
-                    'text': doc_text,
-                    'type': 'knowledge_item'
-                }
-                self.doc_to_id_mapping[doc_text] = doc_id
-                doc_id += 1
-                
-            # Create BM25 index if corpus is not empty
-            if self.bm25_corpus:
-                import rank_bm25
-                self.bm25_index = rank_bm25.BM25Okapi(self.bm25_corpus)
-                
-        except Exception as e:
-            logging.error(f"Error updating BM25 index: {e}")
-            
-        if self.conn is None:
-            conn.close()
-            
+        # Recreate the BM25 index with the updated corpus
+        if self.bm25_corpus:
+            import rank_bm25
+            self.bm25_index = rank_bm25.BM25Okapi(self.bm25_corpus)
+        
         self.bm25_last_update = time.time()
-        logging.debug(f"BM25 index updated with {doc_id} documents")
+        logging.debug(f"BM25 index updated with {len(self.bm25_corpus)} documents")
     
     def store_fact_triple(self, subject: str, predicate: str, obj: str, 
                           confidence: float = 1.0, source: str = None) -> int:

@@ -3,7 +3,7 @@ import json
 import logging
 import requests
 import traceback
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Iterator
 
 from adaptive_context.config import AdaptiveContextConfig
 from adaptive_context.memory import (
@@ -443,6 +443,89 @@ class AdaptiveContextManager:
             logger.error(f"Error generating response: {e}")
             logger.error(traceback.format_exc())
             return f"Error generating response: {str(e)}"
+    
+    def generate_response_stream(self, prompt: str = None, model: str = None) -> Iterator[str]:
+        """
+        Generate a streaming response using the conversation context.
+        
+        Args:
+            prompt: Optional prompt to use instead of the conversation context
+            model: Model to use for generation
+            
+        Yields:
+            Chunks of the generated response
+        """
+        try:
+            import requests
+            
+            # Use model from config if not specified
+            if model is None:
+                model = self.config.default_model
+                
+            # Get conversation context if no prompt provided
+            if prompt is None:
+                context = self.get_conversation_context()
+                
+                # Extract messages
+                messages = context["messages"]
+                
+                # Add knowledge as system message if available
+                knowledge = context.get("knowledge", [])
+                if knowledge:
+                    knowledge_text = "\n".join(item["text"] for item in knowledge)
+                    
+                    # Add knowledge context as a system message
+                    messages = [{"role": "system", "content": f"Use this knowledge to answer the question:\n{knowledge_text}"}] + messages
+                    
+                # Format as prompt if needed
+                if not messages:
+                    prompt = "Hello! How can I assist you today?"
+                    
+                # Skip Chain of Agents for streaming (would require more complex implementation)
+            else:
+                messages = [{"role": "user", "content": prompt}]
+                
+            # Get Ollama URL
+            ollama_url = f"{self.config.ollama_host}/api/chat"
+            
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": True
+            }
+            
+            logger.debug(f"Sending streaming request to Ollama: {ollama_url}")
+            response = requests.post(ollama_url, json=payload, timeout=30, stream=True)
+            
+            if response.status_code == 200:
+                # Store the full response as we stream
+                full_response = ""
+                
+                # Process the streaming response
+                for line in response.iter_lines():
+                    if line:
+                        chunk_data = json.loads(line)
+                        if "message" in chunk_data:
+                            chunk = chunk_data["message"].get("content", "")
+                        else:
+                            chunk = chunk_data.get("response", "")
+                            
+                        if chunk:
+                            full_response += chunk
+                            yield chunk
+                
+                # After streaming completes, add the response to memory
+                self.add_message("assistant", full_response)
+                
+            else:
+                error_message = f"Ollama error: {response.status_code} - {response.text}"
+                logger.error(error_message)
+                yield f"Error generating response: {error_message}"
+                    
+        except Exception as e:
+            logger.error(f"Error in streaming response: {e}")
+            logger.error(traceback.format_exc())
+            yield f"Error generating streaming response: {str(e)}"
     
     def remember_knowledge(self, text: str, source: str = None) -> List[int]:
         """

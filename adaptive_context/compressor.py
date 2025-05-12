@@ -294,22 +294,28 @@ class ContextCompressor:
         if current_token_count <= target_token_count:
             return segments
         
-        # Sort by importance (least important first)
-        sorted_segments = sorted(segments, key=lambda s: (s.importance, -s.age))
-        
         # Calculate compression needed
         compression_ratio = target_token_count / current_token_count
         
-        # Compress segments progressively
-        compressed_segments = []
-        remaining_tokens = current_token_count
+        # Sort by importance and age simultaneously - least important and oldest first
+        # We'll only sort once to avoid inefficiency
+        sorted_indices = sorted(range(len(segments)), 
+                                key=lambda i: (segments[i].importance, -segments[i].age))
         
-        for segment in sorted_segments:
-            # Start with less important segments
+        # Compress segments progressively
+        compressed_segments = segments.copy()  # Start with a copy of the original segments
+        remaining_tokens = current_token_count
+        tokens_to_remove = current_token_count - target_token_count
+        
+        # Track which segments we've already compressed
+        compressed_indices = set()
+        
+        # First pass: compress least important segments until we reach target
+        for idx in sorted_indices:
             if remaining_tokens <= target_token_count:
-                # We've reached our target, no need to compress further
-                compressed_segments.append(segment)
-                continue
+                break
+                
+            segment = segments[idx]
             
             # Calculate compression ratio for this segment
             # Adjust based on importance - compress less important segments more
@@ -321,11 +327,41 @@ class ContextCompressor:
             
             # Compress the segment
             compressed = self.compress_segment(segment, segment_ratio)
-            compressed_segments.append(compressed)
+            compressed_segments[idx] = compressed
+            compressed_indices.add(idx)
             
             # Update remaining tokens
             token_reduction = segment.token_count - compressed.token_count
             remaining_tokens -= token_reduction
+            tokens_to_remove -= token_reduction
+            
+            # If we've removed enough tokens, stop compressing
+            if tokens_to_remove <= 0:
+                break
         
-        # Sort back to original order for return
-        return sorted(compressed_segments, key=lambda s: s.timestamp, reverse=True) 
+        # If we still need to remove more tokens, compress more segments
+        if tokens_to_remove > 0:
+            # Second pass: compress moderately important segments more aggressively
+            for idx in sorted_indices:
+                if idx in compressed_indices or remaining_tokens <= target_token_count:
+                    continue
+                    
+                segment = segments[idx]
+                
+                # For second pass, use more aggressive compression
+                segment_ratio = min(1.0, max(0.2, compression_ratio * 0.7))
+                
+                # Compress the segment
+                compressed = self.compress_segment(segment, segment_ratio)
+                compressed_segments[idx] = compressed
+                
+                # Update remaining tokens
+                token_reduction = segment.token_count - compressed.token_count
+                remaining_tokens -= token_reduction
+                tokens_to_remove -= token_reduction
+                
+                # If we've removed enough tokens, stop compressing
+                if tokens_to_remove <= 0:
+                    break
+        
+        return compressed_segments 

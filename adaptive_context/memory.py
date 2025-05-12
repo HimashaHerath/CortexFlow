@@ -255,46 +255,42 @@ class ConversationMemory:
         self.next_message_id = 1
         
     def update_tier_limits(self, active_limit: int = None, working_limit: int = None, archive_limit: int = None) -> bool:
-        """
-        Update the token limits for memory tiers.
-        
-        Args:
-            active_limit: New token limit for active tier
-            working_limit: New token limit for working tier
-            archive_limit: New token limit for archive tier
-            
-        Returns:
-            True if all updates were successful, False otherwise
-        """
         success = True
         
         # Update active tier if specified
         if active_limit is not None:
-            active_success = self.active_tier.update_token_limit(active_limit)
-            if active_success:
+            # Ensure minimum size and check if we can accommodate current content
+            if active_limit >= max(self.active_tier.current_token_count, 1000):
                 self.active_token_limit = active_limit
+                self.active_tier.max_tokens = active_limit
                 self.tier_stats["active"]["current_limit"] = active_limit
-            success = success and active_success
-            
+            else:
+                success = False
+                logger.warning(f"Cannot update active tier limit to {active_limit} (current usage: {self.active_tier.current_token_count})")
+                
         # Update working tier if specified
         if working_limit is not None:
-            working_success = self.working_tier.update_token_limit(working_limit)
-            if working_success:
+            if working_limit >= max(self.working_tier.current_token_count, 1000):
                 self.working_token_limit = working_limit
+                self.working_tier.max_tokens = working_limit
                 self.tier_stats["working"]["current_limit"] = working_limit
-            success = success and working_success
-            
+            else:
+                success = False
+                logger.warning(f"Cannot update working tier limit to {working_limit} (current usage: {self.working_tier.current_token_count})")
+                
         # Update archive tier if specified
         if archive_limit is not None:
-            archive_success = self.archive_tier.update_token_limit(archive_limit)
-            if archive_success:
+            if archive_limit >= max(self.archive_tier.current_token_count, 1000):
                 self.archive_token_limit = archive_limit
+                self.archive_tier.max_tokens = archive_limit
                 self.tier_stats["archive"]["current_limit"] = archive_limit
-            success = success and archive_success
-            
+            else:
+                success = False
+                logger.warning(f"Cannot update archive tier limit to {archive_limit} (current usage: {self.archive_tier.current_token_count})")
+                
         # Update tier usage history
         self._update_tier_usage_stats()
-            
+                
         return success
     
     def add_message(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

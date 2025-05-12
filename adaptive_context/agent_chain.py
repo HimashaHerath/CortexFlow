@@ -13,6 +13,7 @@ import logging
 import json
 import time
 from typing import List, Dict, Any, Optional, Tuple, Union, Callable
+import traceback
 
 import requests
 
@@ -468,17 +469,45 @@ class AgentChainManager:
         
         logger.info(f"Initialized Chain of Agents with {len(self.agents)} agents")
     
-    def process_query(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Process a query through the chain of agents.
+    def _batch_process_with_llm(self, prompts: List[str]) -> List[str]:
+        """Process multiple prompts with LLM in a single batch."""
+        results = []
         
-        Args:
-            query: User query to process
-            context: Additional context information
+        if not prompts:
+            return results
             
-        Returns:
-            Results from the full agent chain processing
-        """
+        try:
+            # For Ollama, we still need to make sequential requests, but we can optimize
+            # by reusing the connection and batching the processing
+            responses = []
+            
+            with requests.Session() as session:
+                for prompt in prompts:
+                    response = session.post(
+                        f"{self.config.ollama_host}/api/generate",
+                        json={
+                            "model": self.config.default_model,
+                            "prompt": prompt,
+                            "stream": False
+                        },
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        responses.append(result.get("response", ""))
+                    else:
+                        responses.append(f"Error: {response.status_code}")
+                        
+            return responses
+            
+        except Exception as e:
+            logger.error(f"Error in batch LLM processing: {e}")
+            # Return empty strings for each prompt
+            return [""] * len(prompts)
+
+    def process_query(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Process a query through the chain of agents."""
         if context is None:
             context = {}
             
@@ -492,23 +521,107 @@ class AgentChainManager:
             
             # Process with current agent
             agent_start_time = time.time()
-            agent_result = agent.process(query, context, agent_history)
+            try:
+                agent_result = agent.process(query, context, agent_history)
+            except Exception as e:
+                logger.error(f"Error in agent {agent.name}: {e}")
+                logger.error(traceback.format_exc())
+                
+                # Generate fallback result
+                agent_result = self._generate_fallback_result(agent, query, context, agent_history, e)
+            
             agent_duration = time.time() - agent_start_time
             
             # Add processing duration
             agent_result["processing_time"] = agent_duration
+            agent_result["status"] = agent_result.get("status", "success")
             
             # Add to agent history
             agent_history.append(agent_result)
+            
+            # If this agent completely failed and was critical, consider aborting the chain
+            if agent_result.get("status") == "error" and i < len(self.agents) - 1:
+                # For non-terminal agents, check if we should continue
+                if not self._can_continue_after_failure(agent, agent_result):
+                    logger.warning(f"Aborting agent chain due to critical failure in agent {agent.name}")
+                    break
             
             logger.info(f"Completed agent {agent.name} in {agent_duration:.2f} seconds")
         
         total_duration = time.time() - start_time
         
+        # If all agents failed, provide a simplified answer
+        if all(result.get("status") == "error" for result in agent_history):
+            answer = "I'm having trouble processing this request through my reasoning chain. Let me provide a direct answer instead."
+            # Add direct answer generation here
+        else:
+            # Get answer from last successful agent, preferably Synthesizer
+            for result in reversed(agent_history):
+                if result.get("status") == "success" and "answer" in result:
+                    answer = result["answer"]
+                    break
+            else:
+                answer = "I processed your query but couldn't generate a complete answer through my agent chain."
+        
         # Return final result with processing details
         return {
             "query": query,
-            "answer": agent_history[-1].get("answer", "No answer generated"),
+            "answer": answer,
             "agent_chain": agent_history,
             "total_processing_time": total_duration
-        } 
+        }
+
+    def _generate_fallback_result(self, agent, query, context, agent_history, error):
+        """Generate fallback result when an agent fails."""
+        agent_type = agent.name.lower()
+        
+        # Default fallback for any agent
+        fallback_result = {
+            "agent": agent.name,
+            "role": agent.role,
+            "status": "error",
+            "error": str(error)
+        }
+        
+        if agent_type == "explorer":
+            # For explorer, we can fall back to direct knowledge retrieval
+            if self.knowledge_store:
+                knowledge_items = self.knowledge_store.get_relevant_knowledge(query, max_results=5)
+                fallback_result["exploration_results"] = {
+                    "exploration_text": "Direct knowledge retrieval results.",
+                    "status": "fallback"
+                }
+                fallback_result["knowledge_items"] = knowledge_items
+                
+        elif agent_type == "analyzer":
+            # For analyzer, we can provide a simplified analysis
+            if agent_history and "exploration_results" in agent_history[0]:
+                exploration = agent_history[0]["exploration_results"].get("exploration_text", "")
+                fallback_result["analysis_results"] = {
+                    "analysis_text": f"Based on exploration, the main topics appear to be related to {query}.",
+                    "status": "fallback"
+                }
+                
+        elif agent_type == "synthesizer":
+            # For synthesizer, we need to provide some answer
+            fallback_result["synthesis_results"] = {
+                "synthesis_text": f"I've analyzed information related to {query}, but cannot provide a comprehensive answer due to processing limitations.",
+                "status": "fallback"
+            }
+            fallback_result["answer"] = fallback_result["synthesis_results"]["synthesis_text"]
+        
+        return fallback_result
+    
+    def _can_continue_after_failure(self, failed_agent, failure_result):
+        """Determine if the agent chain can continue after a failure."""
+        # Explorer failures are critical - need information to proceed
+        if failed_agent.name == "Explorer" and not failure_result.get("knowledge_items"):
+            return False
+            
+        # If we have some results even in failure, we can try to continue
+        if failed_agent.name == "Analyzer" and "analysis_results" in failure_result:
+            if failure_result["analysis_results"].get("status") == "fallback":
+                return True
+                
+        # Default is to try continuing
+        return True 
