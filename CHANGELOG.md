@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Core Reasoning Framework:
+  - Implemented ReasoningEngine for multi-step reasoning orchestration
+  - Added QueryPlanner for breaking complex queries into reasoning steps
+  - Created ReasoningState for tracking multi-step reasoning processes
+  - Implemented multiple reasoning strategies (forward/backward chaining, abductive reasoning)
+  - Added state tracking mechanisms for reasoning confidence and explanation
+- Path-based Inference capabilities:
+  - Implemented BidirectionalSearch for efficient path finding between entities
+  - Added WeightedPathSearch for confidence and importance-based path discovery
+  - Created ConstrainedPathSearch for relation-filtered path traversal
+  - Added PathExplainer for human-readable reasoning traces
+  - Integrated with agent chain for enhanced knowledge exploration
 - Enhanced Knowledge Graph Schema and Integration:
   - Extended database schema for relation types and confidence scores
   - Added metadata fields for provenance tracking and versioning
