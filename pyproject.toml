@@ -36,6 +36,12 @@ graph = [
     "networkx>=3.1",
     "spacy>=3.5.0",
 ]
+nlp = [
+    "neuralcoref>=4.0",
+    "allennlp>=2.9.0",
+    "allennlp-models>=2.9.0",
+    "nltk>=3.6.5",
+]
 dev = [
     "pytest>=7.3.1",
     "pytest-cov>=4.1.0",
@@ -54,6 +60,10 @@ all = [
     "spacy>=3.5.0",
     "matplotlib>=3.5.0",
     "tiktoken>=0.5.1",
+    "neuralcoref>=4.0",
+    "allennlp>=2.9.0",
+    "allennlp-models>=2.9.0",
+    "nltk>=3.6.5",
 ]
 
 [project.urls]

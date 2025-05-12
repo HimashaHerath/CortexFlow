@@ -6,6 +6,13 @@ from cortexflow.config import CortexFlowConfig
 import unittest
 import random
 
+# Add import for GraphStore
+try:
+    from cortexflow.graph_store import GraphStore
+    HAS_GRAPH_STORE = True
+except ImportError:
+    HAS_GRAPH_STORE = False
+
 class TestDynamicWeightingEngine:
     """Tests for the DynamicWeightingEngine class"""
     
@@ -357,4 +364,137 @@ def test_manager_integration(mock_engine_class, mock_engine):
     )
     
     # Skip this test for now as it needs more investigation into how manager integrates with engine
-    pytest.skip("Integration test needs further investigation of manager implementation") 
+    pytest.skip("Integration test needs further investigation of manager implementation")
+
+
+@pytest.mark.skipif(not HAS_GRAPH_STORE, reason="GraphStore not available")
+class TestEntityRelationExtraction:
+    """Test the enhanced entity and relation extraction capabilities"""
+    
+    def setup_method(self):
+        """Set up test environment for entity and relation extraction"""
+        config = CortexFlowConfig(
+            knowledge_store_path=":memory:",
+            use_graph_rag=True
+        )
+        self.graph_store = GraphStore(config)
+    
+    def test_entity_extraction(self):
+        """Test the enhanced entity extraction capabilities"""
+        # Test text with various entity types
+        text = "Apple Inc. was founded by Steve Jobs in California in 1976. " \
+               "The company released the iPhone in 2007, which runs on iOS. " \
+               "Tim Cook is the current CEO and the stock price was $150.23 on May 15, 2023."
+        
+        entities = self.graph_store.extract_entities(text)
+        
+        # Check that we have reasonable number of entities
+        assert len(entities) >= 8, f"Expected at least 8 entities, got {len(entities)}"
+        
+        # Create a map of entity texts for easier testing
+        entity_texts = {entity["text"]: entity["type"] for entity in entities}
+        
+        # Check for specific entities
+        assert "Apple Inc." in entity_texts, "Failed to extract 'Apple Inc.'"
+        assert "Steve Jobs" in entity_texts, "Failed to extract 'Steve Jobs'"
+        assert "California" in entity_texts, "Failed to extract 'California'"
+        assert "iPhone" in entity_texts, "Failed to extract 'iPhone'"
+        assert "Tim Cook" in entity_texts, "Failed to extract 'Tim Cook'"
+        
+        # Check for numeric entities
+        assert any("$150.23" in entity or "$150" in entity for entity in entity_texts.keys()), \
+            "Failed to extract money value"
+        assert any("1976" in entity for entity in entity_texts.keys()), \
+            "Failed to extract year 1976"
+        
+        # Check specific entity types
+        assert entity_texts.get("Steve Jobs") in ["PERSON", "PROPER_NOUN"], \
+            f"Steve Jobs should be a PERSON or PROPER_NOUN, got {entity_texts.get('Steve Jobs')}"
+        assert entity_texts.get("California") in ["GPE", "LOC", "LOCATION", "PROPER_NOUN"], \
+            f"California should be a location, got {entity_texts.get('California')}"
+    
+    def test_domain_specific_entity_extraction(self):
+        """Test extraction of domain-specific entities"""
+        # Tech domain text
+        text = "Python has become very popular for machine learning applications. " \
+               "Many developers use TensorFlow and PyTorch for deep learning " \
+               "projects, especially when working with CNNs or RNNs."
+        
+        entities = self.graph_store.extract_entities(text)
+        
+        # Create a map of entity texts
+        entity_texts = {entity["text"]: entity["type"] for entity in entities}
+        
+        # Check for programming language detection
+        assert "Python" in entity_texts, "Failed to detect Python as a programming language"
+        assert entity_texts.get("Python") == "PROGRAMMING_LANGUAGE", \
+            f"Python should be a PROGRAMMING_LANGUAGE, got {entity_texts.get('Python')}"
+        
+        # Check for ML/AI term detection
+        assert any(term in entity_texts for term in ["machine learning", "Machine Learning"]), \
+            "Failed to detect 'machine learning' as an AI/ML term"
+        assert any(term in entity_texts for term in ["deep learning", "Deep Learning"]), \
+            "Failed to detect 'deep learning' as an AI/ML term"
+        assert "PyTorch" in entity_texts, "Failed to detect PyTorch"
+        assert any(term in entity_texts for term in ["CNN", "CNNs"]), \
+            "Failed to detect CNN/CNNs"
+    
+    def test_relation_extraction(self):
+        """Test the enhanced relation extraction capabilities"""
+        # Test text with clear subject-verb-object relationships
+        text = "Steve Jobs founded Apple in California. Microsoft develops Windows. " \
+               "The researchers published their findings in Nature. " \
+               "Google acquired YouTube for $1.65 billion in 2006."
+        
+        relations = self.graph_store.extract_relations(text)
+        
+        # Check that we have reasonable number of relations
+        assert len(relations) >= 4, f"Expected at least 4 relations, got {len(relations)}"
+        
+        # Check for specific relations
+        relation_tuples = [(s, p, o) for s, p, o in relations]
+        
+        # Check for direct SVO triples
+        assert any(s.strip() == "Steve Jobs" and p.strip() in ["found", "founded"] and "Apple" in o.strip() 
+                   for s, p, o in relation_tuples), "Failed to extract 'Steve Jobs founded Apple'"
+        
+        assert any(s.strip() == "Microsoft" and p.strip() in ["develop", "develops"] and "Windows" in o.strip() 
+                   for s, p, o in relation_tuples), "Failed to extract 'Microsoft develops Windows'"
+        
+        # Check for prepositional relations (might have different formats)
+        assert any("Apple" in s and "in" in p and "California" in o 
+                   for s, p, o in relation_tuples), "Failed to extract 'Apple in California'"
+        
+        # Test adding relationships to graph
+        for subject, predicate, obj in relations[:3]:  # Add first 3 relations
+            added = self.graph_store.add_relation(subject, predicate, obj)
+            assert added, f"Failed to add relation: {subject} {predicate} {obj}"
+        
+        # Query entities to verify they were added
+        entities = self.graph_store.query_entities(limit=10)
+        assert len(entities) >= 6, "Failed to add expected number of entities to graph"
+        
+    def test_process_text_to_graph(self):
+        """Test processing text directly to build the knowledge graph"""
+        text = "OpenAI released GPT-4 in 2023. The model was trained on a massive dataset. " \
+               "Researchers at DeepMind published papers about AlphaFold. " \
+               "Google is headquartered in Mountain View."
+        
+        # Process text to build graph
+        relations_added = self.graph_store.process_text_to_graph(text)
+        
+        # Should add some relations
+        assert relations_added > 0, "Failed to add any relations to graph from text"
+        
+        # Check that entities were added to the graph
+        entities = self.graph_store.query_entities(limit=10)
+        entity_names = [e["entity"] for e in entities]
+        
+        assert "OpenAI" in entity_names, "Failed to add 'OpenAI' to graph"
+        assert "GPT-4" in entity_names, "Failed to add 'GPT-4' to graph"
+        assert "Google" in entity_names, "Failed to add 'Google' to graph"
+        
+        # Check that we can query relationships
+        # Get neighbors of OpenAI
+        neighbors = self.graph_store.get_entity_neighbors("OpenAI")
+        assert len(neighbors) > 0, "Failed to create relationships for OpenAI" 

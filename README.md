@@ -28,6 +28,7 @@ CortexFlow dynamically manages context information, retaining important elements
 - **Advanced retrieval techniques** including GraphRAG for complex multi-hop queries
 - **Chain of Agents** for collaborative multi-agent reasoning over complex queries
 - **Self-Reflection** for verifying knowledge relevance and response consistency
+- **Enhanced entity and relation extraction** with semantic role labeling and coreference resolution
 
 ## Installation
 
@@ -40,7 +41,7 @@ For the graph-based knowledge features:
 pip install "cortexflow[graph]"
 ```
 
-For the full package with all dependencies:
+For the full package with all dependencies (including enhanced NLP capabilities):
 ```bash
 pip install "cortexflow[all]"
 ```
@@ -70,9 +71,43 @@ print(f"Assistant: {response}")
 # Explicitly store important information
 context_manager.remember_knowledge("The user's name is Alice and she lives in Boston.")
 
+# Use the advanced knowledge graph features
+config = CortexFlowConfig(
+    use_graph_rag=True,
+    knowledge_store_path="knowledge.db"
+)
+manager = CortexFlowManager(config)
+
+# Automatically extract entities and relations from text
+document = """
+Albert Einstein developed the theory of relativity in the early 20th century.
+He was born in Germany but later moved to the United States where he worked at Princeton University.
+His famous equation E=mc² relates energy and mass.
+"""
+manager.knowledge_store.graph_store.process_text_to_graph(document)
+
+# Query the knowledge graph
+paths = manager.knowledge_store.graph_store.path_query(
+    start_entity="Albert Einstein", 
+    end_entity="Princeton University", 
+    max_hops=2
+)
+
 # Clean up when done
 context_manager.close()
 ```
+
+## Advanced NLP Features
+
+CortexFlow provides enhanced entity and relation extraction capabilities:
+
+- **Semantic Role Labeling**: Extracts high-quality relationships based on semantic roles
+- **Coreference Resolution**: Resolves pronouns and other references to their entities
+- **Domain-Specific Entity Recognition**: Identifies entities in specialized domains
+- **Advanced Dependency Parsing**: Extracts complex relationships between entities
+- **Improved Triple Extraction**: Creates more accurate subject-predicate-object triples
+
+These features enable building more robust knowledge graphs for improved reasoning.
 
 ## Documentation
 

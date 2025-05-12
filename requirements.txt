@@ -1,21 +1,26 @@
-ollama>=0.1.0
-numpy>=1.22.0
-faiss-cpu>=1.7.4
-scikit-learn>=1.0.2
-transformers>=4.30.0
-tqdm>=4.65.0
-sqlitedict>=2.1.0
-requests>=2.28.1
-sentence-transformers>=2.2.2
+# Core dependencies
+numpy>=1.19.5
+scipy>=1.7.0
+networkx>=2.5
+
+# NLP and text processing
+spacy>=3.2.0
+sentence-transformers>=2.2.0
 rank_bm25>=0.2.2
-# Optional: enables better token counting
-tiktoken>=0.5.1
-# GraphRAG dependencies
-networkx>=3.1
-spacy>=3.5.0
-# English language model for spaCy (use: python -m spacy download en_core_web_sm) 
-# Testing and visualization dependencies
-matplotlib>=3.5.0
-# Testing dependencies
-pytest>=7.3.1
-pytest-cov>=4.1.0 
+nltk>=3.6.5
+
+# Database and storage
+sqlitedict>=1.7.0
+
+# Enhanced entity and relation extraction
+neuralcoref>=4.0
+allennlp>=2.9.0
+allennlp-models>=2.9.0
+
+# Optional: download spaCy models with these commands:
+# python -m spacy download en_core_web_sm
+# python -m spacy download en_core_web_md
+
+# For development and testing
+pytest>=6.2.5
+pytest-cov>=2.12.1 

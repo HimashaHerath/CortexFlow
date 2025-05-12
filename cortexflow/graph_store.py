@@ -178,7 +178,8 @@ class GraphStore:
     
     def extract_entities(self, text: str) -> List[Dict[str, Any]]:
         """
-        Extract named entities from text using multiple techniques.
+        Extract named entities from text using multiple techniques including
+        NER, pattern matching, noun phrases, and domain-specific entity recognition.
         
         Args:
             text: Input text to extract entities from
@@ -193,7 +194,7 @@ class GraphStore:
             try:
                 doc = self.nlp(text)
                 
-                # Get named entities
+                # Get named entities from spaCy's NER
                 for ent in doc.ents:
                     entities.append({
                         'text': ent.text,
@@ -201,17 +202,64 @@ class GraphStore:
                         'start': ent.start_char,
                         'end': ent.end_char
                     })
+                    
+                # 2. Attempt coreference resolution if neuralcoref is available
+                try:
+                    import neuralcoref
+                    if not hasattr(self, 'coref_nlp'):
+                        # Initialize neuralcoref if not already done
+                        self.coref_nlp = spacy.load('en_core_web_sm')
+                        neuralcoref.add_to_pipe(self.coref_nlp)
+                        logging.info("Coreference resolution model loaded successfully")
+                        
+                    # Process the text for coreference resolution
+                    coref_doc = self.coref_nlp(text)
+                    
+                    # Add coreferenced entities
+                    coref_clusters = coref_doc._.coref_clusters
+                    if coref_clusters:
+                        for cluster in coref_clusters:
+                            main_mention = cluster.main
+                            # Add main mention as entity if it's not already in our list
+                            main_mention_text = main_mention.text
+                            main_start = main_mention.start_char
+                            main_end = main_mention.end_char
+                            
+                            # Check if this mention overlaps with existing entities
+                            is_new_entity = True
+                            for entity in entities:
+                                if (main_start >= entity['start'] and main_start < entity['end']) or \
+                                   (main_end > entity['start'] and main_end <= entity['end']):
+                                    is_new_entity = False
+                                    break
+                                    
+                            if is_new_entity:
+                                entities.append({
+                                    'text': main_mention_text,
+                                    'type': 'COREF',
+                                    'start': main_start,
+                                    'end': main_end,
+                                    'mentions': [m.text for m in cluster.mentions]
+                                })
+                except ImportError:
+                    logging.debug("neuralcoref not available, skipping coreference resolution")
+                except Exception as e:
+                    logging.error(f"Error in coreference resolution: {e}")
             except Exception as e:
                 logging.error(f"Error in SpaCy NER: {e}")
         
-        # 2. Add pattern-based entity extraction
+        # 3. Add pattern-based entity extraction
         patterns = {
             'EMAIL': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
             'URL': r'https?://\S+',
             'DATE': r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',
             'TIME': r'\b\d{1,2}:\d{2}\b',
             'PHONE': r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',
-            'NUMBER': r'\b\d+(?:\.\d+)?\b'
+            'NUMBER': r'\b\d+(?:\.\d+)?\b',
+            'PERCENTAGE': r'\b\d+(?:\.\d+)?%\b',
+            'MONEY': r'\$\d+(?:\.\d+)?\b',
+            'HASHTAG': r'#[A-Za-z][A-Za-z0-9_]*',
+            'MENTION': r'@[A-Za-z][A-Za-z0-9_]*'
         }
         
         for entity_type, pattern in patterns.items():
@@ -232,22 +280,32 @@ class GraphStore:
                         'end': match.end()
                     })
         
-        # 3. Add noun phrase extraction if no entities found yet
-        if not entities and SPACY_ENABLED and self.nlp is not None:
+        # 4. Add noun phrase extraction if no entities found yet or to supplement
+        if SPACY_ENABLED and self.nlp is not None:
             try:
-                doc = self.nlp(text)
+                if not 'doc' in locals():  # Only parse if we haven't already
+                    doc = self.nlp(text)
                 
                 # Extract noun phrases
                 for chunk in doc.noun_chunks:
                     if len(chunk.text) > 2:  # Skip very short chunks
-                        entities.append({
-                            'text': chunk.text,
-                            'type': 'NOUN_PHRASE',
-                            'start': chunk.start_char,
-                            'end': chunk.end_char
-                        })
+                        # Check for overlap with existing entities
+                        overlap = False
+                        for entity in entities:
+                            if (chunk.start_char >= entity['start'] and chunk.start_char < entity['end']) or \
+                               (chunk.end_char > entity['start'] and chunk.end_char <= entity['end']):
+                                overlap = True
+                                break
+                                
+                        if not overlap:
+                            entities.append({
+                                'text': chunk.text,
+                                'type': 'NOUN_PHRASE',
+                                'start': chunk.start_char,
+                                'end': chunk.end_char
+                            })
                         
-                # Add proper nouns
+                # Add proper nouns not already captured
                 for token in doc:
                     if token.pos_ == "PROPN" and len(token.text) > 2:
                         # Check if already part of an entity
@@ -266,8 +324,26 @@ class GraphStore:
                             })
             except Exception as e:
                 logging.error(f"Error extracting noun phrases: {e}")
+
+        # 5. Add domain-specific entity extraction
+        try:
+            # Check for domain-specific patterns based on config
+            domain_entities = self._extract_domain_specific_entities(text)
+            for entity in domain_entities:
+                # Check for overlap
+                overlap = False
+                for existing_entity in entities:
+                    if (entity['start'] >= existing_entity['start'] and entity['start'] < existing_entity['end']) or \
+                       (entity['end'] > existing_entity['start'] and entity['end'] <= existing_entity['end']):
+                        overlap = True
+                        break
                 
-        # 4. Add statistical keyword extraction (for domain-specific entities)
+                if not overlap:
+                    entities.append(entity)
+        except Exception as e:
+            logging.error(f"Error in domain-specific entity extraction: {e}")
+                
+        # 6. Add statistical keyword extraction (for domain-specific entities)
         if not entities or len(entities) < 3:
             # Simple statistical approach - find unusual words
             words = text.split()
@@ -316,10 +392,61 @@ class GraphStore:
                     
         return entities
     
+    def _extract_domain_specific_entities(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Extract domain-specific entities based on patterns.
+        This can be extended for specialized knowledge domains.
+        
+        Args:
+            text: Input text to extract domain entities from
+            
+        Returns:
+            List of entity dictionaries
+        """
+        domain_entities = []
+        
+        # Example: Extract programming language entities
+        programming_langs = [
+            "Python", "JavaScript", "TypeScript", "Java", "C++", "C#", "Go", "Rust",
+            "Swift", "Kotlin", "Ruby", "PHP", "SQL", "R", "MATLAB", "Scala", "Perl",
+            "Haskell", "Clojure", "Erlang", "Elixir", "Julia"
+        ]
+        
+        # Look for programming languages
+        for lang in programming_langs:
+            for match in re.finditer(r'\b' + re.escape(lang) + r'\b', text):
+                domain_entities.append({
+                    'text': match.group(0),
+                    'type': 'PROGRAMMING_LANGUAGE',
+                    'start': match.start(),
+                    'end': match.end()
+                })
+                
+        # Example: Extract ML/AI techniques
+        ml_techniques = [
+            "Neural Network", "Deep Learning", "Machine Learning", "Natural Language Processing",
+            "Computer Vision", "Reinforcement Learning", "Transformer", "BERT", "GPT",
+            "CNN", "RNN", "LSTM", "GAN", "Decision Tree", "Random Forest", "SVM",
+            "K-means", "PCA", "t-SNE", "XGBoost"
+        ]
+        
+        # Look for ML/AI terms
+        for technique in ml_techniques:
+            pattern = r'\b' + re.escape(technique) + r'\b'
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                domain_entities.append({
+                    'text': match.group(0),
+                    'type': 'AI_ML_TERM',
+                    'start': match.start(),
+                    'end': match.end()
+                })
+                
+        return domain_entities
+    
     def extract_relations(self, text: str) -> List[Tuple[str, str, str]]:
         """
-        Extract subject-predicate-object triples from text.
-        This uses dependency parsing to find relationships.
+        Extract subject-predicate-object triples from text using semantic role labeling
+        and enhanced dependency parsing techniques.
         
         Args:
             text: Input text to extract relations from
@@ -333,63 +460,38 @@ class GraphStore:
             try:
                 doc = self.nlp(text)
                 
-                # Process each sentence separately
-                for sent in doc.sents:
-                    # Find root verb and its subject/object
-                    root_verb = None
-                    for token in sent:
-                        if token.dep_ == "ROOT" and token.pos_ == "VERB":
-                            root_verb = token
-                            break
-                    
-                    # If we found a root verb, look for its subject and object
-                    if root_verb:
-                        subject = None
-                        direct_object = None
-                        
-                        # Find subject and object
-                        for child in root_verb.children:
-                            # Find subject
-                            if child.dep_ in ["nsubj", "nsubjpass"]:
-                                # Get the full noun phrase
-                                subject = self._get_span_text(child)
-                                
-                            # Find direct object
-                            elif child.dep_ in ["dobj", "pobj"]:
-                                # Get the full noun phrase
-                                direct_object = self._get_span_text(child)
-                                
-                        # If we have both subject and object, create a relation
-                        if subject and direct_object:
-                            relations.append((subject, root_verb.lemma_, direct_object))
-                    
-                    # If no root verb relation found, try other patterns
-                    if not relations:
-                        # Try subject-verb-object patterns with any verb
-                        for token in sent:
-                            if token.pos_ == "VERB":
-                                subject = None
-                                direct_object = None
-                                
-                                # Find subject and object for this verb
-                                for child in token.children:
-                                    if child.dep_ in ["nsubj", "nsubjpass"] and not subject:
-                                        subject = self._get_span_text(child)
-                                        
-                                    elif child.dep_ in ["dobj", "pobj"] and not direct_object:
-                                        direct_object = self._get_span_text(child)
-                                
-                                # If we found both, add the relation
-                                if subject and direct_object:
-                                    relations.append((subject, token.lemma_, direct_object))
+                # 1. First attempt with semantic role labeling if available
+                try:
+                    srl_relations = self._extract_with_semantic_roles(text)
+                    if srl_relations:
+                        relations.extend(srl_relations)
+                except Exception as e:
+                    logging.debug(f"SRL extraction not available: {e}")
                 
-                # If no relations found with dependency parsing, try a simpler approach
+                # 2. Process each sentence separately with enhanced dependency parsing
+                for sent in doc.sents:
+                    # Extract all subject-verb-object patterns
+                    extracted_svo = self._extract_svo_from_dependency(sent)
+                    relations.extend(extracted_svo)
+                    
+                    # Extract prep relations (X in Y, X on Y, etc.)
+                    extracted_preps = self._extract_prep_relations(sent)
+                    relations.extend(extracted_preps)
+                
+                # 3. Add coreference-based relations if available
+                try:
+                    coref_relations = self._extract_with_coreference(text)
+                    if coref_relations:
+                        relations.extend(coref_relations)
+                except Exception as e:
+                    logging.debug(f"Coreference relation extraction not available: {e}")
+                
+                # 4. If no relations found with advanced methods, fall back to simpler approaches
                 if not relations:
                     entities = self.extract_entities(text)
                     if len(entities) >= 2:
-                        # Create relations between consecutive entities
+                        # Create relations between consecutive entities with heuristics
                         for i in range(len(entities) - 1):
-                            # Find words between entities that might be predicates
                             entity1 = entities[i]
                             entity2 = entities[i + 1]
                             
@@ -421,6 +523,181 @@ class GraphStore:
                 logging.error(f"Traceback: {traceback.format_exc()}")
                 
         return relations
+    
+    def _extract_svo_from_dependency(self, sent) -> List[Tuple[str, str, str]]:
+        """
+        Extract Subject-Verb-Object triples from a sentence using dependency parsing.
+        Uses more advanced patterns than the basic implementation.
+        
+        Args:
+            sent: spaCy Span representing a sentence
+            
+        Returns:
+            List of (subject, predicate, object) tuples
+        """
+        triples = []
+        
+        # Find all verbs in the sentence
+        verbs = [token for token in sent if token.pos_ == "VERB"]
+        
+        for verb in verbs:
+            # Find potential subjects
+            subjects = []
+            for token in verb.lefts:
+                if token.dep_ in ["nsubj", "nsubjpass", "csubj", "csubjpass", "agent"]:
+                    # Get full noun phrase
+                    subject_span = self._get_span_text(token)
+                    subjects.append(subject_span)
+            
+            # Find potential objects
+            objects = []
+            for token in verb.rights:
+                # Direct object or prepositional object
+                if token.dep_ in ["dobj", "pobj", "iobj", "obj"]:
+                    object_span = self._get_span_text(token)
+                    objects.append(object_span)
+                # Handle prep phrases like "to the store"
+                elif token.dep_ == "prep":
+                    for child in token.children:
+                        if child.dep_ == "pobj":
+                            # Include the preposition in the relation
+                            pred = f"{verb.lemma_} {token.text}"
+                            object_span = self._get_span_text(child)
+                            objects.append((pred, object_span))
+            
+            # Create triples for all subject-object pairs
+            for subject in subjects:
+                for obj in objects:
+                    if isinstance(obj, tuple):
+                        # Handle special case of prep phrases
+                        pred, obj_text = obj
+                        triples.append((subject, pred, obj_text))
+                    else:
+                        triples.append((subject, verb.lemma_, obj))
+        
+        return triples
+    
+    def _extract_prep_relations(self, sent) -> List[Tuple[str, str, str]]:
+        """
+        Extract relations based on prepositional phrases like "X in Y".
+        
+        Args:
+            sent: spaCy Span representing a sentence
+            
+        Returns:
+            List of (entity1, preposition, entity2) tuples
+        """
+        prep_relations = []
+        
+        for token in sent:
+            if token.dep_ == "prep" and token.head.pos_ in ["NOUN", "PROPN"]:
+                # Get the head (the first entity)
+                head_span = self._get_span_text(token.head)
+                
+                # Get the object of the preposition (the second entity)
+                for child in token.children:
+                    if child.dep_ == "pobj":
+                        object_span = self._get_span_text(child)
+                        # Create relation with the preposition as predicate
+                        prep_relations.append((head_span, token.text, object_span))
+        
+        return prep_relations
+    
+    def _extract_with_semantic_roles(self, text: str) -> List[Tuple[str, str, str]]:
+        """
+        Extract relations using semantic role labeling (SRL) if available.
+        Requires AllenNLP SRL model.
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            List of (subject, predicate, object) tuples
+        """
+        try:
+            from allennlp.predictors.predictor import Predictor
+            
+            # Initialize SRL predictor if not already done
+            if not hasattr(self, 'srl_predictor'):
+                self.srl_predictor = Predictor.from_path(
+                    "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz")
+                logging.info("SRL model loaded successfully")
+            
+            srl_output = self.srl_predictor.predict(sentence=text)
+            
+            # Extract relations from SRL output
+            relations = []
+            for verb_data in srl_output.get('verbs', []):
+                predicate = verb_data['verb']
+                args = {}
+                
+                # Extract arguments from tags
+                for tag, words in zip(verb_data['tags'], text.split()):
+                    if tag.startswith('B-ARG0'):
+                        args['ARG0'] = words
+                    elif tag.startswith('B-ARG1'):
+                        args['ARG1'] = words
+                    elif tag.startswith('B-ARG2'):
+                        args['ARG2'] = words
+                    elif tag.startswith('I-ARG0') and 'ARG0' in args:
+                        args['ARG0'] += ' ' + words
+                    elif tag.startswith('I-ARG1') and 'ARG1' in args:
+                        args['ARG1'] += ' ' + words
+                    elif tag.startswith('I-ARG2') and 'ARG2' in args:
+                        args['ARG2'] += ' ' + words
+                
+                # Create relations from arguments
+                if 'ARG0' in args and 'ARG1' in args:
+                    relations.append((args['ARG0'], predicate, args['ARG1']))
+                if 'ARG0' in args and 'ARG2' in args:
+                    relations.append((args['ARG0'], predicate + ' to', args['ARG2']))
+            
+            return relations
+            
+        except ImportError:
+            logging.debug("AllenNLP SRL not available. Skipping semantic role extraction.")
+            return []
+        
+    def _extract_with_coreference(self, text: str) -> List[Tuple[str, str, str]]:
+        """
+        Extract relations with coreference resolution to connect entities.
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            List of (subject, predicate, object) tuples with resolved references
+        """
+        try:
+            import neuralcoref
+            
+            # Initialize neuralcoref if not already done
+            if not hasattr(self, 'coref_nlp'):
+                self.coref_nlp = spacy.load('en_core_web_sm')
+                neuralcoref.add_to_pipe(self.coref_nlp)
+                logging.info("Coreference resolution model loaded successfully")
+            
+            # Process the text
+            doc = self.coref_nlp(text)
+            
+            # Get resolved text with pronouns replaced by their referents
+            resolved_text = doc._.coref_resolved
+            
+            # Extract relations from resolved text using standard method
+            # First, parse the resolved text with the standard spaCy model
+            resolved_doc = self.nlp(resolved_text)
+            
+            relations = []
+            
+            # Extract SVO triples from each sentence in the resolved text
+            for sent in resolved_doc.sents:
+                relations.extend(self._extract_svo_from_dependency(sent))
+            
+            return relations
+            
+        except ImportError:
+            logging.debug("neuralcoref not available. Skipping coreference resolution.")
+            return []
         
     def _get_span_text(self, token) -> str:
         """
@@ -1020,6 +1297,7 @@ class GraphStore:
     def process_text_to_graph(self, text: str, source: str = None) -> int:
         """
         Process text to extract entities and relations and add to the graph.
+        Uses advanced NLP techniques for high-quality knowledge extraction.
         
         Args:
             text: Text to process
@@ -1031,69 +1309,165 @@ class GraphStore:
         relations_added = 0
         entities_added = 0
         
-        # Extract entities
-        entities = self.extract_entities(text)
-        
         logging.debug(f"Processing text for graph: '{text[:50]}...'")
+        
+        # Try coreference resolution first if available
+        resolved_text = text
+        coreference_clusters = []
+        mentions_map = {}  # Maps mention text to canonical entity
+
+        try:
+            if SPACY_ENABLED:
+                # Try to load and use neuralcoref for coreference resolution
+                import neuralcoref
+                if not hasattr(self, 'coref_nlp'):
+                    # Initialize neuralcoref if not already done
+                    self.coref_nlp = spacy.load('en_core_web_sm')
+                    neuralcoref.add_to_pipe(self.coref_nlp)
+                    logging.info("Coreference resolution model loaded successfully")
+                
+                # Process the text for coreference resolution
+                coref_doc = self.coref_nlp(text)
+                
+                # Get resolved text with pronouns replaced
+                resolved_text = coref_doc._.coref_resolved
+                
+                # Store coreference clusters for later entity merging
+                coreference_clusters = coref_doc._.coref_clusters if hasattr(coref_doc._, 'coref_clusters') else []
+                
+                # Build a mention map for entity consolidation
+                for cluster in coreference_clusters:
+                    main_entity = cluster.main.text
+                    for mention in cluster.mentions:
+                        mentions_map[mention.text] = main_entity
+                
+                logging.debug(f"Performed coreference resolution. Clusters found: {len(coreference_clusters)}")
+        except ImportError:
+            logging.debug("neuralcoref not available, skipping coreference resolution")
+        except Exception as e:
+            logging.error(f"Error in coreference resolution: {e}")
+            resolved_text = text  # Fall back to original text
+        
+        # Extract entities from the resolved text
+        entities = self.extract_entities(resolved_text)
         logging.debug(f"Extracted {len(entities)} entities")
         
-        # If SpaCy didn't find any entities, try a simpler approach to extract potential entities
-        if not entities and SPACY_ENABLED and self.nlp is not None:
-            try:
-                doc = self.nlp(text)
+        # Extract domain-specific entities 
+        try:
+            domain_entities = self._extract_domain_specific_entities(resolved_text)
+            # Add domain entities that don't overlap with already extracted entities
+            for domain_entity in domain_entities:
+                overlap = False
+                for entity in entities:
+                    if (domain_entity['start'] >= entity['start'] and domain_entity['start'] < entity['end']) or \
+                       (domain_entity['end'] > entity['start'] and domain_entity['end'] <= entity['end']):
+                        overlap = True
+                        break
+                if not overlap:
+                    entities.append(domain_entity)
+        except Exception as e:
+            logging.error(f"Error extracting domain-specific entities: {e}")
+        
+        # Handle coreference clusters - ensure entities mentioned in different ways are tracked
+        if coreference_clusters:
+            # Add canonical entities from coreference clusters if not already present
+            for cluster in coreference_clusters:
+                main_mention = cluster.main
+                main_text = main_mention.text
                 
-                # Extract noun phrases as potential entities
-                for chunk in doc.noun_chunks:
-                    if len(chunk.text) > 2:  # Skip very short chunks
-                        entities.append({
-                            'text': chunk.text,
-                            'type': 'NOUN_PHRASE',  # Generic type for noun phrases
-                            'start': chunk.start_char,
-                            'end': chunk.end_char
-                        })
-                        
-                # Extract proper names that might have been missed
-                for token in doc:
-                    if token.pos_ == "PROPN" and len(token.text) > 2:
-                        # Check if this proper noun is already part of an entity
-                        is_part_of_entity = False
-                        for entity in entities:
-                            if token.idx >= entity['start'] and token.idx + len(token.text) <= entity['end']:
-                                is_part_of_entity = True
-                                break
-                                
-                        if not is_part_of_entity:
-                            entities.append({
-                                'text': token.text,
-                                'type': 'PROPER_NOUN',
-                                'start': token.idx,
-                                'end': token.idx + len(token.text)
-                            })
-                            
-                logging.debug(f"Added {len(entities)} additional entities using noun phrases and proper nouns")
+                # Check if this entity is already extracted
+                already_exists = False
+                for entity in entities:
+                    if entity['text'] == main_text:
+                        already_exists = True
+                        # Add mentions as metadata
+                        if 'mentions' not in entity:
+                            entity['mentions'] = [m.text for m in cluster.mentions]
+                        break
                 
-            except Exception as e:
-                logging.error(f"Error extracting additional entities: {e}")
+                # If not found, add it
+                if not already_exists:
+                    entities.append({
+                        'text': main_text,
+                        'type': 'COREF',
+                        'start': main_mention.start_char,
+                        'end': main_mention.end_char,
+                        'mentions': [m.text for m in cluster.mentions]
+                    })
         
         # Map of entity text to entity ID
         entity_ids = {}
         
         # Add all entities to graph
         for entity_info in entities:
+            entity_text = entity_info["text"]
+            entity_type = entity_info["type"]
+            
+            # Skip very short entities unless they are special types
+            if len(entity_text) <= 2 and entity_type not in ['PERSON', 'ORG', 'GPE', 'LOC', 'DATE', 'TIME', 'MONEY']:
+                continue
+                
+            # Prepare metadata with source and any mentions
+            entity_metadata = {"source": source} if source else {}
+            
+            # Add mention information from coreference resolution
+            if 'mentions' in entity_info:
+                entity_metadata['mentions'] = entity_info['mentions']
+            
+            # Add entity to graph
             entity_id = self.add_entity(
-                entity=entity_info["text"],
-                entity_type=entity_info["type"],
-                metadata={"source": source} if source else None
+                entity=entity_text,
+                entity_type=entity_type,
+                metadata=entity_metadata
             )
             
             if entity_id >= 0:
-                entity_ids[entity_info["text"]] = entity_id
+                entity_ids[entity_text] = entity_id
                 entities_added += 1
+                
+                # Also map all mentions of this entity to the same ID
+                if entity_text in mentions_map.values():
+                    # This is a canonical entity, map all its mentions
+                    for mention, canonical in mentions_map.items():
+                        if canonical == entity_text and mention != entity_text:
+                            entity_ids[mention] = entity_id
         
-        # Extract relations using SpaCy
-        relations = self.extract_relations(text)
-        
+        # Extract relations from the resolved text
+        relations = self.extract_relations(resolved_text)
         logging.debug(f"Extracted {len(relations)} relations")
+        
+        # Try semantic role labeling for additional relation extraction
+        try:
+            srl_relations = self._extract_with_semantic_roles(resolved_text)
+            if srl_relations:
+                # Add new relations not already in the list
+                existing_relations = set((s, p, o) for s, p, o in relations)
+                for s, p, o in srl_relations:
+                    if (s, p, o) not in existing_relations:
+                        relations.append((s, p, o))
+                logging.debug(f"Added {len(srl_relations)} relations from semantic role labeling")
+        except Exception as e:
+            logging.debug(f"Semantic role labeling extraction not available: {e}")
+            
+        # Try additional relation patterns based on syntactic dependency parsing
+        if SPACY_ENABLED and self.nlp is not None and not relations:
+            try:
+                # Parse text
+                doc = self.nlp(resolved_text)
+                
+                # Extract from each sentence
+                for sent in doc.sents:
+                    # Get SVO triples
+                    svo_triples = self._extract_svo_from_dependency(sent)
+                    relations.extend(svo_triples)
+                    
+                    # Get prepositional relations
+                    prep_relations = self._extract_prep_relations(sent)
+                    relations.extend(prep_relations)
+                    
+                logging.debug(f"Added {len(relations)} relations from dependency parsing")
+            except Exception as e:
+                logging.error(f"Error extracting relations from dependencies: {e}")
         
         # If no relations were found with standard extraction, try a simple subject-verb-object approach
         if not relations and len(entities) >= 2:
@@ -1105,13 +1479,36 @@ class GraphStore:
                 # Connect entities that appear close to each other
                 for i in range(len(sorted_entities) - 1):
                     for j in range(i + 1, min(i + 3, len(sorted_entities))):
-                        # If entities are close enough in text
+                        # If entities are close enough in text (within 50 chars)
                         if sorted_entities[j]['start'] - sorted_entities[i]['end'] < 50:
-                            entity_pairs.append((
-                                sorted_entities[i]['text'],
-                                "related_to",
-                                sorted_entities[j]['text']
-                            ))
+                            # Try to find a meaningful predicate between them
+                            between_text = resolved_text[sorted_entities[i]['end']:sorted_entities[j]['start']].strip()
+                            
+                            if between_text:
+                                # Clean up the between text to get a reasonable predicate
+                                predicate = between_text
+                                for stopword in [" the ", " a ", " an ", " and ", " or ", " but ", " of "]:
+                                    predicate = predicate.replace(stopword, " ")
+                                predicate = predicate.strip()
+                                
+                                if predicate:
+                                    entity_pairs.append((
+                                        sorted_entities[i]['text'],
+                                        predicate,
+                                        sorted_entities[j]['text']
+                                    ))
+                                else:
+                                    entity_pairs.append((
+                                        sorted_entities[i]['text'],
+                                        "related_to",
+                                        sorted_entities[j]['text']
+                                    ))
+                            else:
+                                entity_pairs.append((
+                                    sorted_entities[i]['text'],
+                                    "related_to",
+                                    sorted_entities[j]['text']
+                                ))
                 
                 # Add these as backup relations
                 relations.extend(entity_pairs)
@@ -1121,23 +1518,41 @@ class GraphStore:
                 logging.error(f"Error creating backup relations: {e}")
         
         # Add relations to graph
+        added_relation_keys = set()  # To avoid duplicates
+        
         for subject, predicate, obj in relations:
             # Skip relations with empty components
             if not subject.strip() or not predicate.strip() or not obj.strip():
+                continue
+            
+            # Skip self-relations (entity related to itself)
+            if subject.strip() == obj.strip():
                 continue
                 
             # Normalize predicate to create consistent relation types
             predicate = predicate.lower().strip()
             
+            # Create a key to detect duplicates
+            relation_key = (subject.strip(), predicate, obj.strip())
+            
+            # Skip if already added
+            if relation_key in added_relation_keys:
+                continue
+                
+            # Handle coreference - if subject or object is a mention, use the canonical entity
+            canonical_subject = mentions_map.get(subject, subject)
+            canonical_object = mentions_map.get(obj, obj)
+            
             success = self.add_relation(
-                source_entity=subject,
+                source_entity=canonical_subject,
                 relation_type=predicate,
-                target_entity=obj,
+                target_entity=canonical_object,
                 metadata={"source": source} if source else None
             )
             
             if success:
                 relations_added += 1
+                added_relation_keys.add(relation_key)
         
         logging.debug(f"Added {entities_added} entities and {relations_added} relations to graph")
         
