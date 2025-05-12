@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved error handling and fallback in Chain of Agents
 - Streaming response support
 - Command line interface
+- Flexible ontology system with inheritance hierarchies (OntologyClass, RelationType)
+- Support for n-ary relationships beyond simple triples
+- Metadata framework for tracking provenance, confidence, and temporal information
+- Enhanced relation typing with inheritance through the ontology system
 
 ### Fixed
 - Memory tier limit update function

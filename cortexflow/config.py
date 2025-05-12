@@ -33,6 +33,16 @@ class CortexFlowConfig:
     max_graph_hops: int = 3
     graph_weight: float = 0.5
     
+    # Ontology settings
+    use_ontology: bool = False
+    enable_ontology_evolution: bool = True
+    ontology_confidence_threshold: float = 0.7
+    
+    # Metadata framework settings
+    track_provenance: bool = True
+    track_confidence: bool = True
+    track_temporal: bool = True
+    
     # Chain of Agents settings
     use_chain_of_agents: bool = False
     chain_complexity_threshold: int = 5  # Minimum number of words to trigger CoA
@@ -93,6 +103,26 @@ class CortexFlowConfig:
             
         if not hasattr(self, 'graph_weight'):
             self.graph_weight = 0.5
+            
+        # Ontology backward compatibility
+        if not hasattr(self, 'use_ontology'):
+            self.use_ontology = False
+            
+        if not hasattr(self, 'enable_ontology_evolution'):
+            self.enable_ontology_evolution = True
+            
+        if not hasattr(self, 'ontology_confidence_threshold'):
+            self.ontology_confidence_threshold = 0.7
+            
+        # Metadata framework backward compatibility
+        if not hasattr(self, 'track_provenance'):
+            self.track_provenance = True
+            
+        if not hasattr(self, 'track_confidence'):
+            self.track_confidence = True
+            
+        if not hasattr(self, 'track_temporal'):
+            self.track_temporal = True
             
         if not hasattr(self, 'use_ml_classifier'):
             self.use_ml_classifier = False
@@ -168,6 +198,12 @@ class CortexFlowConfig:
             "enable_multi_hop_queries": self.enable_multi_hop_queries,
             "max_graph_hops": self.max_graph_hops,
             "graph_weight": self.graph_weight,
+            "use_ontology": self.use_ontology,
+            "enable_ontology_evolution": self.enable_ontology_evolution,
+            "ontology_confidence_threshold": self.ontology_confidence_threshold,
+            "track_provenance": self.track_provenance,
+            "track_confidence": self.track_confidence,
+            "track_temporal": self.track_temporal,
             "use_chain_of_agents": self.use_chain_of_agents,
             "chain_complexity_threshold": self.chain_complexity_threshold,
             "chain_agent_count": self.chain_agent_count,

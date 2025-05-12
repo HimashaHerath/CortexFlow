@@ -30,6 +30,12 @@ except ImportError:
     logging.warning("spacy not found. Automatic entity extraction will be limited.")
 
 from cortexflow.config import CortexFlowConfig
+try:
+    from cortexflow.ontology import Ontology
+    ONTOLOGY_ENABLED = True
+except ImportError:
+    ONTOLOGY_ENABLED = False
+    logging.warning("Ontology module not found. Advanced knowledge graph capabilities will be limited.")
 
 class GraphStore:
     """Knowledge graph storage and query functionality for GraphRAG."""
@@ -63,13 +69,22 @@ class GraphStore:
             except Exception as e:
                 logging.error(f"Error loading Spacy model: {e}")
         
+        # Initialize ontology if available
+        self.ontology = None
+        if ONTOLOGY_ENABLED:
+            try:
+                self.ontology = Ontology(self.db_path)
+                logging.info("Ontology system initialized successfully")
+            except Exception as e:
+                logging.error(f"Error initializing ontology: {e}")
+        
         # Initialize graph database tables
         self._init_db()
         
         # Load existing graph from database
         self._load_graph_from_db()
         
-        logging.info(f"Graph store initialized with NetworkX: {NETWORKX_ENABLED}, Spacy: {SPACY_ENABLED}")
+        logging.info(f"Graph store initialized with NetworkX: {NETWORKX_ENABLED}, Spacy: {SPACY_ENABLED}, Ontology: {ONTOLOGY_ENABLED}")
     
     def _init_db(self):
         """Initialize the SQLite database with required tables for graph storage."""
@@ -110,11 +125,86 @@ class GraphStore:
         )
         ''')
         
+        # Create table for n-ary relationships
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS nary_relationships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            relation_type TEXT NOT NULL,
+            metadata TEXT,
+            provenance TEXT,
+            confidence REAL,
+            timestamp REAL
+        )
+        ''')
+        
+        # Create table for n-ary relationship participants
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS nary_participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            relationship_id INTEGER NOT NULL,
+            entity_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            metadata TEXT,
+            timestamp REAL,
+            FOREIGN KEY (relationship_id) REFERENCES nary_relationships (id),
+            FOREIGN KEY (entity_id) REFERENCES graph_entities (id),
+            UNIQUE(relationship_id, entity_id, role)
+        )
+        ''')
+        
         # Create index for faster lookups
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity ON graph_entities(entity)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_source ON graph_relationships(source_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_target ON graph_relationships(target_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation ON graph_relationships(relation_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_type ON nary_relationships(relation_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_participant ON nary_participants(relationship_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_entity ON nary_participants(entity_id)')
+        
+        # Alter existing tables to add new metadata columns if they don't exist
+        try:
+            # Check if provenance column exists in graph_relationships
+            cursor.execute("PRAGMA table_info(graph_relationships)")
+            columns = [info[1] for info in cursor.fetchall()]
+            
+            # Add provenance column if it doesn't exist
+            if "provenance" not in columns:
+                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN provenance TEXT")
+                
+            # Add confidence column if it doesn't exist
+            if "confidence" not in columns:
+                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN confidence REAL DEFAULT 0.5")
+                
+            # Add temporal_start column if it doesn't exist
+            if "temporal_start" not in columns:
+                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN temporal_start TEXT")
+                
+            # Add temporal_end column if it doesn't exist
+            if "temporal_end" not in columns:
+                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN temporal_end TEXT")
+                
+            # Check if similar columns need to be added to graph_entities
+            cursor.execute("PRAGMA table_info(graph_entities)")
+            columns = [info[1] for info in cursor.fetchall()]
+            
+            # Add provenance column if it doesn't exist
+            if "provenance" not in columns:
+                cursor.execute("ALTER TABLE graph_entities ADD COLUMN provenance TEXT")
+                
+            # Add confidence column if it doesn't exist
+            if "confidence" not in columns:
+                cursor.execute("ALTER TABLE graph_entities ADD COLUMN confidence REAL DEFAULT 0.8")
+                
+            # Add temporal_start column if it doesn't exist
+            if "temporal_start" not in columns:
+                cursor.execute("ALTER TABLE graph_entities ADD COLUMN temporal_start TEXT")
+                
+            # Add temporal_end column if it doesn't exist
+            if "temporal_end" not in columns:
+                cursor.execute("ALTER TABLE graph_entities ADD COLUMN temporal_end TEXT")
+                
+        except sqlite3.OperationalError as e:
+            logging.error(f"Error adding metadata columns: {e}")
         
         if self.conn is not None:
             self.conn.commit()
@@ -730,14 +820,20 @@ class GraphStore:
         # Return the span text
         return token.doc[leftmost.i:rightmost.i + 1].text
     
-    def add_entity(self, entity: str, entity_type: str = None, metadata: Dict[str, Any] = None) -> int:
+    def add_entity(self, entity: str, entity_type: str = None, metadata: Dict[str, Any] = None,
+                  provenance: str = None, confidence: float = 0.8,
+                  temporal_start: str = None, temporal_end: str = None) -> int:
         """
-        Add an entity to the knowledge graph.
+        Add an entity to the knowledge graph with enhanced metadata.
         
         Args:
             entity: Entity name/text
             entity_type: Type of entity (e.g., person, location, etc.)
             metadata: Additional entity metadata
+            provenance: Source of the entity information
+            confidence: Confidence score for this entity (0.0 to 1.0)
+            temporal_start: Start time/date for temporal validity
+            temporal_end: End time/date for temporal validity
             
         Returns:
             Entity ID
@@ -755,29 +851,55 @@ class GraphStore:
             cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity,))
             existing = cursor.fetchone()
             
+            # If ontology is enabled, check the entity type in the ontology
+            if ONTOLOGY_ENABLED and self.ontology and entity_type:
+                if not self.ontology.get_class(entity_type):
+                    # Try to suggest a new class
+                    suggested_class = self.ontology.suggest_new_class(
+                        entity_name=entity,
+                        entity_type=entity_type,
+                        entity_properties={}
+                    )
+                    
+                    if suggested_class:
+                        # Add the suggested class to the ontology
+                        self.ontology.add_class(suggested_class)
+                        logging.info(f"Added suggested ontology class: {entity_type}")
+            
             if existing:
                 entity_id = existing[0]
                 # Update entity if needed
                 cursor.execute('''
                     UPDATE graph_entities 
-                    SET entity_type = ?, metadata = ?, timestamp = ?
+                    SET entity_type = ?, metadata = ?, timestamp = ?, 
+                        provenance = ?, confidence = ?, 
+                        temporal_start = ?, temporal_end = ?
                     WHERE id = ?
                 ''', (
                     entity_type, 
                     json.dumps(metadata) if metadata else None,
                     timestamp,
+                    provenance,
+                    confidence,
+                    temporal_start,
+                    temporal_end,
                     entity_id
                 ))
             else:
                 # Insert new entity
                 cursor.execute('''
-                    INSERT INTO graph_entities (entity, entity_type, metadata, timestamp) 
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO graph_entities 
+                    (entity, entity_type, metadata, timestamp, provenance, confidence, temporal_start, temporal_end) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     entity, 
                     entity_type, 
                     json.dumps(metadata) if metadata else None,
-                    timestamp
+                    timestamp,
+                    provenance,
+                    confidence,
+                    temporal_start,
+                    temporal_end
                 ))
                 entity_id = cursor.lastrowid
                 
@@ -785,12 +907,20 @@ class GraphStore:
             
             # Add to NetworkX graph if enabled
             if NETWORKX_ENABLED and self.graph is not None:
-                self.graph.add_node(
-                    entity_id, 
-                    name=entity,
-                    entity_type=entity_type,
-                    **(metadata or {})
-                )
+                node_attrs = {
+                    'name': entity,
+                    'entity_type': entity_type,
+                    'provenance': provenance,
+                    'confidence': confidence,
+                    'temporal_start': temporal_start,
+                    'temporal_end': temporal_end,
+                    'timestamp': timestamp
+                }
+                
+                if metadata:
+                    node_attrs.update(metadata)
+                    
+                self.graph.add_node(entity_id, **node_attrs)
             
             return entity_id
             
@@ -804,9 +934,11 @@ class GraphStore:
                 conn.close()
     
     def add_relation(self, source_entity: str, relation_type: str, target_entity: str, 
-                     weight: float = 1.0, metadata: Dict[str, Any] = None) -> bool:
+                     weight: float = 1.0, metadata: Dict[str, Any] = None,
+                     provenance: str = None, confidence: float = 0.5,
+                     temporal_start: str = None, temporal_end: str = None) -> bool:
         """
-        Add a relation between two entities.
+        Add a relation between two entities with enhanced metadata.
         
         Args:
             source_entity: Source entity text
@@ -814,6 +946,10 @@ class GraphStore:
             target_entity: Target entity text
             weight: Weight/confidence of the relation
             metadata: Additional relation metadata
+            provenance: Source of the relation information
+            confidence: Confidence score for this relation (0.0 to 1.0)
+            temporal_start: Start time/date for temporal validity
+            temporal_end: End time/date for temporal validity
             
         Returns:
             True if relation was added successfully
@@ -837,14 +973,29 @@ class GraphStore:
             
             # If either entity doesn't exist, create them
             if not source:
-                source_id = self.add_entity(source_entity)
+                source_id = self.add_entity(source_entity, provenance=provenance, confidence=confidence)
             else:
                 source_id = source[0]
                 
             if not target:
-                target_id = self.add_entity(target_entity)
+                target_id = self.add_entity(target_entity, provenance=provenance, confidence=confidence)
             else:
                 target_id = target[0]
+            
+            # If ontology is enabled, check the relation type in the ontology
+            if ONTOLOGY_ENABLED and self.ontology:
+                if not self.ontology.get_relation_type(relation_type):
+                    # Try to suggest a new relation type
+                    suggested_relation = self.ontology.suggest_new_relation_type(
+                        source_entity=source_entity,
+                        relation=relation_type,
+                        target_entity=target_entity
+                    )
+                    
+                    if suggested_relation:
+                        # Add the suggested relation type to the ontology
+                        self.ontology.add_relation_type(suggested_relation)
+                        logging.info(f"Added suggested ontology relation type: {relation_type}")
             
             # Check if relation already exists
             cursor.execute('''
@@ -857,40 +1008,58 @@ class GraphStore:
                 # Update existing relation
                 cursor.execute('''
                     UPDATE graph_relationships 
-                    SET weight = ?, metadata = ?, timestamp = ?
+                    SET weight = ?, metadata = ?, timestamp = ?,
+                        provenance = ?, confidence = ?,
+                        temporal_start = ?, temporal_end = ?
                     WHERE id = ?
                 ''', (
                     weight,
                     json.dumps(metadata) if metadata else None,
                     timestamp,
+                    provenance,
+                    confidence,
+                    temporal_start,
+                    temporal_end,
                     existing[0]
                 ))
             else:
                 # Insert new relation
                 cursor.execute('''
                     INSERT INTO graph_relationships 
-                    (source_id, target_id, relation_type, weight, metadata, timestamp) 
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (source_id, target_id, relation_type, weight, metadata, timestamp,
+                     provenance, confidence, temporal_start, temporal_end) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     source_id, 
                     target_id, 
                     relation_type,
                     weight,
                     json.dumps(metadata) if metadata else None,
-                    timestamp
+                    timestamp,
+                    provenance,
+                    confidence,
+                    temporal_start,
+                    temporal_end
                 ))
             
             conn.commit()
             
             # Add to NetworkX graph if enabled
             if NETWORKX_ENABLED and self.graph is not None:
-                self.graph.add_edge(
-                    source_id, 
-                    target_id,
-                    relation=relation_type,
-                    weight=weight,
-                    **(metadata or {})
-                )
+                edge_attrs = {
+                    'relation': relation_type,
+                    'weight': weight,
+                    'provenance': provenance,
+                    'confidence': confidence,
+                    'temporal_start': temporal_start,
+                    'temporal_end': temporal_end,
+                    'timestamp': timestamp
+                }
+                
+                if metadata:
+                    edge_attrs.update(metadata)
+                    
+                self.graph.add_edge(source_id, target_id, **edge_attrs)
             
             return True
             
@@ -903,300 +1072,142 @@ class GraphStore:
             if self.conn is None:
                 conn.close()
     
-    def query_entities(self, entity_type: str = None, limit: int = 100) -> List[Dict[str, Any]]:
+    def add_nary_relation(self, relation_type: str, participants: Dict[str, str], 
+                        metadata: Dict[str, Any] = None, provenance: str = None, 
+                        confidence: float = 0.5) -> int:
         """
-        Query entities by type.
+        Add an n-ary relation involving multiple entities with different roles.
         
         Args:
-            entity_type: Type of entities to query (None for all)
-            limit: Maximum number of results
+            relation_type: Type of the n-ary relation
+            participants: Dictionary mapping role names to entity names
+            metadata: Additional relation metadata
+            provenance: Source of the relation information
+            confidence: Confidence score for this relation (0.0 to 1.0)
             
         Returns:
-            List of entity dictionaries
+            ID of the created n-ary relation or -1 if failed
         """
         if self.conn is not None:
             conn = self.conn
         else:
             conn = sqlite3.connect(self.db_path)
             
-        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        timestamp = time.time()
         
         try:
-            if entity_type:
-                cursor.execute('''
-                    SELECT id, entity, entity_type, metadata, timestamp 
-                    FROM graph_entities 
-                    WHERE entity_type = ?
-                    LIMIT ?
-                ''', (entity_type, limit))
-            else:
-                cursor.execute('''
-                    SELECT id, entity, entity_type, metadata, timestamp 
-                    FROM graph_entities
-                    LIMIT ?
-                ''', (limit,))
-                
-            results = []
-            for row in cursor.fetchall():
-                results.append({
-                    'id': row['id'],
-                    'entity': row['entity'],
-                    'type': row['entity_type'],
-                    'metadata': json.loads(row['metadata']) if row['metadata'] else {},
-                    'timestamp': row['timestamp']
-                })
-            
-            return results
-            
-        except Exception as e:
-            logging.error(f"Error querying entities: {e}")
-            return []
-            
-        finally:
-            if self.conn is None:
-                conn.close()
-    
-    def get_entity_neighbors(self, entity: str, relation_type: str = None, 
-                            direction: str = "outgoing", limit: int = 100) -> List[Dict[str, Any]]:
-        """
-        Get neighboring entities connected to the specified entity.
-        
-        Args:
-            entity: Entity text
-            relation_type: Type of relations to consider (None for all)
-            direction: "outgoing", "incoming", or "both"
-            limit: Maximum number of results
-            
-        Returns:
-            List of connected entity dictionaries with relation info
-        """
-        if self.conn is not None:
-            conn = self.conn
-        else:
-            conn = sqlite3.connect(self.db_path)
-            
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        try:
-            # First get the entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity,))
-            entity_row = cursor.fetchone()
-            
-            if not entity_row:
-                return []  # Entity not found
-                
-            entity_id = entity_row['id']
-            results = []
-            
-            # Query outgoing relations
-            if direction in ["outgoing", "both"]:
-                query = '''
-                    SELECT e.id, e.entity, e.entity_type, e.metadata, 
-                           r.relation_type, r.weight, r.metadata as rel_metadata 
-                    FROM graph_relationships r
-                    JOIN graph_entities e ON r.target_id = e.id
-                    WHERE r.source_id = ? 
-                '''
-                params = [entity_id]
-                
-                if relation_type:
-                    query += " AND r.relation_type = ? "
-                    params.append(relation_type)
-                    
-                query += " LIMIT ? "
-                params.append(limit)
-                
-                cursor.execute(query, params)
-                
-                for row in cursor.fetchall():
-                    results.append({
-                        'id': row['id'],
-                        'entity': row['entity'],
-                        'type': row['entity_type'],
-                        'metadata': json.loads(row['metadata']) if row['metadata'] else {},
-                        'relation': row['relation_type'],
-                        'weight': row['weight'],
-                        'rel_metadata': json.loads(row['rel_metadata']) if row['rel_metadata'] else {},
-                        'direction': 'outgoing'
-                    })
-            
-            # Query incoming relations
-            if direction in ["incoming", "both"] and len(results) < limit:
-                remaining = limit - len(results)
-                query = '''
-                    SELECT e.id, e.entity, e.entity_type, e.metadata, 
-                           r.relation_type, r.weight, r.metadata as rel_metadata 
-                    FROM graph_relationships r
-                    JOIN graph_entities e ON r.source_id = e.id
-                    WHERE r.target_id = ? 
-                '''
-                params = [entity_id]
-                
-                if relation_type:
-                    query += " AND r.relation_type = ? "
-                    params.append(relation_type)
-                    
-                query += " LIMIT ? "
-                params.append(remaining)
-                
-                cursor.execute(query, params)
-                
-                for row in cursor.fetchall():
-                    results.append({
-                        'id': row['id'],
-                        'entity': row['entity'],
-                        'type': row['entity_type'],
-                        'metadata': json.loads(row['metadata']) if row['metadata'] else {},
-                        'relation': row['relation_type'],
-                        'weight': row['weight'],
-                        'rel_metadata': json.loads(row['rel_metadata']) if row['rel_metadata'] else {},
-                        'direction': 'incoming'
-                    })
-            
-            return results
-            
-        except Exception as e:
-            logging.error(f"Error getting entity neighbors: {e}")
-            return []
-            
-        finally:
-            if self.conn is None:
-                conn.close()
-    
-    def path_query(self, start_entity: str, end_entity: str, max_hops: int = 3) -> List[List[Dict[str, Any]]]:
-        """
-        Find paths between two entities in the knowledge graph.
-        
-        Args:
-            start_entity: Starting entity text
-            end_entity: Target entity text
-            max_hops: Maximum path length
-            
-        Returns:
-            List of paths, where each path is a list of node dictionaries
-        """
-        if not NETWORKX_ENABLED or self.graph is None:
-            logging.warning("NetworkX not available for path queries")
-            return []
-            
-        if self.conn is not None:
-            conn = self.conn
-        else:
-            conn = sqlite3.connect(self.db_path)
-            
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        try:
-            # Find entity IDs
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (start_entity,))
-            start_row = cursor.fetchone()
-            
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (end_entity,))
-            end_row = cursor.fetchone()
-            
-            if not start_row or not end_row:
-                return []  # One or both entities not found
-                
-            start_id = start_row['id']
-            end_id = end_row['id']
-            
-            # Try to find all simple paths between the entities
-            try:
-                all_paths = list(nx.all_simple_paths(
-                    self.graph, 
-                    source=start_id, 
-                    target=end_id, 
-                    cutoff=max_hops
-                ))
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                return []
-            
-            # Convert path node IDs to detailed information
-            result_paths = []
-            
-            for path in all_paths:
-                path_details = []
-                
-                for i in range(len(path)):
-                    node_id = path[i]
-                    
-                    # Get node details
-                    cursor.execute('''
-                        SELECT id, entity, entity_type, metadata
-                        FROM graph_entities WHERE id = ?
-                    ''', (node_id,))
-                    node = cursor.fetchone()
-                    
-                    if not node:
-                        continue
-                        
-                    node_details = {
-                        'id': node['id'],
-                        'entity': node['entity'],
-                        'type': node['entity_type'],
-                        'metadata': json.loads(node['metadata']) if node['metadata'] else {}
-                    }
-                    
-                    # Add edge details for connections
-                    if i < len(path) - 1:
-                        next_node_id = path[i + 1]
-                        
-                        cursor.execute('''
-                            SELECT relation_type, weight, metadata
-                            FROM graph_relationships 
-                            WHERE source_id = ? AND target_id = ?
-                        ''', (node_id, next_node_id))
-                        edge = cursor.fetchone()
-                        
-                        if edge:
-                            node_details['next_relation'] = {
-                                'type': edge['relation_type'],
-                                'weight': edge['weight'],
-                                'metadata': json.loads(edge['metadata']) if edge['metadata'] else {}
+            # If ontology is enabled, check the relation type in the ontology
+            if ONTOLOGY_ENABLED and self.ontology:
+                if not self.ontology.get_relation_type(relation_type):
+                    # Add a basic relation type if needed
+                    from cortexflow.ontology import RelationType
+                    self.ontology.add_relation_type(
+                        RelationType(
+                            name=relation_type,
+                            parent_types=["related_to"],
+                            metadata={
+                                "n_ary": True,
+                                "automatic": True,
+                                "confidence": 0.7
                             }
-                    
-                    path_details.append(node_details)
-                
-                result_paths.append(path_details)
+                        )
+                    )
+                    logging.info(f"Added n-ary relation type to ontology: {relation_type}")
             
-            return result_paths
+            # Insert the n-ary relation
+            cursor.execute('''
+                INSERT INTO nary_relationships 
+                (relation_type, metadata, provenance, confidence, timestamp) 
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                relation_type,
+                json.dumps(metadata) if metadata else None,
+                provenance,
+                confidence,
+                timestamp
+            ))
+            
+            relation_id = cursor.lastrowid
+            
+            # Add all participants
+            for role, entity_name in participants.items():
+                # Get or create the entity
+                cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity_name,))
+                entity_row = cursor.fetchone()
+                
+                if not entity_row:
+                    entity_id = self.add_entity(
+                        entity=entity_name, 
+                        provenance=provenance,
+                        confidence=confidence
+                    )
+                else:
+                    entity_id = entity_row[0]
+                
+                # Add the participant
+                cursor.execute('''
+                    INSERT INTO nary_participants
+                    (relationship_id, entity_id, role, timestamp)
+                    VALUES (?, ?, ?, ?)
+                ''', (
+                    relation_id,
+                    entity_id,
+                    role,
+                    timestamp
+                ))
+            
+            conn.commit()
+            
+            # Add to NetworkX graph if enabled (using a hypergraph-like representation)
+            if NETWORKX_ENABLED and self.graph is not None:
+                # Create a special node for the n-ary relation
+                relation_node_id = f"nary_{relation_id}"
+                self.graph.add_node(
+                    relation_node_id,
+                    relation_type=relation_type,
+                    n_ary=True,
+                    provenance=provenance,
+                    confidence=confidence,
+                    timestamp=timestamp,
+                    **(metadata or {})
+                )
+                
+                # Connect all participants to the relation node
+                for role, entity_name in participants.items():
+                    cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity_name,))
+                    entity_row = cursor.fetchone()
+                    if entity_row:
+                        entity_id = entity_row[0]
+                        self.graph.add_edge(
+                            entity_id,
+                            relation_node_id,
+                            role=role,
+                            weight=1.0,
+                            timestamp=timestamp
+                        )
+            
+            return relation_id
             
         except Exception as e:
-            logging.error(f"Error in path query: {e}")
-            return []
+            logging.error(f"Error adding n-ary relation: {e}")
+            conn.rollback()
+            return -1
             
         finally:
             if self.conn is None:
                 conn.close()
     
-    def build_knowledge_subgraph(self, query: str, max_nodes: int = 50) -> Dict[str, Any]:
+    def get_nary_relation(self, relation_id: int) -> Optional[Dict[str, Any]]:
         """
-        Build a knowledge subgraph relevant to the query.
+        Get details of an n-ary relation by ID.
         
         Args:
-            query: The query text
-            max_nodes: Maximum number of nodes in the subgraph
+            relation_id: ID of the n-ary relation
             
         Returns:
-            Dictionary with nodes and edges for the subgraph
+            Dictionary with relation details or None if not found
         """
-        if not NETWORKX_ENABLED or self.graph is None:
-            logging.warning("NetworkX not available for building subgraphs")
-            return {"nodes": [], "edges": []}
-            
-        # Extract entities from query
-        entities = self.extract_entities(query)
-        query_entity_texts = [e["text"] for e in entities]
-        
-        # Add common words in query in case NER misses important concepts
-        query_words = {w.lower() for w in query.split() if len(w) > 3}
-        
-        # Find relevant entities in the database
-        relevant_entities = set()
-        
         if self.conn is not None:
             conn = self.conn
         else:
@@ -1206,89 +1217,242 @@ class GraphStore:
         cursor = conn.cursor()
         
         try:
-            # Find exact matches for query entities
-            for entity_text in query_entity_texts:
-                cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity_text,))
-                match = cursor.fetchone()
-                if match:
-                    relevant_entities.add(match["id"])
+            # Get the relation details
+            cursor.execute('''
+                SELECT relation_type, metadata, provenance, confidence, timestamp
+                FROM nary_relationships
+                WHERE id = ?
+            ''', (relation_id,))
             
-            # Find fuzzy matches for query words
-            for word in query_words:
-                cursor.execute('SELECT id FROM graph_entities WHERE entity LIKE ?', (f"%{word}%",))
-                matches = cursor.fetchall()
-                for match in matches:
-                    relevant_entities.add(match["id"])
+            relation_row = cursor.fetchone()
             
-            # If we have relevant entities, expand subgraph
-            subgraph_nodes = set(relevant_entities)
-            subgraph_edges = set()
-            
-            if relevant_entities:
-                # Expand neighborhood for each relevant entity
-                for entity_id in relevant_entities:
-                    if len(subgraph_nodes) >= max_nodes:
-                        break
-                        
-                    # Get 1-hop neighbors
-                    cursor.execute('''
-                        SELECT source_id, target_id, relation_type
-                        FROM graph_relationships
-                        WHERE source_id = ? OR target_id = ?
-                    ''', (entity_id, entity_id))
-                    
-                    neighbors = cursor.fetchall()
-                    
-                    for neighbor in neighbors:
-                        source = neighbor["source_id"]
-                        target = neighbor["target_id"]
-                        relation = neighbor["relation_type"]
-                        
-                        subgraph_nodes.add(source)
-                        subgraph_nodes.add(target)
-                        subgraph_edges.add((source, target, relation))
-                        
-                        if len(subgraph_nodes) >= max_nodes:
-                            break
-            
-            # Retrieve details for all nodes and edges
-            nodes = []
-            edges = []
-            
-            # Get node details
-            for node_id in subgraph_nodes:
-                cursor.execute('''
-                    SELECT id, entity, entity_type, metadata
-                    FROM graph_entities WHERE id = ?
-                ''', (node_id,))
-                node = cursor.fetchone()
+            if not relation_row:
+                return None
                 
-                if node:
-                    nodes.append({
-                        'id': node['id'],
-                        'label': node['entity'],
-                        'type': node['entity_type'],
-                        'metadata': json.loads(node['metadata']) if node['metadata'] else {},
-                        'in_query': node['id'] in relevant_entities
-                    })
+            # Convert row to dictionary
+            relation = dict(relation_row)
             
-            # Get edge details
-            for edge in subgraph_edges:
-                source, target, relation = edge
-                edges.append({
-                    'from': source,
-                    'to': target,
-                    'label': relation
-                })
+            # Parse metadata JSON
+            if relation['metadata']:
+                relation['metadata'] = json.loads(relation['metadata'])
+            else:
+                relation['metadata'] = {}
+                
+            # Get all participants
+            cursor.execute('''
+                SELECT np.role, ge.entity, ge.entity_type, ge.id as entity_id
+                FROM nary_participants np
+                JOIN graph_entities ge ON np.entity_id = ge.id
+                WHERE np.relationship_id = ?
+            ''', (relation_id,))
             
-            return {
-                "nodes": nodes,
-                "edges": edges
-            }
+            participants = {}
+            for row in cursor.fetchall():
+                participants[row['role']] = {
+                    'entity': row['entity'],
+                    'entity_type': row['entity_type'],
+                    'entity_id': row['entity_id']
+                }
+                
+            relation['participants'] = participants
+            relation['id'] = relation_id
+            
+            return relation
             
         except Exception as e:
-            logging.error(f"Error building subgraph: {e}")
-            return {"nodes": [], "edges": []}
+            logging.error(f"Error getting n-ary relation: {e}")
+            return None
+            
+        finally:
+            if self.conn is None:
+                conn.close()
+    
+    def query_nary_relations(self, relation_type: str = None, 
+                          participant_entity: str = None, 
+                          participant_role: str = None,
+                          limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Query n-ary relations with optional filters.
+        
+        Args:
+            relation_type: Type of relation to filter by (optional)
+            participant_entity: Filter by entity name participating in the relation (optional)
+            participant_role: Filter by role in the relation (optional)
+            limit: Maximum number of results
+            
+        Returns:
+            List of n-ary relation dictionaries
+        """
+        if self.conn is not None:
+            conn = self.conn
+        else:
+            conn = sqlite3.connect(self.db_path)
+            
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            params = []
+            
+            # Start with base query
+            query = '''
+                SELECT DISTINCT nr.id as relation_id
+                FROM nary_relationships nr
+            '''
+            
+            # Add join conditions if needed
+            if participant_entity or participant_role:
+                query += '''
+                    JOIN nary_participants np ON nr.id = np.relationship_id
+                    JOIN graph_entities ge ON np.entity_id = ge.id
+                '''
+            
+            # Add WHERE clause
+            where_clauses = []
+            
+            if relation_type:
+                where_clauses.append("nr.relation_type = ?")
+                params.append(relation_type)
+                
+            if participant_entity:
+                where_clauses.append("ge.entity = ?")
+                params.append(participant_entity)
+                
+            if participant_role:
+                where_clauses.append("np.role = ?")
+                params.append(participant_role)
+                
+            if where_clauses:
+                query += " WHERE " + " AND ".join(where_clauses)
+                
+            # Add order and limit
+            query += " ORDER BY nr.timestamp DESC LIMIT ?"
+            params.append(limit)
+            
+            # Execute query to get relation IDs
+            cursor.execute(query, params)
+            relation_ids = [row['relation_id'] for row in cursor.fetchall()]
+            
+            # Get full details for each relation
+            results = []
+            for relation_id in relation_ids:
+                relation = self.get_nary_relation(relation_id)
+                if relation:
+                    results.append(relation)
+                    
+            return results
+            
+        except Exception as e:
+            logging.error(f"Error querying n-ary relations: {e}")
+            return []
+            
+        finally:
+            if self.conn is None:
+                conn.close()
+    
+    def get_entity_metadata(self, entity_id: int) -> Dict[str, Any]:
+        """
+        Get full metadata for an entity.
+        
+        Args:
+            entity_id: ID of the entity
+            
+        Returns:
+            Dictionary with entity metadata
+        """
+        if self.conn is not None:
+            conn = self.conn
+        else:
+            conn = sqlite3.connect(self.db_path)
+            
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                SELECT entity, entity_type, metadata, provenance, confidence, 
+                       temporal_start, temporal_end, timestamp
+                FROM graph_entities
+                WHERE id = ?
+            ''', (entity_id,))
+            
+            row = cursor.fetchone()
+            
+            if not row:
+                return {}
+                
+            result = dict(row)
+            
+            # Parse metadata JSON
+            if result['metadata']:
+                result['metadata'] = json.loads(result['metadata'])
+            else:
+                result['metadata'] = {}
+                
+            result['id'] = entity_id
+            
+            return result
+            
+        except Exception as e:
+            logging.error(f"Error getting entity metadata: {e}")
+            return {}
+            
+        finally:
+            if self.conn is None:
+                conn.close()
+    
+    def get_relation_metadata(self, relation_id: int) -> Dict[str, Any]:
+        """
+        Get full metadata for a relation.
+        
+        Args:
+            relation_id: ID of the relation
+            
+        Returns:
+            Dictionary with relation metadata
+        """
+        if self.conn is not None:
+            conn = self.conn
+        else:
+            conn = sqlite3.connect(self.db_path)
+            
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                SELECT source_id, target_id, relation_type, weight, metadata, 
+                       provenance, confidence, temporal_start, temporal_end, timestamp
+                FROM graph_relationships
+                WHERE id = ?
+            ''', (relation_id,))
+            
+            row = cursor.fetchone()
+            
+            if not row:
+                return {}
+                
+            result = dict(row)
+            
+            # Parse metadata JSON
+            if result['metadata']:
+                result['metadata'] = json.loads(result['metadata'])
+            else:
+                result['metadata'] = {}
+                
+            # Get source and target entity details
+            source = self.get_entity_metadata(result['source_id'])
+            target = self.get_entity_metadata(result['target_id'])
+            
+            result['source'] = source
+            result['target'] = target
+            result['id'] = relation_id
+            
+            return result
+            
+        except Exception as e:
+            logging.error(f"Error getting relation metadata: {e}")
+            return {}
             
         finally:
             if self.conn is None:
@@ -1296,267 +1460,155 @@ class GraphStore:
     
     def process_text_to_graph(self, text: str, source: str = None) -> int:
         """
-        Process text to extract entities and relations and add to the graph.
-        Uses advanced NLP techniques for high-quality knowledge extraction.
+        Process text to extract entities and relations and add them to the graph.
+        Enhanced to support n-ary relationships and metadata tracking.
+        
+        Args:
+            text: The text to process
+            source: The source of the text (for provenance)
+            
+        Returns:
+            Number of relations added to the graph
+        """
+        relations_added = 0
+        
+        try:
+            # Extract entities
+            entities = self.extract_entities(text)
+            
+            # Extract binary relations using existing methods
+            binary_relations = self.extract_relations(text)
+            
+            # Add binary relations to graph
+            for subj, pred, obj in binary_relations:
+                success = self.add_relation(
+                    source_entity=subj,
+                    relation_type=pred,
+                    target_entity=obj,
+                    provenance=source,
+                    confidence=0.7  # Default confidence for extracted relations
+                )
+                
+                if success:
+                    relations_added += 1
+            
+            # Try to extract n-ary relations with roles
+            nary_relations = self._extract_complex_events(text)
+            
+            # Add n-ary relations to graph
+            for relation in nary_relations:
+                relation_type = relation.get('type', 'event')
+                participants = relation.get('participants', {})
+                
+                if participants:
+                    nary_id = self.add_nary_relation(
+                        relation_type=relation_type,
+                        participants=participants,
+                        provenance=source,
+                        confidence=0.6  # Default confidence for n-ary relations
+                    )
+                    
+                    if nary_id > 0:
+                        relations_added += 1
+            
+            return relations_added
+            
+        except Exception as e:
+            logging.error(f"Error processing text to graph: {e}")
+            return 0
+    
+    def _extract_complex_events(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Extract complex events and scenarios as n-ary relations with roles.
         
         Args:
             text: Text to process
-            source: Source of the text for metadata
             
         Returns:
-            Number of relations added
+            List of n-ary relation dictionaries
         """
-        relations_added = 0
-        entities_added = 0
+        complex_events = []
         
-        logging.debug(f"Processing text for graph: '{text[:50]}...'")
-        
-        # Try coreference resolution first if available
-        resolved_text = text
-        coreference_clusters = []
-        mentions_map = {}  # Maps mention text to canonical entity
-
+        # Basic implementation using existing NLP capabilities
+        if not SPACY_ENABLED or not self.nlp:
+            return complex_events
+            
         try:
-            if SPACY_ENABLED:
-                # Try to load and use neuralcoref for coreference resolution
-                import neuralcoref
-                if not hasattr(self, 'coref_nlp'):
-                    # Initialize neuralcoref if not already done
-                    self.coref_nlp = spacy.load('en_core_web_sm')
-                    neuralcoref.add_to_pipe(self.coref_nlp)
-                    logging.info("Coreference resolution model loaded successfully")
-                
-                # Process the text for coreference resolution
-                coref_doc = self.coref_nlp(text)
-                
-                # Get resolved text with pronouns replaced
-                resolved_text = coref_doc._.coref_resolved
-                
-                # Store coreference clusters for later entity merging
-                coreference_clusters = coref_doc._.coref_clusters if hasattr(coref_doc._, 'coref_clusters') else []
-                
-                # Build a mention map for entity consolidation
-                for cluster in coreference_clusters:
-                    main_entity = cluster.main.text
-                    for mention in cluster.mentions:
-                        mentions_map[mention.text] = main_entity
-                
-                logging.debug(f"Performed coreference resolution. Clusters found: {len(coreference_clusters)}")
-        except ImportError:
-            logging.debug("neuralcoref not available, skipping coreference resolution")
-        except Exception as e:
-            logging.error(f"Error in coreference resolution: {e}")
-            resolved_text = text  # Fall back to original text
-        
-        # Extract entities from the resolved text
-        entities = self.extract_entities(resolved_text)
-        logging.debug(f"Extracted {len(entities)} entities")
-        
-        # Extract domain-specific entities 
-        try:
-            domain_entities = self._extract_domain_specific_entities(resolved_text)
-            # Add domain entities that don't overlap with already extracted entities
-            for domain_entity in domain_entities:
-                overlap = False
-                for entity in entities:
-                    if (domain_entity['start'] >= entity['start'] and domain_entity['start'] < entity['end']) or \
-                       (domain_entity['end'] > entity['start'] and domain_entity['end'] <= entity['end']):
-                        overlap = True
-                        break
-                if not overlap:
-                    entities.append(domain_entity)
-        except Exception as e:
-            logging.error(f"Error extracting domain-specific entities: {e}")
-        
-        # Handle coreference clusters - ensure entities mentioned in different ways are tracked
-        if coreference_clusters:
-            # Add canonical entities from coreference clusters if not already present
-            for cluster in coreference_clusters:
-                main_mention = cluster.main
-                main_text = main_mention.text
-                
-                # Check if this entity is already extracted
-                already_exists = False
-                for entity in entities:
-                    if entity['text'] == main_text:
-                        already_exists = True
-                        # Add mentions as metadata
-                        if 'mentions' not in entity:
-                            entity['mentions'] = [m.text for m in cluster.mentions]
-                        break
-                
-                # If not found, add it
-                if not already_exists:
-                    entities.append({
-                        'text': main_text,
-                        'type': 'COREF',
-                        'start': main_mention.start_char,
-                        'end': main_mention.end_char,
-                        'mentions': [m.text for m in cluster.mentions]
-                    })
-        
-        # Map of entity text to entity ID
-        entity_ids = {}
-        
-        # Add all entities to graph
-        for entity_info in entities:
-            entity_text = entity_info["text"]
-            entity_type = entity_info["type"]
+            doc = self.nlp(text)
             
-            # Skip very short entities unless they are special types
-            if len(entity_text) <= 2 and entity_type not in ['PERSON', 'ORG', 'GPE', 'LOC', 'DATE', 'TIME', 'MONEY']:
-                continue
+            # Look for sentences with multiple entities or complex structure
+            for sent in doc.sents:
+                # Check if this is a complex sentence (multiple verbs or entities)
+                entities = [e for e in sent.ents]
+                verbs = [token for token in sent if token.pos_ == "VERB"]
                 
-            # Prepare metadata with source and any mentions
-            entity_metadata = {"source": source} if source else {}
-            
-            # Add mention information from coreference resolution
-            if 'mentions' in entity_info:
-                entity_metadata['mentions'] = entity_info['mentions']
-            
-            # Add entity to graph
-            entity_id = self.add_entity(
-                entity=entity_text,
-                entity_type=entity_type,
-                metadata=entity_metadata
-            )
-            
-            if entity_id >= 0:
-                entity_ids[entity_text] = entity_id
-                entities_added += 1
-                
-                # Also map all mentions of this entity to the same ID
-                if entity_text in mentions_map.values():
-                    # This is a canonical entity, map all its mentions
-                    for mention, canonical in mentions_map.items():
-                        if canonical == entity_text and mention != entity_text:
-                            entity_ids[mention] = entity_id
-        
-        # Extract relations from the resolved text
-        relations = self.extract_relations(resolved_text)
-        logging.debug(f"Extracted {len(relations)} relations")
-        
-        # Try semantic role labeling for additional relation extraction
-        try:
-            srl_relations = self._extract_with_semantic_roles(resolved_text)
-            if srl_relations:
-                # Add new relations not already in the list
-                existing_relations = set((s, p, o) for s, p, o in relations)
-                for s, p, o in srl_relations:
-                    if (s, p, o) not in existing_relations:
-                        relations.append((s, p, o))
-                logging.debug(f"Added {len(srl_relations)} relations from semantic role labeling")
-        except Exception as e:
-            logging.debug(f"Semantic role labeling extraction not available: {e}")
-            
-        # Try additional relation patterns based on syntactic dependency parsing
-        if SPACY_ENABLED and self.nlp is not None and not relations:
-            try:
-                # Parse text
-                doc = self.nlp(resolved_text)
-                
-                # Extract from each sentence
-                for sent in doc.sents:
-                    # Get SVO triples
-                    svo_triples = self._extract_svo_from_dependency(sent)
-                    relations.extend(svo_triples)
+                # Skip simple sentences
+                if len(entities) < 2 or len(verbs) < 1:
+                    continue
                     
-                    # Get prepositional relations
-                    prep_relations = self._extract_prep_relations(sent)
-                    relations.extend(prep_relations)
+                # For each main verb, try to identify an event
+                for verb in verbs:
+                    # Skip auxiliary verbs
+                    if verb.dep_ in ("aux", "auxpass"):
+                        continue
+                        
+                    # Get the verb lemma as event type
+                    event_type = verb.lemma_
                     
-                logging.debug(f"Added {len(relations)} relations from dependency parsing")
-            except Exception as e:
-                logging.error(f"Error extracting relations from dependencies: {e}")
-        
-        # If no relations were found with standard extraction, try a simple subject-verb-object approach
-        if not relations and len(entities) >= 2:
-            try:
-                # Create simple relations between co-occurring entities
-                entity_pairs = []
-                sorted_entities = sorted(entities, key=lambda e: e['start'])
-                
-                # Connect entities that appear close to each other
-                for i in range(len(sorted_entities) - 1):
-                    for j in range(i + 1, min(i + 3, len(sorted_entities))):
-                        # If entities are close enough in text (within 50 chars)
-                        if sorted_entities[j]['start'] - sorted_entities[i]['end'] < 50:
-                            # Try to find a meaningful predicate between them
-                            between_text = resolved_text[sorted_entities[i]['end']:sorted_entities[j]['start']].strip()
-                            
-                            if between_text:
-                                # Clean up the between text to get a reasonable predicate
-                                predicate = between_text
-                                for stopword in [" the ", " a ", " an ", " and ", " or ", " but ", " of "]:
-                                    predicate = predicate.replace(stopword, " ")
-                                predicate = predicate.strip()
-                                
-                                if predicate:
-                                    entity_pairs.append((
-                                        sorted_entities[i]['text'],
-                                        predicate,
-                                        sorted_entities[j]['text']
-                                    ))
-                                else:
-                                    entity_pairs.append((
-                                        sorted_entities[i]['text'],
-                                        "related_to",
-                                        sorted_entities[j]['text']
-                                    ))
-                            else:
-                                entity_pairs.append((
-                                    sorted_entities[i]['text'],
-                                    "related_to",
-                                    sorted_entities[j]['text']
-                                ))
-                
-                # Add these as backup relations
-                relations.extend(entity_pairs)
-                logging.debug(f"Added {len(entity_pairs)} proximity-based relations")
-                
-            except Exception as e:
-                logging.error(f"Error creating backup relations: {e}")
-        
-        # Add relations to graph
-        added_relation_keys = set()  # To avoid duplicates
-        
-        for subject, predicate, obj in relations:
-            # Skip relations with empty components
-            if not subject.strip() or not predicate.strip() or not obj.strip():
-                continue
+                    # Collect participants by role
+                    participants = {}
+                    
+                    # Check for subject
+                    subjects = [token for token in verb.children if token.dep_ in ("nsubj", "nsubjpass")]
+                    for subject in subjects:
+                        # Extend to noun phrases
+                        subj_span = self._get_span_text(subject)
+                        participants["agent"] = subj_span
+                    
+                    # Check for object
+                    objects = [token for token in verb.children if token.dep_ in ("dobj", "pobj")]
+                    for obj in objects:
+                        # Extend to noun phrases
+                        obj_span = self._get_span_text(obj)
+                        participants["theme"] = obj_span
+                    
+                    # Check for indirect object
+                    ind_objects = [token for token in verb.children if token.dep_ == "iobj"]
+                    for ind_obj in ind_objects:
+                        # Extend to noun phrases
+                        ind_obj_span = self._get_span_text(ind_obj)
+                        participants["recipient"] = ind_obj_span
+                    
+                    # Check for time expressions
+                    time_preps = [token for token in verb.children if token.dep_ == "prep" and token.text in ("at", "on", "in")]
+                    for prep in time_preps:
+                        for child in prep.children:
+                            if child.dep_ == "pobj":
+                                time_span = self._get_span_text(child)
+                                participants["time"] = time_span
+                    
+                    # Check for location
+                    loc_preps = [token for token in verb.children if token.dep_ == "prep" and token.text in ("at", "in", "on", "near", "by")]
+                    for prep in loc_preps:
+                        for child in prep.children:
+                            if child.dep_ == "pobj":
+                                # Check if this is actually a location
+                                if child.ent_type_ in ("LOC", "GPE"):
+                                    loc_span = self._get_span_text(child)
+                                    participants["location"] = loc_span
+                    
+                    # If we have at least two participants, add the event
+                    if len(participants) >= 2:
+                        complex_events.append({
+                            "type": event_type,
+                            "participants": participants,
+                            "sentence": sent.text
+                        })
             
-            # Skip self-relations (entity related to itself)
-            if subject.strip() == obj.strip():
-                continue
-                
-            # Normalize predicate to create consistent relation types
-            predicate = predicate.lower().strip()
+        except Exception as e:
+            logging.error(f"Error extracting complex events: {e}")
             
-            # Create a key to detect duplicates
-            relation_key = (subject.strip(), predicate, obj.strip())
-            
-            # Skip if already added
-            if relation_key in added_relation_keys:
-                continue
-                
-            # Handle coreference - if subject or object is a mention, use the canonical entity
-            canonical_subject = mentions_map.get(subject, subject)
-            canonical_object = mentions_map.get(obj, obj)
-            
-            success = self.add_relation(
-                source_entity=canonical_subject,
-                relation_type=predicate,
-                target_entity=canonical_object,
-                metadata={"source": source} if source else None
-            )
-            
-            if success:
-                relations_added += 1
-                added_relation_keys.add(relation_key)
-        
-        logging.debug(f"Added {entities_added} entities and {relations_added} relations to graph")
-        
-        return relations_added
+        return complex_events
     
     def close(self):
         """Clean up resources."""

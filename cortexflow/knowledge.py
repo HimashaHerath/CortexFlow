@@ -60,6 +60,14 @@ class KnowledgeStore(KnowledgeStoreInterface):
         self.use_graph_rag = config.use_graph_rag if hasattr(config, 'use_graph_rag') else False
         self.graph_weight = config.graph_weight if hasattr(config, 'graph_weight') else 0.3
         
+        # Ontology settings
+        self.use_ontology = config.use_ontology if hasattr(config, 'use_ontology') else False
+        
+        # Metadata tracking
+        self.track_provenance = config.track_provenance if hasattr(config, 'track_provenance') else True
+        self.track_confidence = config.track_confidence if hasattr(config, 'track_confidence') else True
+        self.track_temporal = config.track_temporal if hasattr(config, 'track_temporal') else True
+        
         # Hybrid search parameters
         self.hybrid_alpha = 0.7  # Weight for dense vector search (1-alpha is weight for sparse BM25)
         
@@ -68,46 +76,27 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         # Initialize vector embedding model
         self.model = None
-        self.embedding_dimension = 384  # Default for all-MiniLM-L6-v2
+        self.embedding_dimension = 384
         
-        if VECTOR_ENABLED:
-            try:
-                from sentence_transformers import SentenceTransformer
-                
-                # Get vector model from config
-                vector_model = config.vector_model if hasattr(config, 'vector_model') else "all-MiniLM-L6-v2"
-                
-                self.model = SentenceTransformer(vector_model)
-                logging.info("Vector embedding model loaded successfully")
-            except ImportError:
-                logging.warning("SentenceTransformer not available. Vector search will be disabled.")
-            except Exception as e:
-                logging.error(f"Error loading vector model: {e}")
-                
-        # Initialize BM25 index
-        self.bm25_index = None
-        self.bm25_corpus = []
-        self.bm25_doc_ids = []
-        self.bm25_last_update = 0
-        
-        # Storage for in-memory caches
-        self.vector_index = None
-        self.vector_ids = []
-        self.vector_store = {}  # For summaries
-        
-        # Create SQLiteDicts for persistence
         try:
-            from sqlitedict import SqliteDict
-            self.summaries = SqliteDict(self.db_path, tablename='summaries', autocommit=True)
-        except ImportError:
-            logging.warning("SqliteDict not available. In-memory storage will be used.")
-            self.summaries = {}
+            if VECTOR_ENABLED:
+                from sentence_transformers import SentenceTransformer
+                model_name = config.embedding_model if hasattr(config, 'embedding_model') else "all-MiniLM-L6-v2"
+                self.model = SentenceTransformer(model_name)
+                self.embedding_dimension = self.model.get_sentence_embedding_dimension()
+                logging.info(f"Loaded embedding model: {model_name} with dimension {self.embedding_dimension}")
         except Exception as e:
-            logging.error(f"Error initializing summary store: {e}")
-            self.summaries = {}
+            logging.error(f"Error loading vector model: {e}")
             
-        # Initialize the graph store if GraphRAG is enabled
+        # Initialize BM25 indexer
+        self.bm25_index = None
+        if BM25_ENABLED:
+            self.bm25_index = BM25Indexer()
+            self._init_bm25_index()
+        
+        # Initialize graph store if enabled
         self.graph_store = None
+        
         if self.use_graph_rag:
             try:
                 from .graph_store import GraphStore
@@ -116,6 +105,25 @@ class KnowledgeStore(KnowledgeStoreInterface):
             except Exception as e:
                 logging.error(f"Error initializing graph store: {e}")
                 self.use_graph_rag = False
+                
+        # Initialize ontology if enabled
+        self.ontology = None
+        if self.use_ontology:
+            try:
+                from .ontology import Ontology
+                self.ontology = Ontology(self.db_path)
+                logging.info(f"Ontology system initialized successfully")
+                
+                # Connect the ontology to the graph store if both are enabled
+                if self.use_graph_rag and self.graph_store:
+                    self.graph_store.ontology = self.ontology
+                    logging.info(f"Connected ontology to graph store")
+            except ImportError:
+                logging.error(f"Ontology module not found, disabling ontology features")
+                self.use_ontology = False
+            except Exception as e:
+                logging.error(f"Error initializing ontology: {e}")
+                self.use_ontology = False
                 
         # In-memory connection for better performance
         self.conn = None
@@ -1332,42 +1340,48 @@ class KnowledgeStore(KnowledgeStoreInterface):
     
     def remember_explicit(self, text: str, source: str = "user_command", confidence: float = 0.95) -> List[int]:
         """
-        Explicitly remember important facts from text.
+        Explicitly add knowledge to the knowledge store.
         
         Args:
-            text: Text to remember
-            source: Source of the knowledge
-            confidence: Confidence score for the facts
+            text: The text to add
+            source: Source of the knowledge (for provenance)
+            confidence: Confidence level in the knowledge (0.0 to 1.0)
             
         Returns:
-            List of IDs for stored facts
+            IDs of the facts added
         """
         fact_ids = []
         
-        logging.debug(f"Remembering text explicitly: '{text[:50]}...'")
+        # Parse for facts prefixed with trust marker
+        lines = text.strip().split('\n')
+        for line in lines:
+            if line.startswith(self.trust_marker):
+                fact = line[len(self.trust_marker):].strip()
+                if fact:
+                    try:
+                        fact_id = self.store_fact_triple(
+                            subject=fact.split()[0],
+                            predicate=fact.split()[1],
+                            obj=fact.split()[2],
+                            confidence=confidence,
+                            source=source
+                        )
+                        if fact_id:
+                            fact_ids.append(fact_id)
+                    except Exception as e:
+                        logging.error(f"Error storing fact: {e}")
         
-        # Extract triples from text
-        triples = self.extract_facts_from_text(text)
-        
-        logging.debug(f"Extracted {len(triples)} fact triples")
-        
-        # Store each triple as a fact
-        for subject, predicate, obj in triples:
-            fact_id = self.store_fact_triple(
-                subject=subject,
-                predicate=predicate,
-                obj=obj,
-                confidence=confidence,
-                source=source
-            )
-            if fact_id > 0:
-                fact_ids.append(fact_id)
-        
-        # Process text to build knowledge graph
+        # Process text to build knowledge graph with enhanced metadata
         if hasattr(self, 'graph_store') and self.graph_store is not None:
             try:
-                # Process text to extract entities and relations
-                relations_added = self.graph_store.process_text_to_graph(text, source=source)
+                # Add temporal information if available
+                current_time = datetime.now().isoformat()
+                
+                # Process text to extract entities and relations with metadata
+                relations_added = self.graph_store.process_text_to_graph(
+                    text=text, 
+                    source=source
+                )
                 logging.debug(f"Added {relations_added} relations to knowledge graph")
                 
                 # Manually add the text as a single fact if no relations were extracted
@@ -1379,12 +1393,14 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         predicate = "states"
                         obj = " ".join(words[1:])
                         
-                        # Add to graph
+                        # Add to graph with metadata
                         success = self.graph_store.add_relation(
                             source_entity=subject,
                             relation_type=predicate,
                             target_entity=obj,
-                            metadata={"source": source} if source else None
+                            provenance=source if self.track_provenance else None,
+                            confidence=confidence if self.track_confidence else 0.5,
+                            temporal_start=current_time if self.track_temporal else None
                         )
                         
                         if success:
@@ -1404,9 +1420,9 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     fact_ids.append(result)
             except Exception as e:
                 logging.error(f"Error storing direct knowledge: {e}")
-        
+                
         return fact_ids
-        
+    
     def store_knowledge_item(self, text: str, confidence: float = 0.9, source: str = None) -> int:
         """
         Store a piece of text as a knowledge item.
@@ -1719,4 +1735,182 @@ class KnowledgeStore(KnowledgeStoreInterface):
             conn.rollback()
         finally:
             if self.conn is None and conn is not None:
-                conn.close() 
+                conn.close()
+
+    def retrieve_context(self, query: str, max_results: int = 5, min_score: float = 0.0) -> List[Dict[str, Any]]:
+        """
+        Retrieve relevant context from the knowledge store using advanced hybrid retrieval.
+        Enhanced to include ontology-based reasoning and provenance information.
+        
+        Args:
+            query: Query to retrieve context for
+            max_results: Maximum number of results
+            min_score: Minimum relevance score
+            
+        Returns:
+            List of retrieval results with text and metadata
+        """
+        results = []
+        
+        # Get vector search results
+        vector_results = self._vector_search(query, max_results * 2) if VECTOR_ENABLED else []
+        
+        # Get BM25 search results
+        bm25_results = self._bm25_search(query, max_results * 2) if BM25_ENABLED else []
+        
+        # Get graph search results if enabled
+        graph_results = []
+        if self.use_graph_rag and self.graph_store:
+            graph_results = self._graph_search(query, max_results * 2)
+        
+        # Combine results from different sources with hybrid ranking
+        if vector_results and bm25_results:
+            # Map IDs to maintain uniqueness
+            combined_results = {}
+            
+            # Add vector results with their scores
+            for item in vector_results:
+                item_id = item.get("id", 0)
+                if item_id:
+                    combined_results[item_id] = {
+                        "item": item,
+                        "vector_score": item.get("score", 0),
+                        "bm25_score": 0
+                    }
+            
+            # Update or add BM25 results
+            for item in bm25_results:
+                item_id = item.get("id", 0)
+                if item_id:
+                    if item_id in combined_results:
+                        combined_results[item_id]["bm25_score"] = item.get("score", 0)
+                    else:
+                        combined_results[item_id] = {
+                            "item": item,
+                            "vector_score": 0,
+                            "bm25_score": item.get("score", 0)
+                        }
+            
+            # Calculate hybrid scores
+            for item_id, data in combined_results.items():
+                # Normalize scores to 0-1 range (they should already be in this range)
+                vector_score = data["vector_score"]
+                bm25_score = data["bm25_score"]
+                
+                # Calculate hybrid score
+                hybrid_score = self.hybrid_alpha * vector_score + (1 - self.hybrid_alpha) * bm25_score
+                
+                # Update the item with hybrid score
+                data["item"]["score"] = hybrid_score
+                results.append(data["item"])
+                
+            # Sort by hybrid score
+            results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
+        elif vector_results:
+            results = vector_results
+        elif bm25_results:
+            results = bm25_results
+        
+        # Add graph results if available, weighing them appropriately
+        if graph_results:
+            existing_ids = {r.get("id", 0) for r in results if "id" in r}
+            
+            for graph_item in graph_results:
+                graph_id = graph_item.get("id", 0)
+                
+                # Only add if not already in results
+                if graph_id and graph_id not in existing_ids:
+                    # Adjust score by graph weight
+                    graph_item["score"] = graph_item.get("score", 0.5) * self.graph_weight
+                    results.append(graph_item)
+            
+            # Resort results
+            results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
+        
+        # If ontology is enabled, enhance results with subclass/superclass information
+        if self.use_ontology and self.ontology:
+            try:
+                # Extract entity mentions from the query
+                entities = []
+                if self.graph_store:
+                    extracted_entities = self.graph_store.extract_entities(query)
+                    entities = [entity["text"] for entity in extracted_entities]
+                
+                # For each entity, check if it belongs to a class in the ontology
+                enhanced_results = []
+                for entity in entities:
+                    # Get entity type from graph store
+                    entity_type = None
+                    cursor = self.conn.cursor()
+                    cursor.execute("SELECT entity_type FROM graph_entities WHERE entity = ?", (entity,))
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        entity_type = row[0]
+                    
+                    if entity_type and self.ontology.get_class(entity_type):
+                        # Get superclasses
+                        for parent_class in self.ontology.get_class(entity_type).parent_classes:
+                            if parent_class in self.ontology.classes:
+                                # Find entities of the parent class
+                                parent_entities = self.graph_store.query_entities(entity_type=parent_class, limit=3)
+                                for parent_entity in parent_entities:
+                                    enhanced_results.append({
+                                        "text": f"{entity} is a {entity_type}, which is a type of {parent_class}. {parent_entity['entity']} is also a {parent_class}.",
+                                        "score": 0.75,
+                                        "confidence": 0.9,
+                                        "source": "ontology_reasoning",
+                                        "type": "class_hierarchy"
+                                    })
+                
+                # Add the enhanced results
+                results.extend(enhanced_results)
+                
+                # Resort results
+                results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
+            except Exception as e:
+                logging.error(f"Error applying ontology reasoning: {e}")
+        
+        # Filter by minimum score
+        results = [r for r in results if r.get("score", 0) >= min_score]
+        
+        # Deduplicate and limit results
+        unique_texts = set()
+        deduplicated_results = []
+        
+        for result in results:
+            text = result.get("text", "")
+            if text and text not in unique_texts:
+                unique_texts.add(text)
+                deduplicated_results.append(result)
+                
+                if len(deduplicated_results) >= max_results:
+                    break
+        
+        # Rerank if enabled and we have enough results
+        if self.use_reranking and len(deduplicated_results) > 1 and self.model:
+            try:
+                reranked_results = self._rerank_results(query, deduplicated_results[:self.rerank_top_k])
+                
+                # Keep track of which results were reranked for debugging
+                for result in reranked_results:
+                    result["reranked"] = True
+                    
+                # Add any results that weren't in the reranking pool
+                if len(deduplicated_results) > self.rerank_top_k:
+                    for result in deduplicated_results[self.rerank_top_k:]:
+                        reranked_results.append(result)
+                        
+                deduplicated_results = reranked_results[:max_results]
+            except Exception as e:
+                logging.error(f"Error during reranking: {e}")
+        
+        # Add metadata about the retrieval process
+        for result in deduplicated_results:
+            if "provenance" not in result and "source" in result:
+                result["provenance"] = result["source"]
+                
+            # Include timestamp information if available but no explicit timestamp in result
+            if "timestamp" not in result and self.track_temporal:
+                result["timestamp"] = datetime.now().isoformat()
+        
+        return deduplicated_results[:max_results] 
