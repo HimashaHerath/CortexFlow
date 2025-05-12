@@ -30,6 +30,7 @@ CortexFlow dynamically manages context information, retaining important elements
 - **Self-Reflection** for verifying knowledge relevance and response consistency
 - **Enhanced entity and relation extraction** with semantic role labeling and coreference resolution
 - **Logical reasoning capabilities** with forward chaining, backward chaining, and abductive reasoning
+- **Uncertainty handling and belief revision** for managing contradictions and incomplete information
 
 ## Installation
 
@@ -232,7 +233,61 @@ for hypothesis in hypotheses:
     print(f"{hypothesis['text']} (Confidence: {hypothesis['confidence']})")
 ```
 
-To explore the reasoning capabilities in detail, see the [reasoning demo](examples/reasoning_demo.py).
+## Uncertainty Handling and Belief Revision
+
+CortexFlow now provides mechanisms to handle uncertainty and contradictions:
+
+- **Belief Revision**: Update beliefs when new contradictory information arrives
+- **Explicit Uncertainty Representation**: Track confidence scores and probability distributions
+- **Conflict Resolution**: Resolve conflicts based on source reliability and recency
+- **Reasoning with Incomplete Information**: Provide reasonable answers even with partial knowledge
+
+Example usage:
+
+```python
+from cortexflow import CortexFlowManager, CortexFlowConfig
+
+# Configure with uncertainty handling enabled
+config = CortexFlowConfig(
+    use_uncertainty_handling=True,
+    auto_detect_contradictions=True,
+    default_contradiction_strategy="weighted",
+    knowledge_store_path="knowledge.db"
+)
+manager = CortexFlowManager(config)
+
+# Add knowledge with confidence scores
+manager.remember_knowledge(
+    "Mount Everest is 8,848 meters tall.",
+    source="geography_textbook",
+    confidence=0.9
+)
+
+# Add contradictory information
+manager.remember_knowledge(
+    "Mount Everest is 8,849 meters tall.",
+    source="recent_survey",
+    confidence=0.85
+)
+
+# Contradictions are automatically detected and resolved based on the strategy
+
+# Set source reliability for conflict resolution
+manager.update_source_reliability("scientific_journal", 0.95)
+manager.update_source_reliability("social_media", 0.3)
+
+# Get the belief revision history
+revisions = manager.get_belief_revision_history()
+
+# Reason with incomplete information
+query = {
+    "question": "What is the capital of France and its population?",
+    "required_fields": ["capital", "population"]
+}
+result = manager.reason_with_incomplete_information(query, available_knowledge)
+```
+
+For more details, see [Uncertainty Handling Documentation](docs/uncertainty_handling.md).
 
 ## Documentation
 

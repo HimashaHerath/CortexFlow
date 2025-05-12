@@ -52,6 +52,15 @@ except ImportError:
     logger = logging.getLogger('cortexflow')
     logger.warning("dynamic_weighting module not found. Dynamic Weighting functionality will be disabled.")
 
+# Add import for Uncertainty Handling
+try:
+    from cortexflow.uncertainty_handler import UncertaintyHandler
+    UNCERTAINTY_HANDLING_ENABLED = True
+except ImportError:
+    UNCERTAINTY_HANDLING_ENABLED = False
+    logger = logging.getLogger('cortexflow')
+    logger.warning("uncertainty_handler module not found. Uncertainty handling functionality will be disabled.")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -138,6 +147,17 @@ class CortexFlowManager(ContextProvider):
                         self._update_memory_tier_limits(initial_limits)
                 except Exception as e:
                     logger.error(f"Failed to initialize Dynamic Weighting Engine: {e}")
+
+            # Initialize Uncertainty Handler if enabled
+            self.uncertainty_handler = None
+            if hasattr(self.config, "use_uncertainty_handling") and self.config.use_uncertainty_handling and UNCERTAINTY_HANDLING_ENABLED:
+                try:
+                    # Pass the graph store to the uncertainty handler
+                    graph_store = self.knowledge_store.graph_store if hasattr(self.knowledge_store, 'graph_store') else None
+                    self.uncertainty_handler = UncertaintyHandler(self.config, graph_store)
+                    logger.info("Uncertainty Handler initialized successfully")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Uncertainty Handler: {e}")
                 
             logger.info("CortexFlowManager initialized")
             
@@ -535,18 +555,225 @@ class CortexFlowManager(ContextProvider):
             logger.error(traceback.format_exc())
             yield f"Error generating streaming response: {str(e)}"
     
-    def remember_knowledge(self, text: str, source: str = None) -> List[int]:
+    def remember_knowledge(self, text: str, source: str = None, confidence: float = None) -> List[int]:
         """
-        Remember knowledge from text.
+        Store important knowledge in the knowledge store.
         
         Args:
             text: Text to remember
-            source: Optional source information
+            source: Optional source of the knowledge
+            confidence: Optional confidence value for the knowledge
             
         Returns:
             List of IDs for the stored knowledge
         """
-        return self.knowledge_store.remember_knowledge(text, source)
+        item_ids = self.knowledge_store.add_knowledge(text, source=source, confidence=confidence)
+        
+        # Check for contradictions if enabled
+        if self.uncertainty_handler and self.config.auto_detect_contradictions:
+            try:
+                # Extract entity IDs from the added items
+                entity_ids = []
+                if hasattr(self.knowledge_store, 'graph_store'):
+                    # Get the entity IDs from the knowledge store's graph store
+                    for item_id in item_ids:
+                        entity_data = self.knowledge_store.get_knowledge_item(item_id)
+                        if entity_data and 'entity_id' in entity_data:
+                            entity_ids.append(entity_data['entity_id'])
+                
+                # Check for contradictions for each entity
+                for entity_id in entity_ids:
+                    contradictions = self.uncertainty_handler.detect_contradictions(entity_id=entity_id)
+                    
+                    # Auto-resolve contradictions if found
+                    for contradiction in contradictions:
+                        logger.info(f"Detected contradiction for entity {contradiction.get('entity')}: "
+                                  f"{contradiction.get('target1')} vs {contradiction.get('target2')}")
+                        
+                        # Resolve using the configured strategy
+                        resolution = self.uncertainty_handler.resolve_contradiction(
+                            contradiction, 
+                            strategy=self.config.default_contradiction_strategy
+                        )
+                        
+                        logger.info(f"Resolved contradiction using {resolution.get('strategy_used')} strategy: "
+                                  f"Selected '{resolution.get('resolved_value')}' with confidence {resolution.get('confidence')}")
+            except Exception as e:
+                logger.error(f"Error detecting contradictions: {e}")
+                
+        return item_ids
+            
+    def detect_contradictions(self, entity_id=None, relation_type=None, 
+                          max_results=100) -> List[Dict[str, Any]]:
+        """
+        Detect contradictions in the knowledge graph.
+        
+        Args:
+            entity_id: Optional entity ID to check
+            relation_type: Optional relation type to check
+            max_results: Maximum number of results to return
+            
+        Returns:
+            List of detected contradictions
+        """
+        if not self.uncertainty_handler:
+            logger.warning("Uncertainty handling is not enabled. Cannot detect contradictions.")
+            return []
+            
+        return self.uncertainty_handler.detect_contradictions(
+            entity_id=entity_id,
+            relation_type=relation_type,
+            max_results=max_results
+        )
+        
+    def resolve_contradiction(self, contradiction: Dict[str, Any], 
+                           strategy: str = None) -> Dict[str, Any]:
+        """
+        Resolve a contradiction using the specified strategy.
+        
+        Args:
+            contradiction: Contradiction to resolve
+            strategy: Resolution strategy (auto, recency, confidence, reliability, or keep_both)
+            
+        Returns:
+            Resolution result
+        """
+        if not self.uncertainty_handler:
+            logger.warning("Uncertainty handling is not enabled. Cannot resolve contradictions.")
+            return {"error": "Uncertainty handling not enabled"}
+            
+        if strategy is None:
+            strategy = self.config.default_contradiction_strategy
+            
+        return self.uncertainty_handler.resolve_contradiction(contradiction, strategy)
+        
+    def update_source_reliability(self, source_name: str, reliability_score: float,
+                              metadata: Dict[str, Any] = None) -> None:
+        """
+        Update the reliability score for a knowledge source.
+        
+        Args:
+            source_name: Name of the source
+            reliability_score: Reliability score (0.0-1.0)
+            metadata: Optional metadata about the source
+        """
+        if not self.uncertainty_handler:
+            logger.warning("Uncertainty handling is not enabled. Cannot update source reliability.")
+            return
+            
+        self.uncertainty_handler.update_source_reliability(
+            source_name=source_name,
+            reliability_score=reliability_score,
+            metadata=metadata
+        )
+        
+    def get_source_reliability(self, source_name: str) -> float:
+        """
+        Get the reliability score for a knowledge source.
+        
+        Args:
+            source_name: Name of the source
+            
+        Returns:
+            Reliability score (0.0-1.0)
+        """
+        if not self.uncertainty_handler:
+            logger.warning("Uncertainty handling is not enabled. Cannot get source reliability.")
+            return 0.5  # Default medium reliability
+            
+        return self.uncertainty_handler.get_source_reliability(source_name)
+        
+    def add_probability_distribution(self, entity_id: int, relation_id: int,
+                                  distribution_type: str, distribution_data: Dict[str, Any]) -> None:
+        """
+        Add a probability distribution to represent uncertainty about a fact.
+        
+        Args:
+            entity_id: Entity ID
+            relation_id: Relation ID
+            distribution_type: Type of distribution (discrete, gaussian, etc.)
+            distribution_data: Data representing the distribution
+        """
+        if not self.uncertainty_handler:
+            logger.warning("Uncertainty handling is not enabled. Cannot add probability distribution.")
+            return
+            
+        self.uncertainty_handler.add_probability_distribution(
+            entity_id=entity_id,
+            relation_id=relation_id,
+            distribution_type=distribution_type,
+            distribution_data=distribution_data
+        )
+        
+    def get_probability_distribution(self, entity_id: int, relation_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get the probability distribution for a fact.
+        
+        Args:
+            entity_id: Entity ID
+            relation_id: Relation ID
+            
+        Returns:
+            Probability distribution data or None if not found
+        """
+        if not self.uncertainty_handler:
+            logger.warning("Uncertainty handling is not enabled. Cannot get probability distribution.")
+            return None
+            
+        return self.uncertainty_handler.get_probability_distribution(
+            entity_id=entity_id,
+            relation_id=relation_id
+        )
+        
+    def reason_with_incomplete_information(self, query: Dict[str, Any],
+                                       available_knowledge: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Reason with incomplete information to provide best possible answers.
+        
+        Args:
+            query: The query to answer
+            available_knowledge: Available knowledge to reason with
+            
+        Returns:
+            Reasoning result with confidence and explanation
+        """
+        if not self.uncertainty_handler or not self.config.reason_with_incomplete_info:
+            logger.warning("Reasoning with incomplete information is not enabled.")
+            return {
+                "answer": None,
+                "confidence": 0,
+                "explanation": ["Reasoning with incomplete information is not enabled"],
+                "missing_information": []
+            }
+            
+        return self.uncertainty_handler.reason_with_incomplete_information(
+            query=query,
+            available_knowledge=available_knowledge
+        )
+        
+    def get_belief_revision_history(self, entity_id: int = None, 
+                                 relation_id: int = None,
+                                 limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get the revision history for beliefs about an entity or relation.
+        
+        Args:
+            entity_id: Optional entity ID filter
+            relation_id: Optional relation ID filter
+            limit: Maximum number of revisions to return
+            
+        Returns:
+            List of belief revisions
+        """
+        if not self.uncertainty_handler:
+            logger.warning("Uncertainty handling is not enabled. Cannot get belief revision history.")
+            return []
+            
+        return self.uncertainty_handler.get_belief_revision_history(
+            entity_id=entity_id,
+            relation_id=relation_id,
+            limit=limit
+        )
     
     def get_knowledge(self, query: str) -> List[Dict[str, Any]]:
         """

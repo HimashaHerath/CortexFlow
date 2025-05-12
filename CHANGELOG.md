@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Uncertainty handling and belief revision mechanisms:
+  - Explicit uncertainty representation using confidence scores and probability distributions
+  - Belief revision capabilities when new contradictory information arrives
+  - Multiple conflict resolution strategies based on source reliability and recency
+  - Reasoning with incomplete information to provide best possible answers
+  - Comprehensive documentation and demo for uncertainty handling features
 - Logical reasoning mechanisms over knowledge graph:
   - Formal inference engine using logical rules
   - Backward chaining for answering "why" questions

@@ -63,6 +63,16 @@ class CortexFlowConfig:
         "archive": 0.40
     })
     
+    # Uncertainty Handling settings
+    use_uncertainty_handling: bool = False
+    auto_detect_contradictions: bool = True
+    default_contradiction_strategy: str = "weighted"  # auto, recency, confidence, reliability, weighted, or keep_both
+    recency_weight: float = 0.6  # Weight for recency in contradiction resolution
+    reliability_weight: float = 0.4  # Weight for source reliability in contradiction resolution
+    confidence_threshold: float = 0.7  # Threshold for high confidence assertions
+    uncertainty_representation: str = "confidence"  # confidence, distribution, or both
+    reason_with_incomplete_info: bool = True  # Whether to attempt reasoning with incomplete information
+    
     # LLM Integration
     default_model: str = "gemma3:1b"
     ollama_host: str = "http://localhost:11434"
@@ -172,6 +182,31 @@ class CortexFlowConfig:
                 "archive": 0.40
             }
         
+        # Uncertainty Handling backward compatibility
+        if not hasattr(self, 'use_uncertainty_handling'):
+            self.use_uncertainty_handling = False
+            
+        if not hasattr(self, 'auto_detect_contradictions'):
+            self.auto_detect_contradictions = True
+            
+        if not hasattr(self, 'default_contradiction_strategy'):
+            self.default_contradiction_strategy = "weighted"
+            
+        if not hasattr(self, 'recency_weight'):
+            self.recency_weight = 0.6
+            
+        if not hasattr(self, 'reliability_weight'):
+            self.reliability_weight = 0.4
+            
+        if not hasattr(self, 'confidence_threshold'):
+            self.confidence_threshold = 0.7
+            
+        if not hasattr(self, 'uncertainty_representation'):
+            self.uncertainty_representation = "confidence"
+            
+        if not hasattr(self, 'reason_with_incomplete_info'):
+            self.reason_with_incomplete_info = True
+        
         # Inference Engine backward compatibility
         if not hasattr(self, 'use_inference_engine'):
             self.use_inference_engine = False
@@ -256,7 +291,15 @@ class CortexFlowConfig:
             "inference_confidence_threshold": self.inference_confidence_threshold,
             "max_forward_chain_iterations": self.max_forward_chain_iterations,
             "abductive_reasoning_enabled": self.abductive_reasoning_enabled,
-            "max_abductive_hypotheses": self.max_abductive_hypotheses
+            "max_abductive_hypotheses": self.max_abductive_hypotheses,
+            "use_uncertainty_handling": self.use_uncertainty_handling,
+            "auto_detect_contradictions": self.auto_detect_contradictions,
+            "default_contradiction_strategy": self.default_contradiction_strategy,
+            "recency_weight": self.recency_weight,
+            "reliability_weight": self.reliability_weight,
+            "confidence_threshold": self.confidence_threshold,
+            "uncertainty_representation": self.uncertainty_representation,
+            "reason_with_incomplete_info": self.reason_with_incomplete_info
         }
     
     def log_config(self):
