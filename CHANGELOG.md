@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Caching mechanisms for common reasoning patterns
 - New documentation for performance optimization features
 - Example script demonstrating performance optimization capabilities
+- Evaluation Framework implementation:
+  - Added missing multi-hop query methods in CortexFlowManager
+  - Implemented knowledge snapshot functionality for consistency tracking
+  - Fixed build_knowledge_subgraph method for reliable entity handling
+  - Enhanced temporal consistency calculation in consistency metrics
+  - Added support for path finding and reasoning path logging
+
+### Fixed
+- Resolved issues with CortexFlowManager multi-hop query handling
+- Fixed knowledge snapshot functionality for consistency evaluation
+- Improved error handling in graph subgraph building
+- Corrected temporal calculations in consistency metrics
 
 ## [0.7.0] - 2023-10-15
 

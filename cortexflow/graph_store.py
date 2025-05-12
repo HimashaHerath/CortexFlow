@@ -1745,8 +1745,19 @@ class GraphStore:
             # If no entities found with NLP, use simple word extraction
             if not query_entities:
                 for word in query.split():
-                    if len(word) > 3 and word[0].isupper():
+                    if len(word) > 3 and (word[0].isupper() or word in query.lower()):
                         query_entities.append(word)
+            
+            # Check for common entity patterns in queries
+            connection_pattern = r"(?:connection|relationship|relation)(?:\s+between\s+)([^,]+?)(?:\s+and\s+)([^?\.]+)"
+            match = re.search(connection_pattern, query, re.IGNORECASE)
+            if match:
+                start_entity = match.group(1).strip()
+                end_entity = match.group(2).strip()
+                if start_entity not in query_entities:
+                    query_entities.append(start_entity)
+                if end_entity not in query_entities:
+                    query_entities.append(end_entity)
             
             # Track nodes and edges to avoid duplicates
             node_ids = set()
@@ -1763,66 +1774,107 @@ class GraphStore:
                 if not neighbors:
                     continue
                 
-                # Add entity to nodes if new
+                # Safely get source entity ID
                 source_id = None
                 for neighbor in neighbors:
-                    if neighbor['direction'] == 'outgoing':
+                    if 'source_id' in neighbor and neighbor['direction'] == 'outgoing':
                         source_id = neighbor['source_id']
                         break
-                    else:
+                    elif 'target_id' in neighbor and neighbor['direction'] == 'incoming':
                         source_id = neighbor['target_id']
+                        break
                 
+                # If we can't find source ID, try a direct lookup
+                if source_id is None:
+                    entity_info = self.get_entity_id(entity_text)
+                    if entity_info:
+                        source_id = entity_info.get('id')
+                
+                # Add the entity to nodes if we have an ID and it's not already added
                 if source_id and source_id not in node_ids:
-                    # Get entity details
-                    entity_details = self.get_entity_metadata(source_id)
-                    
-                    # Create node
-                    node = {
-                        "id": source_id,
-                        "label": entity_text,
-                        "type": entity_details.get('entity_type', 'unknown'),
-                        "confidence": entity_details.get('confidence', 0.5)
-                    }
-                    
-                    subgraph["nodes"].append(node)
-                    node_ids.add(source_id)
-                
-                # Process each neighbor
-                for neighbor in neighbors:
-                    neighbor_entity = neighbor['entity']
-                    relation = neighbor['relation']
-                    neighbor_id = neighbor['target_id'] if neighbor['direction'] == 'outgoing' else neighbor['source_id']
-                    
-                    # Add neighbor node if new
-                    if neighbor_id not in node_ids:
+                    try:
                         # Get entity details
-                        entity_details = self.get_entity_metadata(neighbor_id)
+                        entity_details = self.get_entity_metadata(source_id) or {}
                         
                         # Create node
                         node = {
-                            "id": neighbor_id,
-                            "label": neighbor_entity,
+                            "id": source_id,
+                            "label": entity_text,
                             "type": entity_details.get('entity_type', 'unknown'),
                             "confidence": entity_details.get('confidence', 0.5)
                         }
                         
                         subgraph["nodes"].append(node)
-                        node_ids.add(neighbor_id)
-                    
-                    # Add edge
-                    edge_id = f"{source_id}_{neighbor_id}_{relation}" if neighbor['direction'] == 'outgoing' else f"{neighbor_id}_{source_id}_{relation}"
-                    
-                    if edge_id not in edge_ids:
-                        edge = {
-                            "source": source_id if neighbor['direction'] == 'outgoing' else neighbor_id,
-                            "target": neighbor_id if neighbor['direction'] == 'outgoing' else source_id,
-                            "label": relation,
-                            "weight": neighbor.get('weight', 1.0),
-                            "confidence": neighbor.get('confidence', 0.5)
-                        }
+                        node_ids.add(source_id)
+                    except Exception as e:
+                        logging.error(f"Error adding source node {source_id}: {e}")
+                
+                # Process each neighbor
+                for neighbor in neighbors:
+                    try:
+                        # Skip neighbors without required fields
+                        if 'entity' not in neighbor:
+                            logging.warning(f"Skipping neighbor without entity field: {neighbor}")
+                            continue
+                            
+                        neighbor_entity = neighbor['entity']
+                        relation = neighbor.get('relation', 'related_to')
                         
-                        subgraph["edges"].append(edge)
-                        edge_ids.add(edge_id)
+                        # Safely get neighbor ID
+                        neighbor_id = None
+                        if neighbor['direction'] == 'outgoing' and 'target_id' in neighbor:
+                            neighbor_id = neighbor['target_id']
+                        elif neighbor['direction'] == 'incoming' and 'source_id' in neighbor:
+                            neighbor_id = neighbor['source_id']
+                        
+                        # If we can't get neighbor ID, try direct lookup
+                        if neighbor_id is None:
+                            nb_info = self.get_entity_id(neighbor_entity)
+                            if nb_info:
+                                neighbor_id = nb_info.get('id')
+                        
+                        # Skip if we still don't have required IDs
+                        if not source_id or not neighbor_id:
+                            logging.warning(f"Missing ID for {entity_text} or {neighbor_entity}")
+                            continue
+                        
+                        # Add neighbor node if new
+                        if neighbor_id not in node_ids:
+                            try:
+                                # Get entity details
+                                entity_details = self.get_entity_metadata(neighbor_id) or {}
+                                
+                                # Create node
+                                node = {
+                                    "id": neighbor_id,
+                                    "label": neighbor_entity,
+                                    "type": entity_details.get('entity_type', 'unknown'),
+                                    "confidence": entity_details.get('confidence', 0.5)
+                                }
+                                
+                                subgraph["nodes"].append(node)
+                                node_ids.add(neighbor_id)
+                            except Exception as e:
+                                logging.error(f"Error adding neighbor node {neighbor_id}: {e}")
+                                continue
+                        
+                        # Add edge
+                        edge_id = f"{source_id}_{neighbor_id}_{relation}" if neighbor['direction'] == 'outgoing' else f"{neighbor_id}_{source_id}_{relation}"
+                        
+                        if edge_id not in edge_ids:
+                            edge = {
+                                "source": source_id if neighbor['direction'] == 'outgoing' else neighbor_id,
+                                "target": neighbor_id if neighbor['direction'] == 'outgoing' else source_id,
+                                "label": relation,
+                                "weight": neighbor.get('weight', 1.0),
+                                "confidence": neighbor.get('confidence', 0.5)
+                            }
+                            
+                            subgraph["edges"].append(edge)
+                            edge_ids.add(edge_id)
+                    
+                    except Exception as e:
+                        logging.error(f"Error processing neighbor: {e}")
                 
                 # Check if we reached max nodes
                 if len(node_ids) >= max_nodes:
@@ -1833,6 +1885,51 @@ class GraphStore:
         except Exception as e:
             logging.error(f"Error building knowledge subgraph: {e}")
             return {"nodes": [], "edges": []}
+            
+    def get_entity_id(self, entity_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Get entity ID from text.
+        
+        Args:
+            entity_text: Entity text to look up
+            
+        Returns:
+            Dictionary with entity information or None if not found
+        """
+        try:
+            if self.conn is not None:
+                conn = self.conn
+            else:
+                conn = sqlite3.connect(self.db_path)
+            
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Try exact match first
+            cursor.execute('SELECT id, entity, entity_type FROM graph_entities WHERE entity = ?', (entity_text,))
+            entity_row = cursor.fetchone()
+            
+            if not entity_row:
+                # Try case-insensitive matching
+                cursor.execute('SELECT id, entity, entity_type FROM graph_entities WHERE LOWER(entity) = LOWER(?)', (entity_text,))
+                entity_row = cursor.fetchone()
+            
+            if not entity_row:
+                # Try fuzzy matching as last resort
+                cursor.execute('SELECT id, entity, entity_type FROM graph_entities WHERE entity LIKE ? LIMIT 1', (f"%{entity_text}%",))
+                entity_row = cursor.fetchone()
+            
+            if self.conn is None:
+                conn.close()
+                
+            if entity_row:
+                return dict(entity_row)
+            
+            return None
+            
+        except Exception as e:
+            logging.error(f"Error getting entity ID: {e}")
+            return None
     
     def path_query(self, start_entity: str, end_entity: str, max_hops: int = 3) -> List[List[Dict[str, Any]]]:
         """

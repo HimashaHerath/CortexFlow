@@ -1680,6 +1680,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         try:
             if hasattr(self, 'conn') and self.conn is not None:
                 self.conn.close()
+                self.conn = None
         except Exception as e:
             logging.error(f"Error closing database connection: {e}")
     
@@ -1689,6 +1690,135 @@ class KnowledgeStore(KnowledgeStoreInterface):
             self.close()
         except Exception as e:
             logging.error(f"Error in __del__: {e}")
+            
+    def get_snapshots(self) -> List[Dict[str, Any]]:
+        """
+        Get snapshots of the knowledge store for consistency evaluation.
+        
+        Returns:
+            List of knowledge snapshots, each with a timestamp
+        """
+        snapshots = []
+        
+        try:
+            # Check if we have a history of snapshots in the database
+            if self.conn is not None:
+                conn = self.conn
+            else:
+                conn = sqlite3.connect(self.db_path)
+                
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Try to get snapshots from the database
+            try:
+                cursor.execute('''
+                SELECT id, snapshot_data, timestamp 
+                FROM knowledge_snapshots
+                ORDER BY timestamp DESC
+                LIMIT 10
+                ''')
+                
+                rows = cursor.fetchall()
+                
+                if rows:
+                    for row in rows:
+                        snapshot_data = json.loads(row['snapshot_data'])
+                        snapshot_data['timestamp'] = row['timestamp']
+                        snapshots.append(snapshot_data)
+                
+            except sqlite3.OperationalError:
+                # Table might not exist, we'll create it later
+                pass
+                
+            if self.conn is None:
+                conn.close()
+                
+            # If no snapshots found, return current state as the only snapshot
+            if not snapshots:
+                current_snapshot = self.take_snapshot()
+                snapshots.append(current_snapshot)
+                
+        except Exception as e:
+            logging.error(f"Error getting snapshots: {e}")
+            
+            # Return an empty snapshot as fallback
+            snapshots.append({
+                "timestamp": datetime.now().timestamp(),
+                "entities": [],
+                "relations": []
+            })
+            
+        return snapshots
+    
+    def take_snapshot(self) -> Dict[str, Any]:
+        """
+        Take a snapshot of the current knowledge state.
+        
+        Returns:
+            Dictionary representing the current knowledge state
+        """
+        snapshot = {
+            "timestamp": datetime.now().timestamp(),
+            "entities": [],
+            "relations": []
+        }
+        
+        try:
+            if self.conn is not None:
+                conn = self.conn
+            else:
+                conn = sqlite3.connect(self.db_path)
+                
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Ensure snapshot table exists
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS knowledge_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_data TEXT NOT NULL,
+                timestamp REAL NOT NULL
+            )
+            ''')
+            
+            # Get entities
+            cursor.execute("SELECT * FROM graph_entities")
+            entities = [dict(row) for row in cursor.fetchall()]
+            snapshot["entities"] = entities
+            
+            # Get relations
+            cursor.execute('''
+            SELECT r.*, e1.entity as source_entity, e2.entity as target_entity, 
+                   r.relation_type as relation
+            FROM graph_relationships r
+            JOIN graph_entities e1 ON r.source_id = e1.id
+            JOIN graph_entities e2 ON r.target_id = e2.id
+            ''')
+            relations = []
+            for row in cursor.fetchall():
+                relation = dict(row)
+                # Add formatted relation for easier analysis
+                relation["formatted"] = f"{relation['source_entity']} {relation['relation']} {relation['target_entity']}"
+                relations.append(relation)
+                
+            snapshot["relations"] = relations
+            
+            # Store snapshot in database
+            cursor.execute(
+                'INSERT INTO knowledge_snapshots (snapshot_data, timestamp) VALUES (?, ?)',
+                (json.dumps(snapshot), snapshot["timestamp"])
+            )
+            
+            conn.commit()
+            
+            if self.conn is None:
+                conn.close()
+                
+        except Exception as e:
+            logging.error(f"Error taking knowledge snapshot: {e}")
+            
+        return snapshot
 
     # Implement methods required by KnowledgeStoreInterface
     def remember(self, text: str, source: Optional[str] = None) -> List[int]:

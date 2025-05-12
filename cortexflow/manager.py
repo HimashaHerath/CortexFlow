@@ -9,7 +9,8 @@ import json
 import logging
 import requests
 import traceback
-from typing import List, Dict, Any, Optional, Union, Iterator
+from typing import List, Dict, Any, Optional, Union, Iterator, Tuple
+import re
 
 from cortexflow.interfaces import ContextProvider
 from cortexflow.config import CortexFlowConfig
@@ -1133,4 +1134,196 @@ class CortexFlowManager(ContextProvider):
             return stats.get("caching", {})
         except Exception as e:
             logger.error(f"Error getting cache stats: {e}")
-            return {"status": "error", "message": str(e)} 
+            return {"status": "error", "message": str(e)}
+    
+    def multi_hop_query(self, query: str) -> Dict[str, Any]:
+        """
+        Perform multi-hop reasoning on a query.
+        
+        Args:
+            query: The query text
+            
+        Returns:
+            Dictionary with path, entities, score, and other reasoning results
+        """
+        if not hasattr(self, "knowledge_store") or not hasattr(self.knowledge_store, "graph_store"):
+            logger.error("Graph store not available for multi-hop query")
+            return {"path": [], "entities": [], "score": 0.0}
+            
+        result = {
+            "path": [],
+            "entities": [],
+            "score": 0.0,
+            "hop_count": 0
+        }
+        
+        try:
+            # Use the graph search to find relevant information
+            graph_results = self.knowledge_store._graph_search(query, max_results=5)
+            
+            # Parse entity relations from query
+            entity_pair = self._extract_entity_pair(query)
+            
+            if entity_pair:
+                # Try to find paths between the entities
+                start_entity, end_entity = entity_pair
+                paths = self.knowledge_store.graph_store.path_query(
+                    start_entity=start_entity,
+                    end_entity=end_entity,
+                    max_hops=self.config.max_graph_hops
+                )
+                
+                # If we found paths, format the result
+                if paths and len(paths) > 0:
+                    best_path = paths[0]  # Use the first path (should be shortest/best)
+                    
+                    # Format into a linear path
+                    formatted_path = []
+                    for i, node in enumerate(best_path):
+                        # Add the entity
+                        formatted_path.append(node.get("entity", f"Entity_{node.get('id')}"))
+                        
+                        # Add the relation to the next node if not the last node
+                        if i < len(best_path) - 1 and "next_relation" in node:
+                            formatted_path.append(node["next_relation"].get("type", "related_to"))
+                    
+                    result["path"] = formatted_path
+                    result["entities"] = [node.get("entity", f"Entity_{node.get('id')}") for node in best_path]
+                    result["hop_count"] = len(best_path) - 1
+                    result["score"] = 0.8  # Default score
+            
+            # If no direct path found, try to extract paths from graph search results
+            if not result["path"] and graph_results:
+                for item in graph_results:
+                    # Look for graph_path type results
+                    if item.get("type") == "graph_path":
+                        path_text = item.get("text", "")
+                        if path_text:
+                            # Parse the path text into components
+                            path = [p.strip() for p in path_text.replace("→", "→").split("→")]
+                            result["path"] = path
+                            result["score"] = item.get("score", 0.5)
+                            result["hop_count"] = len(path) - 1 if path else 0
+                            break
+                    
+                    # Collect entities from all results
+                    if "entities" in item:
+                        result["entities"].extend(item.get("entities", []))
+            
+            # Ensure entities list is unique
+            if result["entities"]:
+                result["entities"] = list(set(result["entities"]))
+            
+            # Log the path if found
+            if result["path"]:
+                logger.info(f"Found path for query '{query}': {' → '.join(result['path'])}")
+            else:
+                logger.info(f"No path found for query '{query}'")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in multi_hop_query: {e}")
+            return {"path": [], "entities": [], "score": 0.0}
+    
+    def _extract_entity_pair(self, query: str) -> Optional[Tuple[str, str]]:
+        """
+        Extract a pair of entities from a query for path finding.
+        
+        Args:
+            query: The query text
+            
+        Returns:
+            Tuple of (start_entity, end_entity) or None if not found
+        """
+        # Try to match common query patterns like "connection between X and Y"
+        connection_pattern = r"(?:connection|relationship|relation)(?:\s+between\s+)([^,]+?)(?:\s+and\s+)([^?\.]+)"
+        match = re.search(connection_pattern, query, re.IGNORECASE)
+        
+        if match:
+            start_entity = match.group(1).strip()
+            end_entity = match.group(2).strip()
+            return (start_entity, end_entity)
+        
+        # Alternative patterns
+        alt_pattern = r"(?:how\s+are|what\s+connects|is\s+there\s+a\s+connection\s+between)\s+([^,]+?)(?:\s+and\s+)([^?\.]+)"
+        match = re.search(alt_pattern, query, re.IGNORECASE)
+        
+        if match:
+            start_entity = match.group(1).strip()
+            end_entity = match.group(2).strip()
+            return (start_entity, end_entity)
+            
+        return None
+        
+    def query(self, query_text: str) -> Dict[str, Any]:
+        """
+        General query interface that routes to specialized query methods.
+        
+        Args:
+            query_text: The query text
+            
+        Returns:
+            Query result
+        """
+        # For multi-hop reasoning queries, use the multi_hop_query method
+        if self.config.enable_multi_hop_queries and self._is_multi_hop_query(query_text):
+            logger.info(f"Routing to multi_hop_query: {query_text}")
+            return self.multi_hop_query(query_text)
+        
+        # For standard queries, use knowledge retrieval
+        logger.info(f"Performing standard knowledge retrieval: {query_text}")
+        knowledge_items = self.knowledge_store.get_relevant_knowledge(query_text)
+        
+        # Format the result
+        result = {
+            "items": knowledge_items,
+            "answer": self._extract_answer(query_text, knowledge_items),
+            "score": max([item.get("score", 0) for item in knowledge_items]) if knowledge_items else 0
+        }
+        
+        return result
+    
+    def _is_multi_hop_query(self, query: str) -> bool:
+        """
+        Determine if a query requires multi-hop reasoning.
+        
+        Args:
+            query: The query text
+            
+        Returns:
+            True if the query requires multi-hop reasoning
+        """
+        # Keywords that suggest multi-hop reasoning is needed
+        multi_hop_indicators = [
+            r"connection between", r"relationship between", r"related to",
+            r"connect", r"path", r"link", r"how are .+ and .+ related",
+            r"what is the connection", r"how does .+ relate to",
+        ]
+        
+        # Check if any indicators are present
+        for indicator in multi_hop_indicators:
+            if re.search(indicator, query, re.IGNORECASE):
+                return True
+                
+        return False
+    
+    def _extract_answer(self, query: str, knowledge_items: List[Dict[str, Any]]) -> str:
+        """
+        Extract an answer from knowledge items.
+        
+        Args:
+            query: The query text
+            knowledge_items: List of knowledge items
+            
+        Returns:
+            Extracted answer string
+        """
+        if not knowledge_items:
+            return "No information found."
+            
+        # Get the highest-scored item
+        best_item = max(knowledge_items, key=lambda x: x.get("score", 0))
+        
+        # Return the text of the best item
+        return best_item.get("text", "Information found but text extraction failed.") 

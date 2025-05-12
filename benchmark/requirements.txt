@@ -1,0 +1,7 @@
+numpy>=1.19.0
+matplotlib>=3.3.0
+networkx>=2.5
+plotly>=4.14.0  # For interactive visualizations
+python-dateutil>=2.8.1
+tqdm>=4.50.0  # For progress bars
+pandas>=1.1.0  # For data analysis 
