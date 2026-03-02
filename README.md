@@ -1,7 +1,5 @@
 # CortexFlow
 
-![CortexFlow Logo](docs/source/_static/logo.png)
-
 CortexFlow is a multi-tier memory optimization system for LLMs that implements a cognitive-inspired architecture to maximize context utilization and enable complex reasoning.
 
 [![PyPI version](https://badge.fury.io/py/cortexflow.svg)](https://badge.fury.io/py/cortexflow)
@@ -85,7 +83,7 @@ response = context_manager.generate_response()
 print(f"Assistant: {response}")
 
 # Explicitly store important information
-context_manager.remember_knowledge("The user's name is Alice and she lives in Boston.")
+context_manager.add_knowledge("The user's name is Alice and she lives in Boston.")
 
 # Use the advanced knowledge graph features
 config = CortexFlowConfig(
@@ -147,7 +145,7 @@ config = CortexFlowConfig(
 manager = CortexFlowManager(config)
 
 # Add some knowledge to the graph
-manager.knowledge_store.remember_knowledge(
+manager.knowledge_store.add_knowledge(
     "Marie Curie discovered radium and polonium. She worked at the University of Paris."
 )
 
@@ -324,14 +322,14 @@ config = CortexFlowConfig(
 manager = CortexFlowManager(config)
 
 # Add knowledge with confidence scores
-manager.remember_knowledge(
+manager.add_knowledge(
     "Mount Everest is 8,848 meters tall.",
     source="geography_textbook",
     confidence=0.9
 )
 
 # Add contradictory information
-manager.remember_knowledge(
+manager.add_knowledge(
     "Mount Everest is 8,849 meters tall.",
     source="recent_survey",
     confidence=0.85
