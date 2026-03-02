@@ -3,7 +3,7 @@ requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cortexflow"
+name = "cortexflow-llm"
 version = "0.8.0"
 description = "Multi-tier memory optimization for LLMs with cognitive-inspired architecture"
 readme = "README.md"
