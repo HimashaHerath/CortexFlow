@@ -7,6 +7,8 @@ This module provides content classification functionality for CortexFlow.
 import time
 import logging
 import numpy as np
+
+logger = logging.getLogger(__name__)
 from typing import List, Dict, Any, Optional, Tuple
 import re
 import json
