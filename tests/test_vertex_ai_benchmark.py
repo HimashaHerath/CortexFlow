@@ -4,7 +4,7 @@ CortexFlow — Vertex AI End-to-End Benchmark
 Run with:
     export VERTEX_PROJECT_ID=<your-project>
     export VERTEX_LOCATION=global
-    export VERTEX_API_KEY=AQ.Ab8RN...        # OR
+    export VERTEX_API_KEY=<your-api-key>      # OR
     export GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json
     python test_vertex_ai_benchmark.py
 

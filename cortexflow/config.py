@@ -22,6 +22,7 @@ class MemoryConfig:
         "working": 0.35,
         "archive": 0.40
     })
+    use_fact_extraction: bool = False
 
 @dataclass
 class KnowledgeStoreConfig:
@@ -340,6 +341,11 @@ class ConfigBuilder:
     def with_inference(self, **kwargs) -> 'ConfigBuilder':
         """Configure inference engine settings."""
         return self._set_section('_inference', **kwargs)
+
+    def with_fact_extraction(self, enabled: bool = True) -> 'ConfigBuilder':
+        """Enable or disable personal fact extraction for deep memory recall."""
+        self._memory.use_fact_extraction = enabled
+        return self
     
     def with_debug(self, verbose_logging: bool = None, debug_mode: bool = None) -> 'ConfigBuilder':
         """Configure debug and logging settings."""

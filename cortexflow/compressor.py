@@ -75,24 +75,40 @@ class ExtractiveSummarizer:
         sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
         return [word for word, _ in sorted_words[:top_n]]
     
+    # Lazy-loaded PersonalFactDetector singleton for entity bonus scoring
+    _fact_detector = None
+
+    @classmethod
+    def _get_fact_detector(cls):
+        if cls._fact_detector is None:
+            from cortexflow.fact_detector import PersonalFactDetector
+            cls._fact_detector = PersonalFactDetector(use_spacy=False)
+        return cls._fact_detector
+
     def rank_sentences(self, text: str, keywords: List[str]) -> List[Tuple[str, float]]:
         """
         Rank sentences by keyword presence.
-        
+
         Args:
             text: Input text
             keywords: List of important keywords
-            
+
         Returns:
             List of (sentence, score) tuples
         """
         # Split into sentences
         sentences = re.split(r'(?<=[.!?])\s+', text)
-        
+
         # Preserve code blocks and specific patterns as important
         code_blocks = re.findall(r'```[\s\S]*?```', text)
         equations = re.findall(r'\$\$[\s\S]*?\$\$', text)
-        
+
+        # Get fact detector for entity bonus
+        try:
+            fact_detector = self._get_fact_detector()
+        except Exception:
+            fact_detector = None
+
         # Score each sentence based on keyword presence
         scored_sentences = []
         for sentence in sentences:
@@ -100,11 +116,16 @@ class ExtractiveSummarizer:
             if any(block in sentence for block in code_blocks) or any(eq in sentence for eq in equations):
                 scored_sentences.append((sentence, 10.0))
                 continue
-                
+
+            # Personal fact sentences get preserved like code blocks
+            if fact_detector and fact_detector.contains_personal_fact(sentence):
+                scored_sentences.append((sentence, 10.0))
+                continue
+
             # Otherwise score based on keywords
             score = sum(1.0 for keyword in keywords if keyword.lower() in sentence.lower())
             scored_sentences.append((sentence, score))
-        
+
         return scored_sentences
     
     def compress(self, content: str, target_ratio: float) -> str:

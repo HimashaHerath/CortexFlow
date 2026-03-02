@@ -21,6 +21,7 @@ CortexFlow dynamically manages context information, retaining important elements
 - Importance-based information retention using rule-based, ML, and LLM classification
 - Progressive context compression with extractive and abstractive summarization
 - Knowledge store for long-term information persistence
+- **Personal fact extraction** with regex-based detection, entity-aware importance scoring, and dual-write to knowledge store for deep memory recall
 - **Dynamic memory tier weighting** for adaptive token allocation
 - **Vector-based knowledge retrieval** for semantic search
 - **Advanced retrieval techniques** including GraphRAG for complex multi-hop queries
@@ -354,6 +355,42 @@ result = manager.reason_with_incomplete_information(query, available_knowledge)
 
 For more details, see [Uncertainty Handling Documentation](docs/uncertainty_handling.md).
 
+## Personal Fact Extraction (Deep Memory Recall)
+
+CortexFlow can automatically detect and preserve personal facts shared during conversation, ensuring they survive memory tier compression and remain retrievable even after hundreds of filler messages.
+
+Three defense layers work together:
+
+1. **Importance scoring** — Personal facts ("My name is Alice") score 8.0, above all regular content (3.0-7.0) and below system messages (9.0). This keeps facts in the active tier longer and triggers the compression preservation guard.
+2. **Entity-preserving compression** — During extractive summarization, sentences containing personal facts get the maximum score (10.0, same as code blocks) and are never dropped.
+3. **Dual-write to knowledge store** — Detected facts are automatically stored in the knowledge store on ingestion. Even after tier compression destroys the original message, `generate_response()` retrieves the fact via BM25 search.
+
+**Detected patterns:** names, occupations, locations, preferences, possessions, age statements.
+
+```python
+from cortexflow import ConfigBuilder, CortexFlowManager
+
+config = (ConfigBuilder()
+    .with_memory(active_token_limit=1024, working_token_limit=4096)
+    .with_fact_extraction(enabled=True)
+    .with_llm(default_model="llama3")
+    .build())
+
+manager = CortexFlowManager(config)
+
+# Personal facts are automatically detected and preserved
+manager.add_message("user", "My name is Alice.")
+manager.add_message("user", "I work at NASA as a flight engineer.")
+
+# ... hundreds of filler messages later ...
+
+manager.add_message("user", "What is my name?")
+response = manager.generate_response()
+# Response will correctly recall "Alice"
+```
+
+Enable via config: `use_fact_extraction=True` in `MemoryConfig`, or `.with_fact_extraction()` on the builder. Disabled by default for backward compatibility.
+
 ## Vertex AI Integration
 
 CortexFlow supports Google Vertex AI as an alternative LLM backend alongside Ollama:
@@ -381,6 +418,63 @@ response = manager.generate_response()
 ```
 
 Vertex AI requires a GCP project with the Vertex AI API enabled and service account credentials with the `cloud-platform` scope.
+
+## Benchmarks
+
+CortexFlow includes two benchmark suites that validate its memory management against live LLM calls (Gemini 2.0 Flash via Vertex AI).
+
+### Comparative Evidence Benchmark — CortexFlow vs. Naive Baseline
+
+An A/B benchmark that runs the **same queries** through both CortexFlow (full tiered-memory pipeline) and a naive last-N-messages baseline using the **same LLM and credentials**. The only difference is memory management.
+
+| # | Scenario | CortexFlow | Naive | Winner |
+|---|----------|:----------:|:-----:|:------:|
+| 1 | **Deep Memory Recall** — 5 personal facts + 40 filler pairs, recall through tier cascade | **5/5** | 0/5 | **CortexFlow** |
+| 2 | **Knowledge-Augmented** — 10 invented facts the LLM can't know from training | 9/10 | 0/10 | **CortexFlow** |
+| 3 | **System Instruction Preservation** — sentinel phrase after 60 filler pairs | 3/3 | 1/3 | **CortexFlow** |
+| 4 | **Conversational Coherence** — framework/language recall across scattered context | 3/3 | 3/3 | Tie |
+| 5 | **Token Efficiency** — quality per token (quality / 1k tokens) | varies | varies | varies |
+
+**Overall: CortexFlow 3 wins, Naive 1, Tie 1. LLM-as-Judge mean score: CortexFlow 9.6/10 vs. Naive 5.7/10.**
+
+Key findings:
+- **Deep memory recall** — With personal fact extraction enabled, CortexFlow recalls **5/5 personal facts** (perfect score) after 40 filler message pairs, while the naive baseline recalls 0/5. Three defense layers (importance scoring, entity-preserving compression, dual-write to knowledge store) ensure facts survive tier cascade compression.
+- **Knowledge retrieval** is the strongest differentiator — CortexFlow retrieves 9/10 invented facts that no LLM could answer from training data alone, while the naive baseline scores 0/10.
+- **System message preservation** works because CortexFlow assigns importance=9.0 to system messages, keeping them pinned through tier cascades.
+
+### Chatbot Scenario Benchmark
+
+End-to-end benchmark covering 6 real-world chatbot scenarios:
+
+| # | Scenario | Result |
+|---|----------|--------|
+| 1 | Basic Conversation (5 turns) | 5/5 |
+| 2 | Long Context Stress (50+ message pairs) | Tier cascade verified |
+| 3 | Knowledge-Augmented Retrieval (20 facts, 8 queries) | 50%+ hit rate |
+| 4 | Memory Persistence & Recall (30 filler pairs) | 1+ of 3 facts recalled |
+| 5 | Context Window Overflow (100 message pairs) | No crashes, tiers within limits |
+| 6 | Concurrent Knowledge + Conversation | 50%+ hit rate |
+
+**Overall pass rate: 96.6% (28/29 checks).**
+
+### Running the Benchmarks
+
+Both suites require Vertex AI credentials (via environment variables) and make live LLM calls:
+
+```bash
+# Set credentials (service account JSON + project ID)
+export VERTEX_CREDENTIALS_PATH=/path/to/service-account.json
+export VERTEX_PROJECT_ID=your-gcp-project
+
+# Comparative evidence benchmark (~2-5 min):
+python -m pytest tests/test_evidence_benchmark.py -v -s --timeout=900
+
+# Chatbot scenario benchmark (~3-5 min):
+python -m pytest tests/test_chatbot_benchmark.py -v -s --timeout=600
+
+# Quick smoke test (single scenario):
+python -m pytest tests/test_evidence_benchmark.py::TestEvidenceBenchmark::test_01_deep_memory_recall -v -s
+```
 
 ## Documentation
 

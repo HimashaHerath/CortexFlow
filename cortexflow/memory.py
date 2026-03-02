@@ -430,6 +430,16 @@ class ConversationMemory:
         word_count = len(content.split())
         return max(1, int(word_count * 1.3))
 
+    # Class-level singleton for PersonalFactDetector (lazy-loaded)
+    _fact_detector = None
+
+    @classmethod
+    def _get_fact_detector(cls):
+        if cls._fact_detector is None:
+            from .fact_detector import PersonalFactDetector
+            cls._fact_detector = PersonalFactDetector(use_spacy=False)
+        return cls._fact_detector
+
     @staticmethod
     def _estimate_importance(role: str, content: str) -> float:
         """Estimate the importance of a message based on simple heuristics.
@@ -444,6 +454,16 @@ class ConversationMemory:
         # System messages are always critical
         if role == "system":
             return 9.0
+
+        # Personal facts get high importance (above all regular content,
+        # below system messages). This triggers the importance >= 8.0
+        # preservation guard in compress_segment().
+        try:
+            detector = ConversationMemory._get_fact_detector()
+            if detector.contains_personal_fact(content):
+                return 8.0
+        except Exception:
+            pass  # Fall through to default heuristics
 
         # Short messages are generally less important
         word_count = len(content.split())

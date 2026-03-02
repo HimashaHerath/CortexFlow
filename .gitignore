@@ -73,6 +73,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Claude Code local settings (may contain credentials)
+.claude/
+
 # Benchmark results
 graph_rag_benchmark_results.png
 benchmark_graph_rag.db

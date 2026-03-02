@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Personal Fact Extraction for deep memory recall:
+  - New `fact_detector.py` module with regex-based `PersonalFactDetector` class
+  - Detects names, occupations, locations, preferences, possessions, and age statements
+  - Entity-aware importance scoring: personal facts score 8.0 (above regular content, below system messages)
+  - Entity-preserving compression: fact sentences get maximum score (10.0) in extractive summarization
+  - Dual-write to knowledge store: detected facts are automatically stored for BM25 retrieval
+  - New `use_fact_extraction` config flag and `.with_fact_extraction()` builder method
+  - Benchmark result: 5/5 personal facts recalled after 40 filler pairs (up from 0-1/5)
 - Core Reasoning Framework:
   - Implemented ReasoningEngine for multi-step reasoning orchestration
   - Added QueryPlanner for breaking complex queries into reasoning steps

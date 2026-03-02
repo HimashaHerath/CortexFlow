@@ -184,7 +184,17 @@ class CortexFlowManager(ContextProvider):
                     logger.info("Performance Optimizer initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize Performance Optimizer: {e}")
-                
+
+            # Initialize Personal Fact Detector if enabled
+            self.fact_detector = None
+            if hasattr(self.config, "use_fact_extraction") and self.config.use_fact_extraction:
+                try:
+                    from cortexflow.fact_detector import PersonalFactDetector
+                    self.fact_detector = PersonalFactDetector(use_spacy=False)
+                    logger.info("Personal Fact Detector initialized successfully")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Personal Fact Detector: {e}")
+
             logger.info("CortexFlowManager initialized")
             
         except Exception as e:
@@ -248,6 +258,20 @@ class CortexFlowManager(ContextProvider):
                 metadata["importance"] = 5.0
 
         message = self.memory.add_message(role, content, metadata)
+
+        # Dual-write: extract personal facts and store in knowledge store
+        if role == "user" and self.fact_detector is not None:
+            try:
+                facts = self.fact_detector.detect_facts(content)
+                for fact in facts:
+                    self.knowledge_store.add_knowledge(
+                        fact["fact_text"],
+                        source="conversation_extract",
+                        confidence=0.9,
+                    )
+                    logger.debug(f"Extracted personal fact: {fact['fact_text']}")
+            except Exception as e:
+                logger.error(f"Error extracting personal facts: {e}")
 
         # Apply dynamic weighting for user queries
         if role == "user" and self.weighting_engine and self.config.use_dynamic_weighting:
