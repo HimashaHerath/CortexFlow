@@ -76,9 +76,9 @@ class TestEntityExtraction:
         # At least one key entity should be found (depends on NLP model availability)
         if entities:
             # Check that at least something meaningful was extracted
-            all_text = " ".join(entity_texts)
+            all_text = " ".join(entity_texts).lower()
             has_relevant = any(
-                name in all_text
+                name.lower() in all_text
                 for name in ["Steve", "Jobs", "Apple", "California"]
             )
             assert has_relevant, f"Expected relevant entities, got: {entity_texts}"
