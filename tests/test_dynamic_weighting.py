@@ -13,6 +13,14 @@ try:
 except ImportError:
     HAS_GRAPH_STORE = False
 
+# Check if spaCy model is available (needed for entity/relation extraction tests)
+try:
+    import spacy
+    spacy.load("en_core_web_sm")
+    HAS_SPACY_MODEL = True
+except Exception:
+    HAS_SPACY_MODEL = False
+
 class TestDynamicWeightingEngine:
     """Tests for the DynamicWeightingEngine class"""
     
@@ -369,6 +377,7 @@ def test_manager_integration(mock_engine_class, mock_engine):
 
 @pytest.mark.timeout(180)
 @pytest.mark.skipif(not HAS_GRAPH_STORE, reason="GraphStore not available")
+@pytest.mark.skipif(not HAS_SPACY_MODEL, reason="spaCy en_core_web_sm model not installed")
 class TestEntityRelationExtraction:
     """Test the enhanced entity and relation extraction capabilities"""
 

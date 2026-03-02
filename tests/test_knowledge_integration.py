@@ -87,7 +87,6 @@ def test_enhanced_schema():
     assert version_count >= 1, f"Expected at least 1 version record, got {version_count}"
     
     logger.info("Enhanced schema test completed successfully")
-    return True
 
 def test_graph_merger():
     """Test the GraphMerger component for intelligently combining information."""
@@ -208,7 +207,6 @@ def test_graph_merger():
     logger.info(f"GraphMerger stats: {stats}")
     
     logger.info("GraphMerger test completed successfully")
-    return True
 
 def test_taxonomic_extraction():
     """Test automatic taxonomic relationship extraction."""
@@ -252,7 +250,6 @@ def test_taxonomic_extraction():
     
     # Skip automatic taxonomic discovery test as it depends on fuzzy matching
     logger.info("Taxonomic extraction test completed")
-    return True
 
 def test_relationship_inference():
     """Test inference of transitive, symmetric, and inverse relations."""
@@ -354,7 +351,6 @@ def test_relationship_inference():
         logger.warning("Inverse relationship not created - this may require manual inverse creation")
     
     logger.info("Relationship inference test completed")
-    return True
 
 def run_all_tests():
     """Run all tests and report results."""
