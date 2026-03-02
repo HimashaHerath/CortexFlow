@@ -2,8 +2,8 @@
 
 CortexFlow is a multi-tier memory optimization system for LLMs that implements a cognitive-inspired architecture to maximize context utilization and enable complex reasoning.
 
-[![PyPI version](https://badge.fury.io/py/cortexflow.svg)](https://badge.fury.io/py/cortexflow)
-[![Documentation Status](https://readthedocs.org/projects/cortexflow/badge/?version=latest)](https://cortexflow.readthedocs.io/en/latest/?badge=latest)
+[![PyPI version](https://badge.fury.io/py/cortexflow-llm.svg)](https://badge.fury.io/py/cortexflow-llm)
+[![Documentation Status](https://readthedocs.org/projects/cortexflow-llm/badge/?version=latest)](https://cortexflow-llm.readthedocs.io/en/latest/?badge=latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
@@ -39,17 +39,17 @@ CortexFlow dynamically manages context information, retaining important elements
 ## Installation
 
 ```bash
-pip install cortexflow
+pip install cortexflow-llm
 ```
 
 For the graph-based knowledge features:
 ```bash
-pip install "cortexflow[graph]"
+pip install "cortexflow-llm[graph]"
 ```
 
 For the full package with all dependencies (including enhanced NLP capabilities):
 ```bash
-pip install "cortexflow[all]"
+pip install "cortexflow-llm[all]"
 ```
 
 ## Quick Start
@@ -396,7 +396,7 @@ Enable via config: `use_fact_extraction=True` in `MemoryConfig`, or `.with_fact_
 CortexFlow supports Google Vertex AI as an alternative LLM backend alongside Ollama:
 
 ```bash
-pip install "cortexflow[vertex]"
+pip install "cortexflow-llm[vertex]"
 ```
 
 ```python
@@ -478,7 +478,7 @@ python -m pytest tests/test_evidence_benchmark.py::TestEvidenceBenchmark::test_0
 
 ## Documentation
 
-For full documentation, visit [cortexflow.readthedocs.io](https://cortexflow.readthedocs.io).
+For full documentation, visit [cortexflow-llm.readthedocs.io](https://cortexflow-llm.readthedocs.io).
 
 ## Contributing
 
@@ -493,4 +493,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 CortexFlow was previously known as AdaptiveContext. To migrate:
 
 1. Replace `from adaptive_context` with `from cortexflow` in all imports
-2. Update flat config dicts to nested `CortexFlowConfig` dataclasses (see [migration guide](https://cortexflow.readthedocs.io/en/latest/guides/migration.html))
+2. Update flat config dicts to nested `CortexFlowConfig` dataclasses (see [migration guide](https://cortexflow-llm.readthedocs.io/en/latest/guides/migration.html))
