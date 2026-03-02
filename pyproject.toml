@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cortexflow"
-version = "0.1.0"
+version = "0.8.0"
 description = "Multi-tier memory optimization for LLMs with cognitive-inspired architecture"
 readme = "README.md"
 authors = [
@@ -16,13 +16,14 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 dependencies = [
     "numpy>=1.22.0",
     "requests>=2.25.0",
@@ -35,16 +36,19 @@ dependencies = [
 graph = [
     "networkx>=3.1",
     "spacy>=3.5.0",
+    "python-louvain>=0.16",
 ]
 nlp = [
-    "neuralcoref>=4.0",
-    "allennlp>=2.9.0",
-    "allennlp-models>=2.9.0",
-    "nltk>=3.6.5",
+    "flair>=0.13.0",
+    "transformers>=4.35.0",
+]
+vertex = [
+    "google-genai>=0.3.0",
 ]
 dev = [
     "pytest>=7.3.1",
     "pytest-cov>=4.1.0",
+    "pytest-timeout>=2.1.0",
     "black>=23.3.0",
     "isort>=5.12.0",
     "flake8>=6.0.0",
@@ -58,18 +62,19 @@ docs = [
 all = [
     "networkx>=3.1",
     "spacy>=3.5.0",
-    "matplotlib>=3.5.0",
-    "tiktoken>=0.5.1",
-    "neuralcoref>=4.0",
-    "allennlp>=2.9.0",
-    "allennlp-models>=2.9.0",
-    "nltk>=3.6.5",
+    "python-louvain>=0.16",
+    "flair>=0.13.0",
+    "transformers>=4.35.0",
+    "google-genai>=0.3.0",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/cortexflow"
-"Bug Tracker" = "https://github.com/yourusername/cortexflow/issues"
+"Homepage" = "https://github.com/cortexflow-team/cortexflow"
+"Bug Tracker" = "https://github.com/cortexflow-team/cortexflow/issues"
 "Documentation" = "https://cortexflow.readthedocs.io"
 
 [project.scripts]
-cortexflow = "cortexflow.cli:main" 
+cortexflow = "cortexflow.cli:main"
+
+[tool.pytest.ini_options]
+timeout = 120

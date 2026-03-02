@@ -9,8 +9,8 @@ The Dynamic Weighting module provides functionality to adaptively allocate token
 ### Initialization
 
 ```python
-from adaptive_context.dynamic_weighting import DynamicWeightingEngine
-from adaptive_context.config import CortexFlowConfig
+from cortexflow.dynamic_weighting import DynamicWeightingEngine
+from cortexflow.config import CortexFlowConfig
 
 # Create a configuration
 config = CortexFlowConfig(
@@ -118,7 +118,7 @@ engine.reset_to_defaults()
 The DynamicWeightingEngine is integrated with CortexFlowManager and can be used as follows:
 
 ```python
-from adaptive_context import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Enable Dynamic Weighting in configuration
 config = CortexFlowConfig(
@@ -195,7 +195,7 @@ Weights are gradually adjusted using the learning rate to avoid abrupt changes.
 Here's a detailed example of using dynamic weighting:
 
 ```python
-from adaptive_context import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Create configuration with Dynamic Weighting enabled
 config = CortexFlowConfig(

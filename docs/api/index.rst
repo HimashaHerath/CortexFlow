@@ -1,16 +1,8 @@
 API Reference
 =============
 
-.. toctree::
-   :maxdepth: 2
+The full API reference is located in the Sphinx source documentation.
+See ``docs/source/api/`` for detailed API documentation of:
 
-   manager
-   config
-   memory
-   knowledge
-   graph_store
-   agent_chain
-   reflection
-   classifier
-   compressor
-   dynamic_weighting 
+- ``CortexFlowManager`` - Main entry point and orchestrator
+- ``CortexFlowConfig`` - Nested configuration with sub-config classes and ConfigBuilder

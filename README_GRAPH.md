@@ -80,7 +80,7 @@ graph.process_text_to_graph(
 Install the required dependencies:
 
 ```bash
-pip install -r requirements.txt
+pip install "cortexflow[nlp]"
 python -m spacy download en_core_web_sm
 ```
 

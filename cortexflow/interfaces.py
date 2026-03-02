@@ -4,7 +4,7 @@ All components should implement these interfaces for consistency and extensibili
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Iterator, Union
+from typing import Dict, List, Any, Optional, Iterator
 
 
 class ContextProvider(ABC):
@@ -47,17 +47,26 @@ class MemoryTierInterface(ABC):
 
 class KnowledgeStoreInterface(ABC):
     """Interface for knowledge stores."""
-    
+
     @abstractmethod
-    def remember(self, text: str, source: Optional[str] = None) -> List[int]:
-        """Store knowledge in the system."""
+    def add_knowledge(self, text: str, source: Optional[str] = None, confidence: float = 0.95) -> List[int]:
+        """Store knowledge in the system.
+
+        Args:
+            text: Text to store as knowledge.
+            source: Optional source identifier.
+            confidence: Confidence score for the stored facts.
+
+        Returns:
+            List of IDs for the stored knowledge items.
+        """
         pass
-    
+
     @abstractmethod
     def retrieve(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """Retrieve knowledge relevant to the query."""
         pass
-    
+
     @abstractmethod
     def clear(self) -> None:
         """Clear all stored knowledge."""
@@ -66,13 +75,18 @@ class KnowledgeStoreInterface(ABC):
 
 class LLMProviderInterface(ABC):
     """Interface for LLM providers."""
-    
+
     @abstractmethod
-    def generate(self, prompt: Union[str, List[Dict[str, str]]], **kwargs) -> str:
-        """Generate text from a prompt."""
+    def generate(self, messages: List[Dict[str, str]], model: str = None, **kwargs) -> str:
+        """Generate a response from a list of role/content messages."""
         pass
-    
+
     @abstractmethod
-    def generate_stream(self, prompt: Union[str, List[Dict[str, str]]], **kwargs) -> Iterator[str]:
-        """Generate text as a stream."""
+    def generate_from_prompt(self, prompt: str, model: str = None, **kwargs) -> str:
+        """Generate a response from a raw string prompt."""
+        pass
+
+    @abstractmethod
+    def generate_stream(self, messages: List[Dict[str, str]], model: str = None, **kwargs) -> Iterator[str]:
+        """Stream a response from a list of role/content messages."""
         pass 

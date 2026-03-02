@@ -5,11 +5,11 @@ This module provides context compression functionality for CortexFlow.
 """
 
 import re
-import requests
 from typing import List, Dict, Any, Optional, Tuple
 
 from cortexflow.config import CortexFlowConfig
 from cortexflow.memory import ContextSegment
+from cortexflow.llm_client import create_llm_client
 
 class TruncationCompressor:
     """Simple truncation-based context compressor."""
@@ -156,13 +156,12 @@ class LLMSummarizer:
     def __init__(self, config: CortexFlowConfig):
         """
         Initialize LLM summarizer.
-        
+
         Args:
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration
         """
         self.config = config
-        self.ollama_url = f"{config.ollama_host}/api/generate"
-        self.model = config.default_model
+        self.llm_client = create_llm_client(config)
     
     def compress(self, content: str, target_ratio: float) -> str:
         """
@@ -198,23 +197,10 @@ class LLMSummarizer:
         """
         
         try:
-            response = requests.post(
-                self.ollama_url,
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False
-                },
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                compressed = result.get("response", "").strip()
-                
-                # Verify compression was achieved
-                if len(compressed.split()) <= approx_tokens * 1.1:  # Allow 10% margin
-                    return compressed
+            compressed = self.llm_client.generate_from_prompt(prompt, timeout=10).strip()
+            # Verify compression was achieved
+            if compressed and len(compressed.split()) <= approx_tokens * 1.1:  # Allow 10% margin
+                return compressed
         except Exception as e:
             # Fall back to extractive summarization on error
             pass
@@ -225,18 +211,37 @@ class LLMSummarizer:
 
 class ContextCompressor:
     """Context compressor that manages different compression strategies."""
-    
-    def __init__(self, config: CortexFlowConfig):
+
+    def __init__(self, config: Optional[CortexFlowConfig] = None):
         """
         Initialize context compressor.
-        
+
         Args:
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration. If None, only extractive
+                    and truncation strategies will be available (no LLM).
         """
         self.config = config
         self.truncation = TruncationCompressor()
         self.extractive = ExtractiveSummarizer()
-        self.abstractive = LLMSummarizer(config)
+        self._abstractive = None
+        if config is not None:
+            try:
+                self._abstractive = LLMSummarizer(config)
+            except Exception:
+                self._abstractive = None
+
+    @classmethod
+    def create_default(cls) -> 'ContextCompressor':
+        """
+        Create a default compressor that uses extractive summarization only.
+
+        No LLM or config required. Suitable for use by the memory tier system
+        when full config is not available.
+
+        Returns:
+            ContextCompressor instance with extractive/truncation strategies only
+        """
+        return cls(config=None)
     
     def compress_segment(self, segment: ContextSegment, target_ratio: float) -> ContextSegment:
         """
@@ -267,9 +272,12 @@ class ContextCompressor:
         elif segment.importance < 4.0:
             # Use more aggressive compression for unimportant content
             compressed_content = self.extractive.compress(content, target_ratio)
+        elif self._abstractive is not None:
+            # Use abstractive summarization for important content when LLM available
+            compressed_content = self._abstractive.compress(content, target_ratio)
         else:
-            # Use abstractive summarization for important content
-            compressed_content = self.abstractive.compress(content, target_ratio)
+            # Fallback to extractive when no LLM is configured
+            compressed_content = self.extractive.compress(content, target_ratio)
         
         # Create new segment with compressed content
         # Estimate token count based on original ratio

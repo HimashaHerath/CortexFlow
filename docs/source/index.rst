@@ -1,12 +1,8 @@
 CortexFlow Documentation
 =======================
 
-CortexFlow is a cognitive-inspired memory optimization system for LLMs that implements a 
+CortexFlow is a cognitive-inspired memory optimization system for LLMs that implements a
 multi-tier architecture designed to maximize context utilization and enable complex reasoning.
-
-.. image:: _static/architecture.png
-   :width: 600px
-   :alt: CortexFlow Architecture
 
 Key Features
 -----------
@@ -20,6 +16,7 @@ Key Features
 - Advanced retrieval techniques with GraphRAG
 - Chain of Agents framework for complex queries
 - Self-reflection for verifying knowledge relevance
+- Vertex AI and Ollama backend support
 
 .. toctree::
    :maxdepth: 2
@@ -28,10 +25,7 @@ Key Features
    guides/installation
    guides/getting_started
    guides/configuration
-   guides/chain_of_agents
-   guides/graph_rag
-   guides/dynamic_weighting
-   guides/self_reflection
+   guides/migration
 
 .. toctree::
    :maxdepth: 2
@@ -39,26 +33,28 @@ Key Features
 
    api/manager
    api/config
-   api/memory
-   api/knowledge
-   api/graph_store
-   api/agent_chain
-   api/dynamic_weighting
-   api/reflection
 
 .. toctree::
    :maxdepth: 1
    :caption: Examples
 
    examples/basic_usage
-   examples/knowledge_retrieval
-   examples/chain_of_agents
-   examples/graph_rag
-   examples/custom_providers
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Design & Research
+
+   ../chain_of_agents
+   ../self_reflection
+   ../dynamic_weighting
+   ../research_improvements
+   ../logical_reasoning
+   ../performance_optimization
+   ../uncertainty_handling
 
 Indices and tables
 ==================
 
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search` 
+* :ref:`search`

@@ -28,7 +28,7 @@ CortexFlow dynamically manages context information, retaining important elements
 - **Advanced retrieval techniques** including GraphRAG for complex multi-hop queries
 - **Chain of Agents** for collaborative multi-agent reasoning over complex queries
 - **Self-Reflection** for verifying knowledge relevance and response consistency
-- **Enhanced entity and relation extraction** with semantic role labeling and coreference resolution
+- **Enhanced entity and relation extraction** with semantic role labeling and dependency parsing
 - **Logical reasoning capabilities** with forward chaining, backward chaining, and abductive reasoning
 - **Uncertainty handling and belief revision** for managing contradictions and incomplete information
 - **Performance optimization features** for scalable knowledge graph operations:
@@ -56,15 +56,24 @@ pip install "cortexflow[all]"
 ## Quick Start
 
 ```python
-from cortexflow import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig, ConfigBuilder
+from cortexflow import MemoryConfig, LLMConfig, KnowledgeStoreConfig, GraphRagConfig
 
-# Configure with custom settings
+# Configure with nested dataclasses
 config = CortexFlowConfig(
-    active_token_limit=2000,
-    working_token_limit=4000,
-    archive_token_limit=6000,
-    default_model="llama3"  # Use your preferred Ollama model
+    memory=MemoryConfig(
+        active_token_limit=2000,
+        working_token_limit=4000,
+        archive_token_limit=6000,
+    ),
+    llm=LLMConfig(default_model="llama3"),
 )
+
+# Or use the builder pattern
+config = (ConfigBuilder()
+    .with_memory(active_token_limit=2000, working_token_limit=4000)
+    .with_llm(default_model="llama3")
+    .build())
 
 # Create the context manager
 context_manager = CortexFlowManager(config)
@@ -80,8 +89,8 @@ context_manager.remember_knowledge("The user's name is Alice and she lives in Bo
 
 # Use the advanced knowledge graph features
 config = CortexFlowConfig(
-    use_graph_rag=True,
-    knowledge_store_path="knowledge.db"
+    graph_rag=GraphRagConfig(use_graph_rag=True),
+    knowledge_store=KnowledgeStoreConfig(knowledge_store_path="knowledge.db"),
 )
 manager = CortexFlowManager(config)
 
@@ -95,8 +104,8 @@ manager.knowledge_store.graph_store.process_text_to_graph(document)
 
 # Query the knowledge graph
 paths = manager.knowledge_store.graph_store.path_query(
-    start_entity="Albert Einstein", 
-    end_entity="Princeton University", 
+    start_entity="Albert Einstein",
+    end_entity="Princeton University",
     max_hops=2
 )
 
@@ -109,7 +118,6 @@ context_manager.close()
 CortexFlow provides enhanced entity and relation extraction capabilities:
 
 - **Semantic Role Labeling**: Extracts high-quality relationships based on semantic roles
-- **Coreference Resolution**: Resolves pronouns and other references to their entities
 - **Domain-Specific Entity Recognition**: Identifies entities in specialized domains
 - **Advanced Dependency Parsing**: Extracts complex relationships between entities
 - **Improved Triple Extraction**: Creates more accurate subject-predicate-object triples
@@ -133,8 +141,8 @@ from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Configure with graph features enabled
 config = CortexFlowConfig(
-    use_graph_rag=True,
-    knowledge_store_path="knowledge.db"
+    graph_rag=GraphRagConfig(use_graph_rag=True),
+    knowledge_store=KnowledgeStoreConfig(knowledge_store_path="knowledge.db"),
 )
 manager = CortexFlowManager(config)
 
@@ -196,15 +204,13 @@ Example usage:
 from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Configure with performance optimization enabled
-config = CortexFlowConfig(
-    use_graph_rag=True,
-    use_performance_optimization=True,
-    use_graph_partitioning=True,
-    use_multihop_indexing=True,
-    graph_partition_method="louvain",
-    max_indexed_hops=2,
-    knowledge_store_path="knowledge.db"
-)
+config = (ConfigBuilder()
+    .with_graph_rag(use_graph_rag=True, use_graph_partitioning=True,
+                    use_multihop_indexing=True, graph_partition_method="louvain",
+                    max_indexed_hops=2)
+    .with_performance(use_performance_optimization=True)
+    .with_knowledge_store(knowledge_store_path="knowledge.db")
+    .build())
 manager = CortexFlowManager(config)
 
 # Partition the knowledge graph for efficient operations
@@ -251,9 +257,9 @@ from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Configure with inference engine enabled
 config = CortexFlowConfig(
-    use_graph_rag=True,
-    use_inference_engine=True,
-    knowledge_store_path="knowledge.db"
+    graph_rag=GraphRagConfig(use_graph_rag=True),
+    inference=InferenceConfig(use_inference_engine=True),
+    knowledge_store=KnowledgeStoreConfig(knowledge_store_path="knowledge.db"),
 )
 manager = CortexFlowManager(config)
 
@@ -308,10 +314,12 @@ from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Configure with uncertainty handling enabled
 config = CortexFlowConfig(
-    use_uncertainty_handling=True,
-    auto_detect_contradictions=True,
-    default_contradiction_strategy="weighted",
-    knowledge_store_path="knowledge.db"
+    uncertainty=UncertaintyConfig(
+        use_uncertainty_handling=True,
+        auto_detect_contradictions=True,
+        default_contradiction_strategy="weighted",
+    ),
+    knowledge_store=KnowledgeStoreConfig(knowledge_store_path="knowledge.db"),
 )
 manager = CortexFlowManager(config)
 
@@ -348,6 +356,34 @@ result = manager.reason_with_incomplete_information(query, available_knowledge)
 
 For more details, see [Uncertainty Handling Documentation](docs/uncertainty_handling.md).
 
+## Vertex AI Integration
+
+CortexFlow supports Google Vertex AI as an alternative LLM backend alongside Ollama:
+
+```bash
+pip install "cortexflow[vertex]"
+```
+
+```python
+from cortexflow import ConfigBuilder, CortexFlowManager
+
+# Configure with Vertex AI using the builder pattern
+config = (ConfigBuilder()
+    .with_vertex_ai(
+        project_id="your-gcp-project",
+        location="us-central1",
+        default_model="gemini-2.0-flash",
+        credentials_path="/path/to/service-account.json",
+    )
+    .with_memory(active_token_limit=4096)
+    .build())
+
+manager = CortexFlowManager(config)
+response = manager.generate_response()
+```
+
+Vertex AI requires a GCP project with the Vertex AI API enabled and service account credentials with the `cloud-platform` scope.
+
 ## Documentation
 
 For full documentation, visit [cortexflow.readthedocs.io](https://cortexflow.readthedocs.io).
@@ -360,6 +396,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Note for AdaptiveContext Users
+## Migrating from AdaptiveContext
 
-CortexFlow is the new name for the project previously known as AdaptiveContext. See the [migration guide](https://cortexflow.readthedocs.io/en/latest/guides/migration.html) for details on transitioning.
+CortexFlow was previously known as AdaptiveContext. To migrate:
+
+1. Replace `from adaptive_context` with `from cortexflow` in all imports
+2. Update flat config dicts to nested `CortexFlowConfig` dataclasses (see [migration guide](https://cortexflow.readthedocs.io/en/latest/guides/migration.html))

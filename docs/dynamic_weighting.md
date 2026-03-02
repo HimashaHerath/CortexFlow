@@ -2,7 +2,7 @@
 
 ## Overview
 
-Dynamic Memory Tier Weighting is a feature in AdaptiveContext that automatically adjusts token allocation between memory tiers based on the characteristics of the conversation. This feature optimizes memory usage by analyzing query complexity, document types, and historical patterns to provide the most efficient distribution of tokens across the active, working, and archive tiers.
+Dynamic Memory Tier Weighting is a feature in CortexFlow that automatically adjusts token allocation between memory tiers based on the characteristics of the conversation. This feature optimizes memory usage by analyzing query complexity, document types, and historical patterns to provide the most efficient distribution of tokens across the active, working, and archive tiers.
 
 ## Key Features
 
@@ -76,7 +76,7 @@ config = CortexFlowConfig(
 
 ## Integration Points
 
-The Dynamic Weighting functionality is integrated with the core AdaptiveContext system at these key points:
+The Dynamic Weighting functionality is integrated with the core CortexFlow system at these key points:
 
 1. In `CortexFlowManager.__init__()`, where the DynamicWeightingEngine is initialized
 2. In `CortexFlowManager.add_message()`, where user queries trigger dynamic weighting updates
@@ -84,10 +84,10 @@ The Dynamic Weighting functionality is integrated with the core AdaptiveContext 
 
 ## Example Usage
 
-Here's how to use Dynamic Memory Tier Weighting with AdaptiveContext:
+Here's how to use Dynamic Memory Tier Weighting with CortexFlow:
 
 ```python
-from adaptive_context import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Create a configuration with Dynamic Weighting enabled
 config = CortexFlowConfig(

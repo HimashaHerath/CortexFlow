@@ -4,10 +4,8 @@ CortexFlow Graph Store module.
 This module provides graph-based knowledge representation for CortexFlow.
 """
 
-import os
 import sqlite3
 import logging
-import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Set, Union
 import json
 import time
@@ -49,6 +47,7 @@ if FLAIR_ENABLED:
         from flair.models import SequenceTagger
     except ImportError:
         FLAIR_ENABLED = False
+        logging.warning("Flair SequenceTagger not available. Advanced NER is disabled.")
 
 # Try importing SpanBERT for entity recognition
 spanbert_deps = import_optional_dependency(
@@ -58,13 +57,14 @@ spanbert_deps = import_optional_dependency(
 transformers_deps = import_optional_dependency(
     'transformers',
     warning_message="",  # Skip duplicate warning
-    classes=['AutoTokenizer', 'AutoModelForTokenClassification']
+    classes=['AutoTokenizer', 'AutoModelForTokenClassification', 'AutoModelForSeq2SeqLM']
 )
 SPANBERT_ENABLED = spanbert_deps['TORCH_ENABLED'] and transformers_deps['TRANSFORMERS_ENABLED']
 if SPANBERT_ENABLED:
     torch = spanbert_deps['module']
     AutoTokenizer = transformers_deps['AutoTokenizer']
     AutoModelForTokenClassification = transformers_deps['AutoModelForTokenClassification']
+    AutoModelForSeq2SeqLM = transformers_deps['AutoModelForSeq2SeqLM']
 
 # Try importing libraries for fuzzy matching
 fuzzy_deps = import_optional_dependency(
@@ -93,11 +93,16 @@ class RelationExtractor:
     Provides advanced relation extraction capabilities using dependency parsing,
     semantic role labeling, and relation classification.
     """
-    
+
+    # Class-level singletons for heavy models (loaded once per process)
+    _rebel_classifier = None
+    _rebel_tokenizer = None
+    _rebel_loaded = False
+
     def __init__(self, nlp=None):
         """
         Initialize relation extractor.
-        
+
         Args:
             nlp: spaCy language model, or None to create a new one
         """
@@ -111,7 +116,7 @@ class RelationExtractor:
             except Exception as e:
                 logging.error(f"Error loading spaCy model for relation extraction: {e}")
                 self.nlp = None
-        
+
         # Initialize SRL (Semantic Role Labeling) components
         self.srl_predictor = None
         try:
@@ -120,23 +125,32 @@ class RelationExtractor:
                 "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz")
             logging.info("SRL model loaded successfully")
         except ImportError:
-            logging.debug("AllenNLP SRL not available. Semantic role extraction will be limited.")
+            logging.warning("AllenNLP SRL not available. Semantic role labeling is disabled.")
         except Exception as e:
-            logging.error(f"Error loading SRL model: {e}")
-        
-        # Initialize relation classification model
+            logging.warning(f"AllenNLP SRL model failed to load. Semantic role labeling is disabled: {e}")
+
+        # REBEL model is lazy-loaded at class level (see _ensure_rebel_loaded)
         self.relation_classifier = None
-        try:
-            self.relation_classifier = AutoModelForTokenClassification.from_pretrained("Babelscape/rebel-large")
-            self.relation_tokenizer = AutoTokenizer.from_pretrained("Babelscape/rebel-large")
-            logging.info("Relation classification model loaded successfully")
-        except ImportError:
-            logging.debug("Relation classification model not available")
-        except Exception as e:
-            logging.error(f"Error loading relation classification model: {e}")
-        
+        self.relation_tokenizer = None
+
         # Define relation patterns and templates
         self.relation_patterns = self._init_relation_patterns()
+
+    def _ensure_rebel_loaded(self):
+        """Lazily load REBEL relation classification model (class-level singleton)."""
+        if not RelationExtractor._rebel_loaded and SPANBERT_ENABLED:
+            RelationExtractor._rebel_loaded = True
+            try:
+                RelationExtractor._rebel_classifier = AutoModelForSeq2SeqLM.from_pretrained("Babelscape/rebel-large")
+                RelationExtractor._rebel_tokenizer = AutoTokenizer.from_pretrained("Babelscape/rebel-large")
+                logging.info("Relation classification model loaded successfully")
+            except ImportError:
+                logging.warning("REBEL model not available. Relation classification is disabled.")
+            except Exception as e:
+                logging.warning(f"REBEL model failed to load. Relation classification is disabled: {e}")
+        # Sync instance attributes from class-level
+        self.relation_classifier = RelationExtractor._rebel_classifier
+        self.relation_tokenizer = RelationExtractor._rebel_tokenizer
     
     def _init_relation_patterns(self) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -201,7 +215,8 @@ class RelationExtractor:
                     srl_relations = self.extract_with_semantic_roles(text)
                     relations.extend(srl_relations)
                 
-                # 4. Apply relation classification if available
+                # 4. Apply relation classification if available (lazy-loaded)
+                self._ensure_rebel_loaded()
                 if self.relation_classifier:
                     classified_relations = self.classify_relations(text)
                     relations.extend(classified_relations)
@@ -509,7 +524,14 @@ class RelationExtractor:
 
 class GraphStore:
     """Knowledge graph storage and query functionality for GraphRAG."""
-    
+
+    # Class-level singletons for heavy NLP models (loaded once per process)
+    _flair_ner = None
+    _flair_loaded = False
+    _spanbert_tokenizer = None
+    _spanbert_model = None
+    _spanbert_loaded = False
+
     def __init__(self, config: CortexFlowConfig):
         """
         Initialize graph store.
@@ -539,27 +561,7 @@ class GraphStore:
             except Exception as e:
                 logging.error(f"Error loading Spacy model: {e}")
         
-        # Initialize advanced NER models if available
-        self.flair_ner = None
-        if FLAIR_ENABLED:
-            try:
-                # Load Flair NER model
-                self.flair_ner = SequenceTagger.load("flair/ner-english-ontonotes-large")
-                logging.info("Flair NER model loaded successfully")
-            except Exception as e:
-                logging.error(f"Error loading Flair model: {e}")
-                
-        # Initialize SpanBERT model if available
-        self.spanbert_tokenizer = None
-        self.spanbert_model = None
-        if SPANBERT_ENABLED:
-            try:
-                # Load SpanBERT model for entity recognition
-                self.spanbert_tokenizer = AutoTokenizer.from_pretrained("SpanBERT/spanbert-base-cased")
-                self.spanbert_model = AutoModelForTokenClassification.from_pretrained("SpanBERT/spanbert-base-cased")
-                logging.info("SpanBERT model loaded successfully")
-            except Exception as e:
-                logging.error(f"Error loading SpanBERT model: {e}")
+        # Flair and SpanBERT are class-level singletons (lazy-loaded on first use)
         
         # Initialize entity linking system
         self.entity_db = {}  # Map of canonical entities
@@ -588,6 +590,27 @@ class GraphStore:
         
         logging.info(f"Graph store initialized with NetworkX: {NETWORKX_ENABLED}, Spacy: {SPACY_ENABLED}, Flair: {FLAIR_ENABLED}, SpanBERT: {SPANBERT_ENABLED}, Ontology: {ONTOLOGY_ENABLED}")
     
+    def _ensure_flair_loaded(self):
+        """Lazily load Flair NER model on first use (class-level singleton)."""
+        if not GraphStore._flair_loaded and FLAIR_ENABLED:
+            GraphStore._flair_loaded = True
+            try:
+                GraphStore._flair_ner = SequenceTagger.load("flair/ner-english-ontonotes-large")
+                logging.info("Flair NER model loaded successfully")
+            except Exception as e:
+                logging.warning(f"Advanced NER is disabled (Flair model failed to load): {e}")
+
+    def _ensure_spanbert_loaded(self):
+        """Lazily load SpanBERT model on first use (class-level singleton)."""
+        if not GraphStore._spanbert_loaded and SPANBERT_ENABLED:
+            GraphStore._spanbert_loaded = True
+            try:
+                GraphStore._spanbert_tokenizer = AutoTokenizer.from_pretrained("SpanBERT/spanbert-base-cased")
+                GraphStore._spanbert_model = AutoModelForTokenClassification.from_pretrained("SpanBERT/spanbert-base-cased")
+                logging.info("SpanBERT model loaded successfully")
+            except Exception as e:
+                logging.error(f"Error loading SpanBERT model: {e}")
+
     def _load_entity_db(self):
         """Load existing entity database for entity linking."""
         if self.conn is not None:
@@ -777,37 +800,6 @@ class GraphStore:
         )
         ''')
         
-        # Create indexes for faster lookups
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity ON graph_entities(entity)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_type ON graph_entities(entity_type)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version ON graph_entities(version)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_provenance ON graph_entities(provenance)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_extraction ON graph_entities(extraction_method)')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_type_name ON relation_types(name)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_type_parent ON relation_types(parent_type)')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_source ON graph_relationships(source_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_target ON graph_relationships(target_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation ON graph_relationships(relation_type)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_version ON graph_relationships(version)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_provenance ON graph_relationships(provenance)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_extraction ON graph_relationships(extraction_method)')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_entity ON entity_versions(entity_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_number ON entity_versions(version)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_type ON entity_versions(change_type)')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_rel ON relationship_versions(relationship_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_number ON relationship_versions(version)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_type ON relationship_versions(change_type)')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_type ON nary_relationships(relation_type)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_extraction ON nary_relationships(extraction_method)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_version ON nary_relationships(version)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_participant ON nary_participants(relationship_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_entity ON nary_participants(entity_id)')
-        
         # Insert basic relation types if not exist
         basic_relation_types = [
             ('is_a', None, 'Taxonomic relationship', 0, 0, None, 1),
@@ -824,50 +816,77 @@ class GraphStore:
             ('instance_of', 'is_a', 'Instance relationship', 0, 0, 'has_instance', 2),
             ('subclass_of', 'is_a', 'Subclass relationship', 0, 1, 'has_subclass', 2)
         ]
-        
+
         for relation in basic_relation_types:
             cursor.execute('''
-                INSERT OR IGNORE INTO relation_types 
-                (name, parent_type, description, symmetric, transitive, inverse_relation, taxonomy_level) 
+                INSERT OR IGNORE INTO relation_types
+                (name, parent_type, description, symmetric, transitive, inverse_relation, taxonomy_level)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', relation)
-        
-        # Alter existing tables to add new metadata columns if they don't exist
+
+        # Migrate existing tables to add columns that may be missing
+        # (e.g. when knowledge.py created the table with a minimal schema).
+        # This MUST run before index creation so indexes on new columns succeed.
         try:
-            # Check if extraction_method column exists in graph_relationships
-            cursor.execute("PRAGMA table_info(graph_relationships)")
-            columns = [info[1] for info in cursor.fetchall()]
-            
-            # Add extraction_method column if it doesn't exist
-            if "extraction_method" not in columns:
-                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN extraction_method TEXT")
-                
-            # Add version column if it doesn't exist
-            if "version" not in columns:
-                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN version INTEGER DEFAULT 1")
-                
-            # Add last_updated column if it doesn't exist
-            if "last_updated" not in columns:
-                cursor.execute("ALTER TABLE graph_relationships ADD COLUMN last_updated REAL")
-                
-            # Check if similar columns need to be added to graph_entities
-            cursor.execute("PRAGMA table_info(graph_entities)")
-            columns = [info[1] for info in cursor.fetchall()]
-            
-            # Add extraction_method column if it doesn't exist
-            if "extraction_method" not in columns:
-                cursor.execute("ALTER TABLE graph_entities ADD COLUMN extraction_method TEXT")
-                
-            # Add version column if it doesn't exist
-            if "version" not in columns:
-                cursor.execute("ALTER TABLE graph_entities ADD COLUMN version INTEGER DEFAULT 1")
-                
-            # Add last_updated column if it doesn't exist
-            if "last_updated" not in columns:
-                cursor.execute("ALTER TABLE graph_entities ADD COLUMN last_updated REAL")
-                
+            for table, new_columns in [
+                ("graph_relationships", [
+                    ("extraction_method", "TEXT"),
+                    ("version", "INTEGER DEFAULT 1"),
+                    ("last_updated", "REAL"),
+                    ("provenance", "TEXT"),
+                    ("confidence", "REAL DEFAULT 0.5"),
+                    ("temporal_start", "TEXT"),
+                    ("temporal_end", "TEXT"),
+                ]),
+                ("graph_entities", [
+                    ("extraction_method", "TEXT"),
+                    ("version", "INTEGER DEFAULT 1"),
+                    ("last_updated", "REAL"),
+                    ("embedding", "BLOB"),
+                    ("provenance", "TEXT"),
+                    ("confidence", "REAL DEFAULT 0.8"),
+                    ("temporal_start", "TEXT"),
+                    ("temporal_end", "TEXT"),
+                ]),
+            ]:
+                cursor.execute(f"PRAGMA table_info({table})")
+                existing = {info[1] for info in cursor.fetchall()}
+                for col_name, col_type in new_columns:
+                    if col_name not in existing:
+                        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}")
         except sqlite3.OperationalError as e:
             logging.error(f"Error adding metadata columns: {e}")
+
+        # Create indexes for faster lookups (after migration so all columns exist)
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity ON graph_entities(entity)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_type ON graph_entities(entity_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version ON graph_entities(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_provenance ON graph_entities(provenance)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_extraction ON graph_entities(extraction_method)')
+
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_type_name ON relation_types(name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_type_parent ON relation_types(parent_type)')
+
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_source ON graph_relationships(source_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_target ON graph_relationships(target_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation ON graph_relationships(relation_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_version ON graph_relationships(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_provenance ON graph_relationships(provenance)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_relation_extraction ON graph_relationships(extraction_method)')
+
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_entity ON entity_versions(entity_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_number ON entity_versions(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_entity_version_type ON entity_versions(change_type)')
+
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_rel ON relationship_versions(relationship_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_number ON relationship_versions(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_rel_version_type ON relationship_versions(change_type)')
+
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_type ON nary_relationships(relation_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_extraction ON nary_relationships(extraction_method)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_version ON nary_relationships(version)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_participant ON nary_participants(relationship_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_nary_entity ON nary_participants(entity_id)')
         
         if self.conn is not None:
             self.conn.commit()
@@ -933,10 +952,15 @@ class GraphStore:
         """
         Extract named entities from text using multiple techniques including
         advanced NER models, entity linking, and fuzzy matching.
-        
+
+        NOTE: Entity extraction also exists in knowledge.py for search/retrieval purposes.
+        This implementation is graph-focused (supports entity linking, multi-model NER,
+        and domain-specific extraction) while knowledge.py's version is search-focused.
+        Both are intentionally maintained as separate implementations.
+
         Args:
             text: Input text to extract entities from
-            
+
         Returns:
             List of entity dictionaries with text, type, start, end
         """
@@ -957,60 +981,22 @@ class GraphStore:
                         'source': 'spacy'
                     })
                     
-                # 2. Attempt coreference resolution if neuralcoref is available
-                try:
-                    import neuralcoref
-                    if not hasattr(self, 'coref_nlp'):
-                        # Initialize neuralcoref if not already done
-                        self.coref_nlp = spacy.load('en_core_web_sm')
-                        neuralcoref.add_to_pipe(self.coref_nlp)
-                        logging.info("Coreference resolution model loaded successfully")
-                        
-                    # Process the text for coreference resolution
-                    coref_doc = self.coref_nlp(text)
-                    
-                    # Add coreferenced entities
-                    coref_clusters = coref_doc._.coref_clusters
-                    if coref_clusters:
-                        for cluster in coref_clusters:
-                            main_mention = cluster.main
-                            # Add main mention as entity if it's not already in our list
-                            main_mention_text = main_mention.text
-                            main_start = main_mention.start_char
-                            main_end = main_mention.end_char
-                            
-                            # Check if this mention overlaps with existing entities
-                            is_new_entity = True
-                            for entity in entities:
-                                if (main_start >= entity['start'] and main_start < entity['end']) or \
-                                   (main_end > entity['start'] and main_end <= entity['end']):
-                                    is_new_entity = False
-                                    break
-                                    
-                            if is_new_entity:
-                                entities.append({
-                                    'text': main_mention_text,
-                                    'type': 'COREF',
-                                    'start': main_start,
-                                    'end': main_end,
-                                    'mentions': [m.text for m in cluster.mentions],
-                                    'source': 'coref'
-                                })
-                except ImportError:
-                    logging.debug("neuralcoref not available, skipping coreference resolution")
-                except Exception as e:
-                    logging.error(f"Error in coreference resolution: {e}")
+                # 2. Coreference resolution
+                # NOTE: neuralcoref was removed (deprecated since 2020, incompatible with modern spaCy).
+                # Coreference resolution is disabled until a replacement library is integrated.
+                # Candidates: coreferee, spacy-experimental coref, or fastcoref.
             except Exception as e:
                 logging.error(f"Error in SpaCy NER: {e}")
         
-        # 3. Use Flair for NER if available
-        if FLAIR_ENABLED and self.flair_ner is not None:
+        # 3. Use Flair for NER if available (lazy-loaded on first use)
+        self._ensure_flair_loaded()
+        if FLAIR_ENABLED and GraphStore._flair_ner is not None:
             try:
                 # Create Flair sentence
                 flair_sentence = Sentence(text)
-                
+
                 # Run NER
-                self.flair_ner.predict(flair_sentence)
+                GraphStore._flair_ner.predict(flair_sentence)
                 
                 # Extract entities
                 for entity in flair_sentence.get_spans('ner'):
@@ -1039,20 +1025,21 @@ class GraphStore:
             except Exception as e:
                 logging.error(f"Error in Flair NER: {e}")
         
-        # 4. Use SpanBERT for NER if available
-        if SPANBERT_ENABLED and self.spanbert_model is not None and self.spanbert_tokenizer is not None:
+        # 4. Use SpanBERT for NER if available (lazy-loaded on first use)
+        self._ensure_spanbert_loaded()
+        if SPANBERT_ENABLED and GraphStore._spanbert_model is not None and GraphStore._spanbert_tokenizer is not None:
             try:
                 # Tokenize input
-                inputs = self.spanbert_tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
-                
+                inputs = GraphStore._spanbert_tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+
                 # Get model predictions
                 with torch.no_grad():
-                    outputs = self.spanbert_model(**inputs)
-                    
+                    outputs = GraphStore._spanbert_model(**inputs)
+
                 # Process predictions to extract entities
                 # This is a simplified implementation and would need to be adapted for the specific model
                 predictions = outputs.logits.argmax(-1).squeeze().tolist()
-                tokens = self.spanbert_tokenizer.convert_ids_to_tokens(inputs.input_ids.squeeze().tolist())
+                tokens = GraphStore._spanbert_tokenizer.convert_ids_to_tokens(inputs.input_ids.squeeze().tolist())
                 
                 # Map predictions to entity spans (simplified)
                 current_entity = None
@@ -1293,19 +1280,6 @@ class GraphStore:
         # No match found
         return None
     
-    def extract_relations(self, text: str) -> List[Tuple[str, str, str]]:
-        """
-        Extract subject-predicate-object triples from text using the RelationExtractor.
-        
-        Args:
-            text: Input text to extract relations from
-            
-        Returns:
-            List of (subject, predicate, object) tuples
-        """
-        # Use the dedicated RelationExtractor for relation extraction
-        return self.relation_extractor.extract_relations(text)
-    
     def _extract_domain_specific_entities(self, text: str) -> List[Dict[str, Any]]:
         """
         Extract domain-specific entities based on patterns.
@@ -1361,10 +1335,15 @@ class GraphStore:
         """
         Extract subject-predicate-object triples from text using semantic role labeling
         and enhanced dependency parsing techniques.
-        
+
+        NOTE: The RelationExtractor class also provides relation extraction. This method
+        is the GraphStore-level implementation that includes coreference-based extraction
+        and fallback heuristics. The RelationExtractor instance is available as
+        self.relation_extractor for standalone relation extraction needs.
+
         Args:
             text: Input text to extract relations from
-            
+
         Returns:
             List of (subject, predicate, object) tuples
         """
@@ -1380,7 +1359,7 @@ class GraphStore:
                     if srl_relations:
                         relations.extend(srl_relations)
                 except Exception as e:
-                    logging.debug(f"SRL extraction not available: {e}")
+                    logging.warning(f"SRL extraction not available: {e}")
                 
                 # 2. Process each sentence separately with enhanced dependency parsing
                 for sent in doc.sents:
@@ -1398,7 +1377,7 @@ class GraphStore:
                     if coref_relations:
                         relations.extend(coref_relations)
                 except Exception as e:
-                    logging.debug(f"Coreference relation extraction not available: {e}")
+                    logging.warning(f"Coreference relation extraction not available: {e}")
                 
                 # 4. If no relations found with advanced methods, fall back to simpler approaches
                 if not relations:
@@ -1569,49 +1548,25 @@ class GraphStore:
             return relations
             
         except ImportError:
-            logging.debug("AllenNLP SRL not available. Skipping semantic role extraction.")
+            logging.warning("AllenNLP SRL not available. Semantic role extraction is disabled.")
             return []
         
     def _extract_with_coreference(self, text: str) -> List[Tuple[str, str, str]]:
         """
         Extract relations with coreference resolution to connect entities.
-        
+
+        NOTE: neuralcoref was removed (deprecated since 2020, incompatible with modern spaCy).
+        This method is a stub that returns an empty list until a replacement coreference
+        resolution library is integrated (e.g., coreferee, spacy-experimental coref, or fastcoref).
+
         Args:
             text: Input text
-            
+
         Returns:
-            List of (subject, predicate, object) tuples with resolved references
+            Empty list (coreference resolution is currently disabled)
         """
-        try:
-            import neuralcoref
-            
-            # Initialize neuralcoref if not already done
-            if not hasattr(self, 'coref_nlp'):
-                self.coref_nlp = spacy.load('en_core_web_sm')
-                neuralcoref.add_to_pipe(self.coref_nlp)
-                logging.info("Coreference resolution model loaded successfully")
-            
-            # Process the text
-            doc = self.coref_nlp(text)
-            
-            # Get resolved text with pronouns replaced by their referents
-            resolved_text = doc._.coref_resolved
-            
-            # Extract relations from resolved text using standard method
-            # First, parse the resolved text with the standard spaCy model
-            resolved_doc = self.nlp(resolved_text)
-            
-            relations = []
-            
-            # Extract SVO triples from each sentence in the resolved text
-            for sent in resolved_doc.sents:
-                relations.extend(self._extract_svo_from_dependency(sent))
-            
-            return relations
-            
-        except ImportError:
-            logging.debug("neuralcoref not available. Skipping coreference resolution.")
-            return []
+        logging.debug("Coreference resolution is disabled (neuralcoref was removed as deprecated).")
+        return []
         
     def _get_span_text(self, token) -> str:
         """
@@ -4497,8 +4452,8 @@ class GraphStore:
                                     # No common neighbor, skip this abstracted path
                                     segment_paths = []
                                     break
-                            except Exception:
-                                # Fail silently, skip this abstracted path
+                            except Exception as e:
+                                logging.warning(f"Error finding segment path via common neighbors: {e}")
                                 segment_paths = []
                                 break
                     
@@ -4650,7 +4605,8 @@ class GraphMerger:
             if existing_metadata_str:
                 try:
                     existing_metadata = json.loads(existing_metadata_str)
-                except (TypeError, json.JSONDecodeError):
+                except (TypeError, json.JSONDecodeError) as e:
+                    logging.warning(f"Failed to parse existing entity metadata, defaulting to empty: {e}")
                     existing_metadata = {}
             else:
                 existing_metadata = {}

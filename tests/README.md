@@ -1,93 +1,56 @@
-# AdaptiveContext Tests
+# CortexFlow Tests
 
-This directory contains test files for the AdaptiveContext system.
+This directory contains all test files for the CortexFlow system.
 
-## Unit Tests
+## Test Files
 
-Unit tests are organized by module and use pytest. They focus on testing individual components in isolation.
+| File | Description |
+|---|---|
+| `test_agent_chain.py` | Chain of Agents multi-agent reasoning |
+| `test_classifier.py` | Importance classification (rule-based, ML, LLM) |
+| `test_compressor.py` | Context compression (extractive & abstractive) |
+| `test_config.py` | Nested config dataclasses & ConfigBuilder |
+| `test_dynamic_weighting.py` | Dynamic memory tier weighting |
+| `test_extraction.py` | Entity and relation extraction |
+| `test_graph_enhancements.py` | Graph store advanced features |
+| `test_graph_traversal.py` | Weighted, bidirectional, constrained path queries |
+| `test_inference.py` | Inference engine (forward/backward chaining, abduction) |
+| `test_knowledge_integration.py` | Knowledge store integration tests |
+| `test_knowledge_store.py` | Knowledge store unit tests |
+| `test_llm_client.py` | LLM client abstraction (Ollama & Vertex AI) |
+| `test_memory.py` | Multi-tier memory management |
+| `test_memory_tiers.py` | Memory tier transitions and limits |
+| `test_ontology.py` | Ontology system and concept hierarchies |
+| `test_reasoning_engine.py` | Multi-step reasoning engine |
+| `test_reflection.py` | Self-reflection and self-correction |
+| `test_vertex_ai_benchmark.py` | Vertex AI integration benchmark (requires credentials) |
 
-### Running Unit Tests
+## Running Tests
 
-Install pytest if you haven't already:
+Run all tests:
 
 ```bash
-pip install pytest
+pytest tests/ -v
 ```
 
-Run all unit tests:
+Run a specific test file:
 
 ```bash
-pytest tests/
-```
-
-Run tests for a specific module:
-
-```bash
-pytest tests/test_memory.py
-pytest tests/test_dynamic_weighting.py
+pytest tests/test_memory.py -v
 ```
 
 Run a specific test:
 
 ```bash
-pytest tests/test_memory.py::TestConversationMemory::test_add_message
-```
-
-## Integration Tests
-
-The project also includes several integration test scripts in the root directory:
-
-- `test.py`: Basic functionality test
-- `ollama_test.py`: Tests integration with Ollama models
-- `vector_test.py`: Tests vector-based knowledge retrieval
-- `advanced_retrieval_test.py`: Tests advanced retrieval techniques
-- `graph_rag_benchmark.py`: Benchmarks GraphRAG functionality
-- `dynamic_weighting_test.py`: Tests dynamic memory weighting
-- `self_reflection_test.py`: Tests self-reflection functionality
-- `coa_test.py`: Tests Chain of Agents functionality
-
-### Running Integration Tests
-
-Run an integration test script:
-
-```bash
-python test.py
-python ollama_test.py
-python dynamic_weighting_test.py
-```
-
-Some test scripts accept command-line arguments:
-
-```bash
-python dynamic_weighting_test.py --model llama3 --plot
-python graph_rag_benchmark.py --verbose --keep-db
-python coa_test.py --model gemma3:1b
+pytest tests/test_memory.py::TestConversationMemory::test_add_message -v
 ```
 
 ## Test Coverage
 
-To generate a test coverage report:
-
 ```bash
 pip install pytest-cov
-pytest --cov=adaptive_context tests/
+pytest --cov=cortexflow tests/
+pytest --cov=cortexflow --cov-report=html tests/
 ```
 
-Generate an HTML coverage report:
-
-```bash
-pytest --cov=adaptive_context --cov-report=html tests/
-```
-
-Then open `htmlcov/index.html` in your browser to view the coverage report.
-
-## Writing New Tests
-
-When writing new tests:
-
-1. Follow the naming convention: `test_*.py` for test files, `test_*` for test methods
-2. Use descriptive test method names that explain what is being tested
-3. Include docstrings that explain the purpose of the test
-4. Test both normal operation and edge cases
-5. Use pytest fixtures for setup/teardown when appropriate
-6. Mock external dependencies when testing in isolation 
+Then open `htmlcov/index.html` to view the coverage report.

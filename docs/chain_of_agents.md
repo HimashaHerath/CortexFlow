@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Chain of Agents (CoA) framework in AdaptiveContext enables complex query processing through a sequence of specialized agents, each with a distinct role in the reasoning process. This approach is based on research from Google's "Chain of Agents: Large Language Models Collaborating on Long Context Tasks" (2025).
+The Chain of Agents (CoA) framework in CortexFlow enables complex query processing through a sequence of specialized agents, each with a distinct role in the reasoning process. This approach is based on research from Google's "Chain of Agents: Large Language Models Collaborating on Long Context Tasks" (2025).
 
 The primary benefit of this approach is the ability to break down complex reasoning tasks into specialized sub-tasks, allowing for more focused and effective processing of multi-hop queries, especially those requiring integration of multiple pieces of information.
 
@@ -102,7 +102,7 @@ The Chain of Agents is integrated with the main `CortexFlowManager` through:
 Enable and use the Chain of Agents in your application:
 
 ```python
-from adaptive_context import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Configure with Chain of Agents enabled
 config = CortexFlowConfig(
@@ -185,7 +185,7 @@ Therefore, the answer is: Yes, the tallest mountain in Japan is located on the s
 
 ## Technical Requirements
 
-- Python 3.7+
+- Python 3.8+
 - Ollama with a suitable model (llama3, mistral, gemma, etc.)
 - Dependencies: requests, networkx (for graph-based exploration)
 - Optional: spacy for enhanced entity extraction 

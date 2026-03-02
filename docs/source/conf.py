@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 
 # Project information
 project = 'CortexFlow'
-copyright = '2025, CortexFlow Team'
+copyright = '2025-2026, CortexFlow Team'
 author = 'CortexFlow Team'
 
 # Import project version
@@ -36,9 +36,9 @@ exclude_patterns = []
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 
-# Logo
-html_logo = '_static/logo.png'
-html_favicon = '_static/favicon.ico'
+# Logo (commented out — files do not exist yet)
+# html_logo = '_static/logo.png'
+# html_favicon = '_static/favicon.ico'
 
 # Custom sidebar templates
 html_sidebars = {

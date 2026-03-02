@@ -5,20 +5,24 @@ Here's a simple example of using CortexFlow:
 
 .. code-block:: python
 
-   from cortexflow import CortexFlowManager, CortexFlowConfig
+   from cortexflow import CortexFlowManager, CortexFlowConfig, MemoryConfig, LLMConfig
 
-   # Create a configuration
+   # Create a configuration using nested config
    config = CortexFlowConfig(
-       model_name="llama3",
-       vector_dimensions=1536,
-       api_base="http://localhost:11434/api"
+       memory=MemoryConfig(active_token_limit=4096),
+       llm=LLMConfig(default_model="llama3", backend="ollama"),
    )
 
    # Initialize the manager
    manager = CortexFlowManager(config)
 
-   # Use the manager for LLM interactions
-   response = manager.generate("Tell me about machine learning")
-   print(response)
+   # Add messages and generate a response
+   manager.add_message("system", "You are a helpful AI assistant.")
+   manager.add_message("user", "Tell me about machine learning")
+   response = manager.generate_response()
+   print(f"Assistant: {response}")
 
-For more detailed examples, see the examples directory in the repository. 
+   # Clean up
+   manager.close()
+
+For more detailed examples, see the examples directory in the repository.

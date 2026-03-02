@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Self-Reflection and Self-Correction mechanism in AdaptiveContext enables the system to verify the relevance of retrieved knowledge, check for inconsistencies in generated responses, and revise answers based on detected issues. This feature was implemented based on research showing that adding a verification step after knowledge retrieval significantly improves the quality and accuracy of AI responses.
+The Self-Reflection and Self-Correction mechanism in CortexFlow enables the system to verify the relevance of retrieved knowledge, check for inconsistencies in generated responses, and revise answers based on detected issues. This feature was implemented based on research showing that adding a verification step after knowledge retrieval significantly improves the quality and accuracy of AI responses.
 
 ## Key Features
 
@@ -61,17 +61,17 @@ config = CortexFlowConfig(
 
 ## Integration Points
 
-The Self-Reflection functionality is integrated with the core AdaptiveContext system at two key points:
+The Self-Reflection functionality is integrated with the core CortexFlow system at two key points:
 
 1. In `CortexFlowManager.get_conversation_context()`, where knowledge relevance verification is applied
 2. In `CortexFlowManager.generate_response()`, where response consistency checking and revision are applied
 
 ## Example Usage
 
-Here's how to use Self-Reflection with AdaptiveContext:
+Here's how to use Self-Reflection with CortexFlow:
 
 ```python
-from adaptive_context import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Create a configuration with Self-Reflection enabled
 config = CortexFlowConfig(

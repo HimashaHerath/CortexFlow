@@ -4,18 +4,14 @@ CortexFlow Classifier module.
 This module provides content classification functionality for CortexFlow.
 """
 
-import os
-import pickle
 import time
 import logging
-import random
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 import re
 import json
-import requests
-
 from cortexflow.config import CortexFlowConfig
+from cortexflow.llm_client import create_llm_client
 from cortexflow.memory import ContextSegment
 
 class RuleBasedClassifier:
@@ -70,12 +66,17 @@ class RuleBasedClassifier:
     def classify(self, segment: ContextSegment) -> float:
         """
         Classify importance using rule-based heuristics.
-        
+
         Args:
             segment: Context segment to classify
-            
+
         Returns:
-            Importance score (0-1)
+            Importance score on a 0.0-1.0 normalized scale.
+
+        Note:
+            This returns a normalized 0-1 score for the classifier interface.
+            The ImportanceClassifier is responsible for converting this to the
+            0-10 scale used by ContextSegment.importance.
         """
         if not segment or not segment.content:
             return 0.0
@@ -129,68 +130,6 @@ class RuleBasedClassifier:
         return max(0.0, min(score, 1.0))
 
 
-class MLClassifier:
-    """
-    Machine learning-based classifier for message importance.
-    Requires a pre-trained model.
-    """
-    
-    def __init__(self, model_path: Optional[str] = None):
-        """
-        Initialize ML classifier.
-        
-        Args:
-            model_path: Path to pre-trained model file
-        """
-        self.model = None
-        self.vectorizer = None
-        
-        if model_path and os.path.exists(model_path):
-            try:
-                with open(model_path, 'rb') as f:
-                    model_data = pickle.load(f)
-                    self.model = model_data.get('model')
-                    self.vectorizer = model_data.get('vectorizer')
-                logging.info(f"ML classifier model loaded from {model_path}")
-            except Exception as e:
-                logging.error(f"Error loading ML model: {e}")
-        else:
-            logging.warning("ML model path not provided or does not exist; ML classification disabled")
-    
-    def classify(self, segment: ContextSegment) -> float:
-        """
-        Classify importance using ML model.
-        
-        Args:
-            segment: Context segment to classify
-            
-        Returns:
-            Importance score (0-1) or 0.5 if model unavailable
-        """
-        if not self.model or not self.vectorizer:
-            return 0.5
-            
-        try:
-            content = segment.content
-            # Extract features (text and metadata)
-            features = {
-                'text': content,
-                'segment_type': segment.segment_type,
-                'token_count': segment.token_count,
-                'metadata': json.dumps(segment.metadata or {})
-            }
-            
-            # Transform with vectorizer
-            X = self.vectorizer.transform([features])
-            
-            # Predict probability
-            proba = self.model.predict_proba(X)[0][1]  # Probability of positive class
-            
-            return float(proba)
-        except Exception as e:
-            logging.error(f"Error in ML classification: {e}")
-            return 0.5
-
 
 class LLMClassifier:
     """
@@ -203,9 +142,10 @@ class LLMClassifier:
         Initialize LLM classifier.
         
         Args:
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration
         """
         self.config = config
+        self.llm_client = create_llm_client(config)
         self.cache = {}  # Simple cache to avoid repeated queries
         
         # Base prompt for importance classification
@@ -268,36 +208,22 @@ class LLMClassifier:
             prompt = prompt.replace("Message:", f"Recent context:\n{context_text}\n\nMessage:")
             
         try:
-            # Call Ollama API
-            response = requests.post(
-                f"{self.config.ollama_host}/api/generate",
-                json={
-                    "model": self.config.default_model,
-                    "prompt": prompt,
-                    "temperature": 0.1,
-                    "stream": False
-                },
-                timeout=5
-            )
-            
-            if response.status_code == 200:
-                result = response.json().get("response", "")
-                
-                # Extract score from response
-                score_match = re.search(r'0\.\d+', result)
-                if score_match:
-                    score = float(score_match.group(0))
-                    # Cache the result
-                    self.cache[cache_key] = score
-                    return score
-                    
-                # If no decimal found, look for integer
-                int_match = re.search(r'\b[0-9]\b', result)
-                if int_match:
-                    score = float(int_match.group(0)) / 10.0
-                    self.cache[cache_key] = score
-                    return score
-                
+            result = self.llm_client.generate_from_prompt(prompt, timeout=5)
+
+            # Extract score from response
+            score_match = re.search(r'0\.\d+', result)
+            if score_match:
+                score = float(score_match.group(0))
+                self.cache[cache_key] = score
+                return score
+
+            # If no decimal found, look for integer
+            int_match = re.search(r'\b[0-9]\b', result)
+            if int_match:
+                score = float(int_match.group(0)) / 10.0
+                self.cache[cache_key] = score
+                return score
+
         except Exception as e:
             logging.error(f"Error in LLM classification: {e}")
         
@@ -313,63 +239,59 @@ class ImportanceClassifier:
     def __init__(self, config: CortexFlowConfig):
         """
         Initialize importance classifier.
-        
+
+        Uses an ensemble of rule-based and LLM-based classifiers. The rule-based
+        classifier is deterministic and always active, while the LLM classifier
+        is optional and activated via config. Both classifiers return scores on
+        a 0-1 normalized scale; the ensemble result is scaled to 0-10 for
+        ContextSegment.importance.
+
         Args:
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration
         """
         self.config = config
-        
+
         # Initialize component classifiers
         self.rule_classifier = RuleBasedClassifier()
-        
-        # Initialize ML classifier if enabled
-        self.ml_classifier = None
-        if hasattr(config, 'use_ml') and config.use_ml:
-            model_path = config.ml_model_path if hasattr(config, 'ml_model_path') else None
-            self.ml_classifier = MLClassifier(model_path)
-        
+
         # Initialize LLM classifier
         self.llm_classifier = LLMClassifier(config)
-        
-        # Set up weights for ensemble
-        self.rule_weight = 0.5  # Default weight for rule-based classifier
-        self.ml_weight = 0.3    # Default weight for ML-based classifier
-        self.llm_weight = 0.7   # Default weight for LLM-based classifier
-        
+
+        # Set up weights for ensemble (rule-based dominates since it's deterministic)
+        self.rule_weight = 0.6  # Default weight for rule-based classifier
+        self.llm_weight = 0.4   # Default weight for LLM-based classifier
+
         # Override with config if available
         if hasattr(config, 'rule_weight'):
             self.rule_weight = config.rule_weight
-        if hasattr(config, 'ml_weight'):
-            self.ml_weight = config.ml_weight
         if hasattr(config, 'llm_weight'):
             self.llm_weight = config.llm_weight
             
     def classify(self, segment: ContextSegment, context: List[ContextSegment] = None) -> float:
         """
         Classify the importance of a context segment.
-        
+
+        Component classifiers (rule-based, LLM) operate on a 0-1 normalized
+        scale internally. The final ensemble score is scaled to 0-10 before
+        being stored on the segment, matching the ContextSegment.importance
+        convention used throughout the codebase (e.g., compressor thresholds).
+
         Args:
             segment: The segment to classify
             context: Recent conversation context (optional)
-            
+
         Returns:
-            Importance score between 0 and 1
+            Importance score between 0 and 10
         """
         if segment is None:
             return 0.0
-        
-        # Always use rule-based classification
+
+        # Always use rule-based classification (returns 0-1)
         rule_score = self.rule_classifier.classify(segment)
         scores = [rule_score]
         weights = [self.rule_weight]
-        
-        # Use ML classifier if available
-        if self.ml_classifier is not None:
-            ml_score = self.ml_classifier.classify(segment)
-            scores.append(ml_score)
-            weights.append(self.ml_weight)
-        
-        # Use LLM classifier for more complex content
+
+        # Use LLM classifier for more complex content (returns 0-1)
         use_llm = hasattr(self.config, 'use_llm_classification') and self.config.use_llm_classification
         if use_llm:
             max_llm_length = getattr(self.config, 'max_llm_classification_length', 250)
@@ -380,21 +302,22 @@ class ImportanceClassifier:
             else:
                 # For very long content, adjust rule score slightly higher
                 scores[0] = min(rule_score * 1.2, 1.0)
-        
+
         # Normalize weights
         total_weight = sum(weights)
         weights = [w / total_weight for w in weights]
-        
-        # Calculate weighted average
-        importance = sum(s * w for s, w in zip(scores, weights))
-        
-        # Ensure importance is within valid range
-        importance = max(0.0, min(importance, 1.0))
-        
-        # Store importance on segment
+
+        # Calculate weighted average (0-1 scale)
+        normalized_importance = sum(s * w for s, w in zip(scores, weights))
+        normalized_importance = max(0.0, min(normalized_importance, 1.0))
+
+        # Scale to 0-10 for ContextSegment.importance convention
+        importance = normalized_importance * 10.0
+
+        # Store importance on segment (0-10 scale)
         segment.importance = importance
-        
-        return importance 
+
+        return importance
 
 class ContentClassifier:
     """

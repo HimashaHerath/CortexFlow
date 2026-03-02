@@ -90,8 +90,6 @@ class UncertaintyConfig:
 class PerformanceConfig:
     """Performance Optimization configuration settings."""
     use_performance_optimization: bool = False
-    use_query_planning: bool = True
-    use_reasoning_cache: bool = True
     reasoning_cache_max_size: int = 1000
     query_cache_max_size: int = 500
     cache_ttl: int = 3600
@@ -103,6 +101,14 @@ class LLMConfig:
     ollama_host: str = "http://localhost:11434"
     conversation_style: str = "casual"
     system_persona: str = "helpful assistant"
+    # Backend selection
+    backend: str = "ollama"           # "ollama" or "vertex_ai"
+    # Vertex AI fields (None = read from env vars at runtime)
+    vertex_project_id: Optional[str] = None
+    vertex_location: Optional[str] = None
+    vertex_api_key: Optional[str] = None
+    vertex_credentials_path: Optional[str] = None
+    vertex_model: str = "gemini-1.5-flash"
 
 @dataclass
 class ClassifierConfig:
@@ -154,179 +160,88 @@ class CortexFlowConfig:
             self.knowledge_store.knowledge_store_path = os.path.join(
                 os.getcwd(), self.knowledge_store.knowledge_store_path
             )
-    
+
+    def __getattr__(self, name: str):
+        """Proxy flat attribute access to nested config sections (backward compat)."""
+        for sub_name in ('memory', 'knowledge_store', 'graph_rag', 'ontology', 'metadata',
+                         'agents', 'reflection', 'uncertainty', 'performance', 'llm',
+                         'classifier', 'inference'):
+            try:
+                sub = object.__getattribute__(self, sub_name)
+                if name in {f.name for f in fields(type(sub))}:
+                    return getattr(sub, name)
+            except AttributeError:
+                continue
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    @staticmethod
+    def _extract_section(config_dict: Dict[str, Any], config_class) -> Dict[str, Any]:
+        """Extract keys from config_dict that belong to the given dataclass."""
+        valid_fields = {f.name for f in fields(config_class)}
+        return {k: v for k, v in config_dict.items() if k in valid_fields}
+
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'CortexFlowConfig':
         """
         Create configuration from a dictionary.
-        
+
         Args:
             config_dict: Configuration dictionary
-            
+
         Returns:
             CortexFlowConfig instance
         """
-        # Create config sections
-        memory_dict = {k: v for k, v in config_dict.items() 
-                      if k in [f.name for f in fields(MemoryConfig)]}
-        knowledge_dict = {k: v for k, v in config_dict.items() 
-                         if k in [f.name for f in fields(KnowledgeStoreConfig)]}
-        graph_dict = {k: v for k, v in config_dict.items() 
-                     if k in [f.name for f in fields(GraphRagConfig)]}
-        ontology_dict = {k: v for k, v in config_dict.items() 
-                        if k in [f.name for f in fields(OntologyConfig)]}
-        metadata_dict = {k: v for k, v in config_dict.items() 
-                        if k in [f.name for f in fields(MetadataConfig)]}
-        agent_dict = {k: v for k, v in config_dict.items() 
-                     if k in [f.name for f in fields(AgentConfig)]}
-        reflection_dict = {k: v for k, v in config_dict.items() 
-                          if k in [f.name for f in fields(ReflectionConfig)]}
-        uncertainty_dict = {k: v for k, v in config_dict.items() 
-                           if k in [f.name for f in fields(UncertaintyConfig)]}
-        performance_dict = {k: v for k, v in config_dict.items() 
-                           if k in [f.name for f in fields(PerformanceConfig)]}
-        llm_dict = {k: v for k, v in config_dict.items() 
-                   if k in [f.name for f in fields(LLMConfig)]}
-        classifier_dict = {k: v for k, v in config_dict.items() 
-                          if k in [f.name for f in fields(ClassifierConfig)]}
-        inference_dict = {k: v for k, v in config_dict.items() 
-                         if k in [f.name for f in fields(InferenceConfig)]}
-        
+        # Mapping of CortexFlowConfig field names to their dataclass types
+        _section_map = {
+            "memory": MemoryConfig,
+            "knowledge_store": KnowledgeStoreConfig,
+            "graph_rag": GraphRagConfig,
+            "ontology": OntologyConfig,
+            "metadata": MetadataConfig,
+            "agents": AgentConfig,
+            "reflection": ReflectionConfig,
+            "uncertainty": UncertaintyConfig,
+            "performance": PerformanceConfig,
+            "llm": LLMConfig,
+            "classifier": ClassifierConfig,
+            "inference": InferenceConfig,
+        }
+
         # Create top-level config dict with just the top-level items
         top_config_dict = {
             "verbose_logging": config_dict.get("verbose_logging", False),
             "debug_mode": config_dict.get("debug_mode", False),
             "custom_config": config_dict.get("custom_config", {})
         }
-        
-        # Create section objects if any fields were provided
-        if memory_dict:
-            top_config_dict["memory"] = MemoryConfig(**memory_dict)
-        if knowledge_dict:
-            top_config_dict["knowledge_store"] = KnowledgeStoreConfig(**knowledge_dict)
-        if graph_dict:
-            top_config_dict["graph_rag"] = GraphRagConfig(**graph_dict)
-        if ontology_dict:
-            top_config_dict["ontology"] = OntologyConfig(**ontology_dict)
-        if metadata_dict:
-            top_config_dict["metadata"] = MetadataConfig(**metadata_dict)
-        if agent_dict:
-            top_config_dict["agents"] = AgentConfig(**agent_dict)
-        if reflection_dict:
-            top_config_dict["reflection"] = ReflectionConfig(**reflection_dict)
-        if uncertainty_dict:
-            top_config_dict["uncertainty"] = UncertaintyConfig(**uncertainty_dict)
-        if performance_dict:
-            top_config_dict["performance"] = PerformanceConfig(**performance_dict)
-        if llm_dict:
-            top_config_dict["llm"] = LLMConfig(**llm_dict)
-        if classifier_dict:
-            top_config_dict["classifier"] = ClassifierConfig(**classifier_dict)
-        if inference_dict:
-            top_config_dict["inference"] = InferenceConfig(**inference_dict)
-        
+
+        # Create section objects if any matching fields were provided
+        for section_name, config_class in _section_map.items():
+            section_dict = cls._extract_section(config_dict, config_class)
+            if section_dict:
+                top_config_dict[section_name] = config_class(**section_dict)
+
         return cls(**top_config_dict)
     
     def to_dict(self) -> Dict[str, Any]:
         """
-        Convert configuration to a dictionary.
-        
+        Convert configuration to a flat dictionary.
+
         Returns:
             Dictionary representation of configuration
         """
-        config_dict = {
-            # Memory settings
-            "active_token_limit": self.memory.active_token_limit,
-            "working_token_limit": self.memory.working_token_limit,
-            "archive_token_limit": self.memory.archive_token_limit,
-            "use_dynamic_weighting": self.memory.use_dynamic_weighting,
-            "dynamic_weighting_learning_rate": self.memory.dynamic_weighting_learning_rate,
-            "dynamic_weighting_min_tier_size": self.memory.dynamic_weighting_min_tier_size,
-            "dynamic_weighting_default_ratios": self.memory.dynamic_weighting_default_ratios,
-            
-            # Knowledge store settings
-            "knowledge_store_path": self.knowledge_store.knowledge_store_path,
-            "retrieval_type": self.knowledge_store.retrieval_type,
-            "trust_marker": self.knowledge_store.trust_marker,
-            "use_reranking": self.knowledge_store.use_reranking,
-            "rerank_top_k": self.knowledge_store.rerank_top_k,
-            "vector_model": self.knowledge_store.vector_model,
-            
-            # Graph RAG settings
-            "use_graph_rag": self.graph_rag.use_graph_rag,
-            "enable_multi_hop_queries": self.graph_rag.enable_multi_hop_queries,
-            "max_graph_hops": self.graph_rag.max_graph_hops,
-            "graph_weight": self.graph_rag.graph_weight,
-            "use_graph_partitioning": self.graph_rag.use_graph_partitioning,
-            "graph_partition_method": self.graph_rag.graph_partition_method,
-            "target_partition_count": self.graph_rag.target_partition_count,
-            "use_multihop_indexing": self.graph_rag.use_multihop_indexing,
-            "max_indexed_hops": self.graph_rag.max_indexed_hops,
-            
-            # Ontology settings
-            "use_ontology": self.ontology.use_ontology,
-            "enable_ontology_evolution": self.ontology.enable_ontology_evolution,
-            "ontology_confidence_threshold": self.ontology.ontology_confidence_threshold,
-            
-            # Metadata framework settings
-            "track_provenance": self.metadata.track_provenance,
-            "track_confidence": self.metadata.track_confidence,
-            "track_temporal": self.metadata.track_temporal,
-            
-            # Chain of Agents settings
-            "use_chain_of_agents": self.agents.use_chain_of_agents,
-            "chain_complexity_threshold": self.agents.chain_complexity_threshold,
-            "chain_agent_count": self.agents.chain_agent_count,
-            
-            # Self-Reflection settings
-            "use_self_reflection": self.reflection.use_self_reflection,
-            "reflection_relevance_threshold": self.reflection.reflection_relevance_threshold,
-            "reflection_confidence_threshold": self.reflection.reflection_confidence_threshold,
-            
-            # Uncertainty Handling settings
-            "use_uncertainty_handling": self.uncertainty.use_uncertainty_handling,
-            "auto_detect_contradictions": self.uncertainty.auto_detect_contradictions,
-            "default_contradiction_strategy": self.uncertainty.default_contradiction_strategy,
-            "recency_weight": self.uncertainty.recency_weight,
-            "reliability_weight": self.uncertainty.reliability_weight,
-            "confidence_threshold": self.uncertainty.confidence_threshold,
-            "uncertainty_representation": self.uncertainty.uncertainty_representation,
-            "reason_with_incomplete_info": self.uncertainty.reason_with_incomplete_info,
-            
-            # Performance Optimization settings
-            "use_performance_optimization": self.performance.use_performance_optimization,
-            "use_query_planning": self.performance.use_query_planning,
-            "use_reasoning_cache": self.performance.use_reasoning_cache,
-            "reasoning_cache_max_size": self.performance.reasoning_cache_max_size,
-            "query_cache_max_size": self.performance.query_cache_max_size,
-            "cache_ttl": self.performance.cache_ttl,
-            
-            # LLM Integration
-            "default_model": self.llm.default_model,
-            "ollama_host": self.llm.ollama_host,
-            "conversation_style": self.llm.conversation_style,
-            "system_persona": self.llm.system_persona,
-            
-            # Classifier settings
-            "use_ml_classifier": self.classifier.use_ml_classifier,
-            "classifier_model": self.classifier.classifier_model,
-            "classifier_threshold": self.classifier.classifier_threshold,
-            
-            # Inference Engine settings
-            "use_inference_engine": self.inference.use_inference_engine,
-            "max_inference_depth": self.inference.max_inference_depth,
-            "inference_confidence_threshold": self.inference.inference_confidence_threshold,
-            "max_forward_chain_iterations": self.inference.max_forward_chain_iterations,
-            "abductive_reasoning_enabled": self.inference.abductive_reasoning_enabled,
-            "max_abductive_hypotheses": self.inference.max_abductive_hypotheses,
-            
-            # Debug and logging settings
-            "verbose_logging": self.verbose_logging,
-            "debug_mode": self.debug_mode,
-            
-            # Custom config
-            "custom_config": self.custom_config,
-        }
+        config_dict: Dict[str, Any] = {}
+
+        # Flatten all nested dataclass sections into a single dict
+        for section_field in fields(self):
+            value = getattr(self, section_field.name)
+            if hasattr(value, '__dataclass_fields__'):
+                # It's a nested dataclass section -- flatten its fields
+                for f in fields(value):
+                    config_dict[f.name] = getattr(value, f.name)
+            else:
+                # Top-level scalar field
+                config_dict[section_field.name] = value
+
         return config_dict
     
     def log_config(self):
@@ -355,77 +270,76 @@ class ConfigBuilder:
         self._debug_mode = False
         self._custom_config = {}
     
+    def _set_section(self, section_name: str, **kwargs) -> 'ConfigBuilder':
+        """Apply keyword arguments to the named config section."""
+        section = getattr(self, section_name)
+        for key, value in kwargs.items():
+            setattr(section, key, value)
+        return self
+
     def with_memory(self, **kwargs) -> 'ConfigBuilder':
         """Configure memory settings."""
-        for key, value in kwargs.items():
-            setattr(self._memory, key, value)
-        return self
-    
+        return self._set_section('_memory', **kwargs)
+
     def with_knowledge_store(self, **kwargs) -> 'ConfigBuilder':
         """Configure knowledge store settings."""
-        for key, value in kwargs.items():
-            setattr(self._knowledge_store, key, value)
-        return self
-    
+        return self._set_section('_knowledge_store', **kwargs)
+
     def with_graph_rag(self, **kwargs) -> 'ConfigBuilder':
         """Configure graph RAG settings."""
-        for key, value in kwargs.items():
-            setattr(self._graph_rag, key, value)
-        return self
-    
+        return self._set_section('_graph_rag', **kwargs)
+
     def with_ontology(self, **kwargs) -> 'ConfigBuilder':
         """Configure ontology settings."""
-        for key, value in kwargs.items():
-            setattr(self._ontology, key, value)
-        return self
-    
+        return self._set_section('_ontology', **kwargs)
+
     def with_metadata(self, **kwargs) -> 'ConfigBuilder':
         """Configure metadata framework settings."""
-        for key, value in kwargs.items():
-            setattr(self._metadata, key, value)
-        return self
-    
+        return self._set_section('_metadata', **kwargs)
+
     def with_agents(self, **kwargs) -> 'ConfigBuilder':
         """Configure chain of agents settings."""
-        for key, value in kwargs.items():
-            setattr(self._agents, key, value)
-        return self
-    
+        return self._set_section('_agents', **kwargs)
+
     def with_reflection(self, **kwargs) -> 'ConfigBuilder':
         """Configure self-reflection settings."""
-        for key, value in kwargs.items():
-            setattr(self._reflection, key, value)
-        return self
-    
+        return self._set_section('_reflection', **kwargs)
+
     def with_uncertainty(self, **kwargs) -> 'ConfigBuilder':
         """Configure uncertainty handling settings."""
-        for key, value in kwargs.items():
-            setattr(self._uncertainty, key, value)
-        return self
-    
+        return self._set_section('_uncertainty', **kwargs)
+
     def with_performance(self, **kwargs) -> 'ConfigBuilder':
         """Configure performance optimization settings."""
-        for key, value in kwargs.items():
-            setattr(self._performance, key, value)
-        return self
-    
+        return self._set_section('_performance', **kwargs)
+
     def with_llm(self, **kwargs) -> 'ConfigBuilder':
         """Configure LLM integration settings."""
-        for key, value in kwargs.items():
-            setattr(self._llm, key, value)
+        return self._set_section('_llm', **kwargs)
+
+    def with_vertex_ai(self, project_id=None, location=None, default_model="gemini-1.5-flash",
+                       api_key=None, credentials_path=None) -> 'ConfigBuilder':
+        """Configure Vertex AI as the LLM backend."""
+        self._llm.backend = "vertex_ai"
+        self._llm.default_model = default_model
+        self._llm.vertex_model = default_model
+        if project_id:
+            self._llm.vertex_project_id = project_id
+        if location:
+            self._llm.vertex_location = location
+        if api_key:
+            self._llm.vertex_api_key = api_key
+        if credentials_path:
+            self._llm.vertex_credentials_path = credentials_path
         return self
-    
+
     def with_classifier(self, **kwargs) -> 'ConfigBuilder':
         """Configure classifier settings."""
-        for key, value in kwargs.items():
-            setattr(self._classifier, key, value)
-        return self
-    
+        return self._set_section('_classifier', **kwargs)
+
     def with_inference(self, **kwargs) -> 'ConfigBuilder':
         """Configure inference engine settings."""
-        for key, value in kwargs.items():
-            setattr(self._inference, key, value)
-        return self
+        return self._set_section('_inference', **kwargs)
     
     def with_debug(self, verbose_logging: bool = None, debug_mode: bool = None) -> 'ConfigBuilder':
         """Configure debug and logging settings."""

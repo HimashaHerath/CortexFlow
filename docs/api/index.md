@@ -1,6 +1,6 @@
-# AdaptiveContext API Reference
+# CortexFlow API Reference
 
-This section provides detailed API documentation for the AdaptiveContext system.
+This section provides detailed API documentation for the CortexFlow system.
 
 ## Core Modules
 
@@ -26,12 +26,12 @@ This section provides detailed API documentation for the AdaptiveContext system.
 ### Basic Usage
 
 ```python
-from adaptive_context import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 # Configure with custom settings
 config = CortexFlowConfig(
     active_token_limit=4000,
-    working_token_limit=8000, 
+    working_token_limit=8000,
     archive_token_limit=12000,
     use_dynamic_weighting=True,
     use_graph_rag=True,
@@ -59,7 +59,7 @@ manager.close()
 ### Knowledge Store Usage
 
 ```python
-from adaptive_context import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 config = CortexFlowConfig(knowledge_store_path="my_knowledge.db")
 manager = CortexFlowManager(config)
@@ -81,11 +81,11 @@ for item in knowledge:
 ### Dynamic Weighting Usage
 
 ```python
-from adaptive_context import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowManager, CortexFlowConfig
 
 config = CortexFlowConfig(
     active_token_limit=4000,
-    working_token_limit=8000, 
+    working_token_limit=8000,
     archive_token_limit=12000,
     use_dynamic_weighting=True,
     dynamic_weighting_learning_rate=0.1

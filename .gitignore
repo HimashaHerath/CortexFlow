@@ -77,4 +77,18 @@ Thumbs.db
 graph_rag_benchmark_results.png
 benchmark_graph_rag.db
 results.json
-*.json 
+vertex_ai_benchmark_*.json
+graph_rag_benchmark_results.json
+
+# SQLite in-memory dumps
+:memory:
+
+# Temporary vector stores
+temp_deep_memory/
+
+# Evaluation artifacts
+evaluation_results/
+evaluation_*.log
+
+# Benchmark PNG outputs
+*.png

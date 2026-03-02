@@ -38,7 +38,11 @@ def check_dependency(
         # Import requested classes if specified
         if classes:
             for class_name in classes:
-                imported_objects[class_name] = getattr(module, class_name)
+                try:
+                    imported_objects[class_name] = getattr(module, class_name)
+                except AttributeError:
+                    # Try importing as a submodule (e.g., thefuzz.fuzz)
+                    imported_objects[class_name] = importlib.import_module(f"{module_name}.{class_name}")
                 
         return True, imported_objects
     except ImportError:
@@ -70,8 +74,9 @@ def import_optional_dependency(
         module_name, import_name, warning_message, classes
     )
     
-    # Add the ENABLED flag to the dictionary
-    flag_name = f"{import_name.upper()}_ENABLED" if import_name else f"{module_name.upper()}_ENABLED"
+    # Add the ENABLED flag to the dictionary (replace dots with underscores for dotted module names)
+    raw_name = import_name if import_name else module_name
+    flag_name = f"{raw_name.upper().replace('.', '_')}_ENABLED"
     imported_objects[flag_name] = is_enabled
     
     return imported_objects 

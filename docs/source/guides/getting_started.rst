@@ -10,14 +10,12 @@ Here's a simple example of how to use CortexFlow:
 
 .. code-block:: python
 
-    from cortexflow import CortexFlowManager, CortexFlowConfig
+    from cortexflow import CortexFlowManager, CortexFlowConfig, MemoryConfig, LLMConfig
 
-    # Configure with custom settings
+    # Configure with custom settings (nested config)
     config = CortexFlowConfig(
-        active_token_limit=2000,
-        working_token_limit=4000,
-        archive_token_limit=6000,
-        default_model="llama3"  # Use your preferred Ollama model
+        memory=MemoryConfig(active_token_limit=2048, working_token_limit=4096, archive_token_limit=8192),
+        llm=LLMConfig(backend="ollama", default_model="llama3"),
     )
 
     # Create the context manager
@@ -37,6 +35,22 @@ Here's a simple example of how to use CortexFlow:
     # Clean up when done
     context_manager.close()
 
+Using the ConfigBuilder
+----------------------
+
+CortexFlow also supports a fluent builder pattern for configuration:
+
+.. code-block:: python
+
+    from cortexflow import CortexFlowManager, ConfigBuilder
+
+    config = (ConfigBuilder()
+        .with_memory(active_token_limit=2000, working_token_limit=4000, archive_token_limit=6000)
+        .with_llm(default_model="llama3")
+        .build())
+
+    manager = CortexFlowManager(config)
+
 Advanced Features
 ---------------
 
@@ -47,20 +61,21 @@ CortexFlow includes a Chain of Agents framework that breaks down complex reasoni
 
 .. code-block:: python
 
-    # Enable Chain of Agents in your configuration
-    config = CortexFlowConfig(
-        use_chain_of_agents=True,
-        chain_complexity_threshold=5,  # Only use for reasonably complex queries
-        # ... other config options
-    )
+    from cortexflow import CortexFlowManager, ConfigBuilder
+
+    # Enable Chain of Agents via the builder
+    config = (ConfigBuilder()
+        .with_agents(use_chain_of_agents=True, chain_complexity_threshold=5)
+        .with_llm(default_model="llama3")
+        .build())
 
     # Create the manager with this configuration
     manager = CortexFlowManager(config)
 
     # Add a complex query
     manager.add_message("user", "What connection exists between quantum physics and consciousness?")
-    
+
     # Generate response (automatically uses Chain of Agents for complex queries)
     response = manager.generate_response()
 
-See the :doc:`chain_of_agents` guide for more details. 
+See the :doc:`configuration` guide for more details on all available options.

@@ -10,16 +10,15 @@ import time
 import re
 from typing import List, Dict, Any, Optional, Tuple, Union
 
-import requests
-
 from cortexflow.config import CortexFlowConfig
 from cortexflow.knowledge import KnowledgeStore
+from cortexflow.llm_client import create_llm_client
 
 logger = logging.getLogger('cortexflow')
 
 class ReflectionEngine:
     """
-    Engine for self-reflection and self-correction capabilities in AdaptiveContext.
+    Engine for self-reflection and self-correction capabilities in CortexFlow.
     
     This class provides mechanisms to:
     1. Verify the relevance of retrieved knowledge
@@ -36,13 +35,12 @@ class ReflectionEngine:
         Initialize the reflection engine with configuration.
         
         Args:
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration
             knowledge_store: Optional knowledge store for verification
         """
         self.config = config
         self.knowledge_store = knowledge_store
-        self.ollama_host = config.ollama_host
-        self.default_model = config.default_model
+        self.llm_client = create_llm_client(config)
         
         # Default reflection thresholds
         self.relevance_threshold = 0.6  # Minimum score for knowledge relevance
@@ -64,41 +62,135 @@ class ReflectionEngine:
     ) -> List[Dict[str, Any]]:
         """
         Verify the relevance of knowledge items to the query.
-        
+
         Args:
             query: The user's query
             knowledge_items: List of knowledge items to verify
-            
+
         Returns:
             Filtered list of knowledge items with relevance scores
         """
         if not knowledge_items:
             return []
-        
+
         # Create a prompt for relevance verification
         prompt = self._create_relevance_prompt(query, knowledge_items)
-        
+
         # Process with LLM
         response = self._process_with_llm(prompt)
-        
+
         try:
             # Parse the relevance scores
             relevant_items = self._parse_relevance_response(response, knowledge_items)
-            
+
             # Filter by relevance threshold
-            filtered_items = [
-                item for item in relevant_items 
-                if item.get('relevance_score', 0) >= self.relevance_threshold
-            ]
-            
+            filtered_items = []
+            removed_items = []
+            for item in relevant_items:
+                if item.get('relevance_score', 0) >= self.relevance_threshold:
+                    filtered_items.append(item)
+                else:
+                    removed_items.append(item)
+
+            # Log what was removed and why
+            if removed_items:
+                for item in removed_items:
+                    text_preview = item.get('text', '')[:80]
+                    score = item.get('relevance_score', 0)
+                    reason = item.get('relevance_explanation', 'below threshold')
+                    logger.info(
+                        f"Reflection filtered out knowledge item (score={score:.2f}, "
+                        f"threshold={self.relevance_threshold}): '{text_preview}...' - {reason}"
+                    )
+
             logger.info(f"Knowledge relevance verification: {len(filtered_items)}/{len(knowledge_items)} items passed threshold")
             return filtered_items
-            
+
         except Exception as e:
             logger.error(f"Error parsing relevance response: {e}")
             # Fall back to original items if parsing fails
             return knowledge_items
     
+    def _extract_claims(self, response: str) -> List[str]:
+        """Extract key claims from a response using sentence splitting.
+
+        Splits the response into sentences and filters out very short or
+        non-substantive sentences to identify verifiable claims.
+
+        Args:
+            response: The generated response text
+
+        Returns:
+            List of claim strings extracted from the response.
+        """
+        # Split on sentence boundaries
+        sentences = re.split(r'(?<=[.!?])\s+', response.strip())
+        claims = []
+        for sentence in sentences:
+            sentence = sentence.strip()
+            # Filter out very short sentences and non-substantive fragments
+            if len(sentence.split()) >= 4 and not sentence.startswith(('I ', 'Let me', 'Here')):
+                claims.append(sentence)
+        return claims
+
+    def _compute_kb_support_ratio(
+        self,
+        claims: List[str],
+        knowledge_items: List[Dict[str, Any]]
+    ) -> Tuple[float, List[Dict[str, Any]]]:
+        """Compute what fraction of claims have supporting evidence in the KB.
+
+        For each claim, checks whether any knowledge item contains overlapping
+        key terms (3+ word overlap), which serves as a lightweight signal for
+        whether the claim is grounded in the knowledge base.
+
+        Args:
+            claims: List of extracted claim strings
+            knowledge_items: Knowledge items to check against
+
+        Returns:
+            Tuple of (support_ratio, per_claim_details) where support_ratio
+            is the fraction of claims with KB backing (0.0-1.0), and
+            per_claim_details is a list of dicts with claim text and whether
+            it was supported.
+        """
+        if not claims:
+            return 1.0, []
+
+        kb_texts = [item.get('text', '').lower() for item in knowledge_items]
+        supported_count = 0
+        claim_details = []
+
+        for claim in claims:
+            claim_words = set(claim.lower().split())
+            # Remove common stopwords for matching
+            stopwords = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
+                        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+                        'could', 'should', 'may', 'might', 'can', 'shall', 'to', 'of',
+                        'in', 'for', 'on', 'with', 'at', 'by', 'from', 'it', 'this',
+                        'that', 'and', 'or', 'but', 'not', 'so', 'if', 'as'}
+            claim_keywords = claim_words - stopwords
+
+            has_support = False
+            for kb_text in kb_texts:
+                kb_words = set(kb_text.split())
+                overlap = claim_keywords & kb_words
+                # Require at least 3 keyword overlaps for support
+                if len(overlap) >= 3:
+                    has_support = True
+                    break
+
+            if has_support:
+                supported_count += 1
+
+            claim_details.append({
+                "claim": claim[:100],
+                "has_kb_support": has_support
+            })
+
+        support_ratio = supported_count / len(claims)
+        return support_ratio, claim_details
+
     def check_response_consistency(
         self,
         query: str,
@@ -107,35 +199,64 @@ class ReflectionEngine:
     ) -> Dict[str, Any]:
         """
         Check for inconsistencies between response and knowledge items.
-        
+
+        Performs two levels of verification:
+        1. KB-based: Extracts claims from the response and checks what fraction
+           have supporting evidence in the knowledge items (ground-truth signal).
+        2. LLM-based: Asks the LLM to identify factual inconsistencies,
+           unsupported claims, and logical contradictions.
+
         Args:
             query: The user's query
             response: Generated response to check
             knowledge_items: Knowledge items used for response
-            
+
         Returns:
-            Dictionary with consistency assessment and identified issues
+            Dictionary with consistency assessment, identified issues,
+            and kb_support_ratio indicating ground-truth KB coverage.
         """
-        # Create a prompt for consistency checking
+        # Step 1: KB-based verification (lightweight, no LLM call)
+        claims = self._extract_claims(response)
+        kb_support_ratio, claim_details = self._compute_kb_support_ratio(claims, knowledge_items)
+        logger.info(
+            f"KB-based verification: {kb_support_ratio:.1%} of {len(claims)} "
+            f"claims have knowledge base support"
+        )
+
+        # Step 2: LLM-based consistency checking
         prompt = self._create_consistency_prompt(query, response, knowledge_items)
-        
-        # Process with LLM
         check_result = self._process_with_llm(prompt)
-        
+
         try:
             # Parse the consistency check result
             consistency_result = self._parse_consistency_response(check_result)
-            logger.info(f"Consistency check: {consistency_result.get('is_consistent', False)}")
+
+            # Enrich with KB-based verification results
+            consistency_result['kb_support_ratio'] = kb_support_ratio
+            consistency_result['claim_details'] = claim_details
+
+            is_consistent = consistency_result.get('is_consistent', False)
+            if not is_consistent:
+                issues = consistency_result.get('issues', [])
+                logger.warning(
+                    f"Consistency check FAILED: {len(issues)} issue(s) found - "
+                    f"{'; '.join(str(i) for i in issues[:3])}"
+                )
+            else:
+                logger.info("Consistency check passed")
+
             return consistency_result
-            
+
         except Exception as e:
             logger.error(f"Error parsing consistency response: {e}")
-            # Return a default result on error
+            # Return a default result on error, still including KB signal
             return {
                 "is_consistent": True,  # Assume consistent on error
                 "confidence": 0.5,
                 "issues": [],
-                "reasoning": "Failed to perform consistency check due to error."
+                "reasoning": "Failed to perform LLM consistency check due to error.",
+                "kb_support_ratio": kb_support_ratio,
+                "claim_details": claim_details
             }
     
     def revise_response(
@@ -147,33 +268,46 @@ class ReflectionEngine:
     ) -> str:
         """
         Revise the response based on detected inconsistencies.
-        
+
         Args:
             query: The user's query
             original_response: Original response to revise
             knowledge_items: Knowledge items for reference
             consistency_result: Result of consistency check
-            
+
         Returns:
-            Revised response
+            Revised response, or the original if no revision was needed.
         """
         # Only revise if inconsistent
         if consistency_result.get('is_consistent', True):
+            logger.debug("Response is consistent, no revision needed")
             return original_response
-        
+
+        issues = consistency_result.get('issues', [])
+        logger.warning(
+            f"Revising response due to {len(issues)} consistency issue(s): "
+            f"{'; '.join(str(i) for i in issues[:3])}"
+        )
+
         # Create a prompt for response revision
         prompt = self._create_revision_prompt(
-            query, 
-            original_response, 
+            query,
+            original_response,
             knowledge_items,
             consistency_result
         )
-        
-        # Process with LLM
-        revised_response = self._process_with_llm(prompt)
-        
-        logger.info("Response revised based on consistency check")
-        return revised_response
+
+        try:
+            # Process with LLM
+            revised_response = self._process_with_llm(prompt)
+            logger.info(
+                f"Response revised based on consistency check "
+                f"(original: {len(original_response)} chars, revised: {len(revised_response)} chars)"
+            )
+            return revised_response
+        except Exception as e:
+            logger.error(f"Error during response revision: {e}")
+            return original_response
     
     def _create_relevance_prompt(
         self, 
@@ -295,29 +429,22 @@ Provide a complete revised response that directly answers the user's query while
 REVISED RESPONSE:"""
     
     def _process_with_llm(self, prompt: str) -> str:
-        """Process the prompt with an LLM."""
+        """Process the prompt with an LLM.
+
+        Args:
+            prompt: The prompt to send to the LLM
+
+        Returns:
+            The LLM's response text
+
+        Raises:
+            Exception: If the LLM call fails after logging the error
+        """
         try:
-            # Call Ollama API
-            response = requests.post(
-                f"{self.ollama_host}/api/generate",
-                json={
-                    "model": self.default_model,
-                    "prompt": prompt,
-                    "stream": False
-                },
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result.get("response", "")
-            else:
-                logger.error(f"Error from LLM: {response.status_code} - {response.text}")
-                return ""
-                
+            return self.llm_client.generate_from_prompt(prompt)
         except Exception as e:
-            logger.error(f"Error processing with LLM: {e}")
-            return ""
+            logger.error(f"LLM processing failed in ReflectionEngine: {e}")
+            raise
     
     def _parse_relevance_response(
         self, 

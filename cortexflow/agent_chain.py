@@ -3,7 +3,7 @@ CortexFlow Agent Chain module.
 
 This module provides multi-agent collaboration for CortexFlow.
 
-Chain of Agents (CoA) Framework for AdaptiveContext.
+Chain of Agents (CoA) Framework for CortexFlow.
 
 This module implements the Chain of Agents approach for complex query processing,
 enabling multiple specialized agents to collaborate sequentially on tasks that
@@ -19,10 +19,9 @@ import time
 from typing import List, Dict, Any, Optional, Tuple, Union, Callable
 import traceback
 
-import requests
-
 from cortexflow.config import CortexFlowConfig
 from cortexflow.knowledge import KnowledgeStore
+from cortexflow.llm_client import create_llm_client
 
 logger = logging.getLogger('cortexflow')
 
@@ -42,15 +41,14 @@ class Agent:
         Args:
             name: Name identifier for this agent
             role: Description of this agent's specialized role
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration
             knowledge_store: Optional shared knowledge store
         """
         self.name = name
         self.role = role
         self.config = config
         self.knowledge_store = knowledge_store
-        self.ollama_host = config.ollama_host
-        self.default_model = config.default_model
+        self.llm_client = create_llm_client(config)
         
     def process(
         self, 
@@ -171,43 +169,38 @@ Output your exploration findings in a clear, structured format.
         return "KNOWLEDGE CONTEXT:\n" + "\n".join(formatted_items)
     
     def _process_with_llm(self, prompt: str, knowledge_context: str) -> Dict[str, Any]:
-        """Process the prompt and knowledge context with an LLM."""
-        # Combine prompt with knowledge context
+        """Process the prompt and knowledge context with an LLM.
+
+        Args:
+            prompt: The exploration prompt
+            knowledge_context: Formatted knowledge items as context
+
+        Returns:
+            Dict with exploration_text, status, and optionally error details.
+        """
         full_prompt = f"{prompt}\n\n{knowledge_context}"
-        
+        logger.debug(f"Explorer LLM prompt length: {len(full_prompt)} chars")
         try:
-            # Call Ollama API
-            response = requests.post(
-                f"{self.ollama_host}/api/generate",
-                json={
-                    "model": self.default_model,
-                    "prompt": full_prompt,
-                    "stream": False
-                },
-                timeout=30
+            exploration_text = self.llm_client.generate_from_prompt(
+                full_prompt, timeout=30
             )
-            
-            if response.status_code == 200:
-                result = response.json()
-                exploration_text = result.get("response", "")
-                return {
-                    "exploration_text": exploration_text,
-                    "status": "success"
-                }
-            else:
-                logger.error(f"Error from LLM: {response.status_code} - {response.text}")
-                return {
-                    "exploration_text": "Failed to explore knowledge base.",
-                    "status": "error",
-                    "error": f"LLM API error: {response.status_code}"
-                }
-                
-        except Exception as e:
-            logger.error(f"Error processing with LLM: {e}")
+            logger.debug(f"Explorer LLM response length: {len(exploration_text)} chars")
+            return {"exploration_text": exploration_text, "status": "success"}
+        except TimeoutError as e:
+            logger.error(f"Timeout in Explorer LLM processing: {e}")
             return {
-                "exploration_text": "Failed to process with LLM.",
+                "exploration_text": "",
                 "status": "error",
-                "error": str(e)
+                "error": f"LLM request timed out: {e}",
+                "error_type": "timeout"
+            }
+        except Exception as e:
+            logger.error(f"Error in Explorer LLM processing: {e}")
+            return {
+                "exploration_text": "",
+                "status": "error",
+                "error": str(e),
+                "error_type": type(e).__name__
             }
 
 
@@ -285,40 +278,36 @@ Output your analysis in a clear, structured format.
 """
 
     def _process_with_llm(self, prompt: str) -> Dict[str, Any]:
-        """Process the prompt with an LLM."""
+        """Process the prompt with an LLM.
+
+        Args:
+            prompt: The analysis prompt
+
+        Returns:
+            Dict with analysis_text, status, and optionally error details.
+        """
+        logger.debug(f"Analyzer LLM prompt length: {len(prompt)} chars")
         try:
-            # Call Ollama API
-            response = requests.post(
-                f"{self.ollama_host}/api/generate",
-                json={
-                    "model": self.default_model,
-                    "prompt": prompt,
-                    "stream": False
-                },
-                timeout=30
+            analysis_text = self.llm_client.generate_from_prompt(
+                prompt, timeout=30
             )
-            
-            if response.status_code == 200:
-                result = response.json()
-                analysis_text = result.get("response", "")
-                return {
-                    "analysis_text": analysis_text,
-                    "status": "success"
-                }
-            else:
-                logger.error(f"Error from LLM: {response.status_code} - {response.text}")
-                return {
-                    "analysis_text": "Failed to analyze information.",
-                    "status": "error",
-                    "error": f"LLM API error: {response.status_code}"
-                }
-                
-        except Exception as e:
-            logger.error(f"Error processing with LLM: {e}")
+            logger.debug(f"Analyzer LLM response length: {len(analysis_text)} chars")
+            return {"analysis_text": analysis_text, "status": "success"}
+        except TimeoutError as e:
+            logger.error(f"Timeout in Analyzer LLM processing: {e}")
             return {
-                "analysis_text": "Failed to process with LLM.",
+                "analysis_text": "",
                 "status": "error",
-                "error": str(e)
+                "error": f"LLM request timed out: {e}",
+                "error_type": "timeout"
+            }
+        except Exception as e:
+            logger.error(f"Error in Analyzer LLM processing: {e}")
+            return {
+                "analysis_text": "",
+                "status": "error",
+                "error": str(e),
+                "error_type": type(e).__name__
             }
 
 
@@ -410,40 +399,36 @@ Provide your answer directly.
 """
 
     def _process_with_llm(self, prompt: str) -> Dict[str, Any]:
-        """Process the prompt with an LLM."""
+        """Process the prompt with an LLM.
+
+        Args:
+            prompt: The synthesis prompt
+
+        Returns:
+            Dict with synthesis_text, status, and optionally error details.
+        """
+        logger.debug(f"Synthesizer LLM prompt length: {len(prompt)} chars")
         try:
-            # Call Ollama API
-            response = requests.post(
-                f"{self.ollama_host}/api/generate",
-                json={
-                    "model": self.default_model,
-                    "prompt": prompt,
-                    "stream": False
-                },
-                timeout=30
+            synthesis_text = self.llm_client.generate_from_prompt(
+                prompt, timeout=30
             )
-            
-            if response.status_code == 200:
-                result = response.json()
-                synthesis_text = result.get("response", "")
-                return {
-                    "synthesis_text": synthesis_text,
-                    "status": "success"
-                }
-            else:
-                logger.error(f"Error from LLM: {response.status_code} - {response.text}")
-                return {
-                    "synthesis_text": "Failed to synthesize answer.",
-                    "status": "error",
-                    "error": f"LLM API error: {response.status_code}"
-                }
-                
-        except Exception as e:
-            logger.error(f"Error processing with LLM: {e}")
+            logger.debug(f"Synthesizer LLM response length: {len(synthesis_text)} chars")
+            return {"synthesis_text": synthesis_text, "status": "success"}
+        except TimeoutError as e:
+            logger.error(f"Timeout in Synthesizer LLM processing: {e}")
             return {
-                "synthesis_text": "Failed to process with LLM.",
+                "synthesis_text": "",
                 "status": "error",
-                "error": str(e)
+                "error": f"LLM request timed out: {e}",
+                "error_type": "timeout"
+            }
+        except Exception as e:
+            logger.error(f"Error in Synthesizer LLM processing: {e}")
+            return {
+                "synthesis_text": "",
+                "status": "error",
+                "error": str(e),
+                "error_type": type(e).__name__
             }
 
 
@@ -458,7 +443,7 @@ class AgentChainManager:
         Initialize the Chain of Agents manager.
         
         Args:
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration
             knowledge_store: Knowledge store for agents to access
         """
         self.config = config
@@ -472,52 +457,71 @@ class AgentChainManager:
         ]
         
         logger.info(f"Initialized Chain of Agents with {len(self.agents)} agents")
-    
+
+    def _is_complex_query(self, query: str) -> bool:
+        """Determine if a query warrants multi-agent processing.
+
+        Uses a heuristic based on query length, presence of conjunctions
+        (which suggest multi-clause reasoning), and analysis/comparison
+        keywords that indicate deeper processing is needed.
+
+        Args:
+            query: The user query string
+
+        Returns:
+            True if the query is complex enough for multi-agent processing.
+        """
+        words = query.split()
+        # Multi-clause queries (conjunctions suggest complexity)
+        has_conjunctions = any(
+            w.lower() in ('and', 'but', 'however', 'because', 'therefore', 'while', 'although')
+            for w in words
+        )
+        # Comparison/analysis queries
+        has_analysis_words = any(
+            w.lower() in ('compare', 'contrast', 'analyze', 'explain', 'evaluate', 'why', 'how')
+            for w in words
+        )
+        # Length-based (longer queries are generally more complex)
+        is_long = len(words) > 15
+
+        return is_long or (has_conjunctions and len(words) > 8) or has_analysis_words
+
     def _batch_process_with_llm(self, prompts: List[str]) -> List[str]:
         """Process multiple prompts with LLM in a single batch."""
-        results = []
-        
         if not prompts:
-            return results
-            
+            return []
         try:
-            # For Ollama, we still need to make sequential requests, but we can optimize
-            # by reusing the connection and batching the processing
-            responses = []
-            
-            with requests.Session() as session:
-                for prompt in prompts:
-                    response = session.post(
-                        f"{self.config.ollama_host}/api/generate",
-                        json={
-                            "model": self.config.default_model,
-                            "prompt": prompt,
-                            "stream": False
-                        },
-                        timeout=30
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        responses.append(result.get("response", ""))
-                    else:
-                        responses.append(f"Error: {response.status_code}")
-                        
-            return responses
-            
+            return self.agents[0].llm_client.batch_generate_from_prompts(prompts)
         except Exception as e:
             logger.error(f"Error in batch LLM processing: {e}")
-            # Return empty strings for each prompt
             return [""] * len(prompts)
 
     def process_query(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Process a query through the chain of agents."""
+        """Process a query through the chain of agents.
+
+        If the query is not complex enough to warrant multi-agent processing,
+        returns a simplified direct-answer result instead of running the full
+        agent chain.
+        """
         if context is None:
             context = {}
-            
+
+        # Check if the query warrants multi-agent processing
+        if not self._is_complex_query(query):
+            logger.info(f"Query not complex enough for agent chain, skipping: {query[:50]}...")
+            return {
+                "query": query,
+                "answer": None,
+                "agent_chain": [],
+                "total_processing_time": 0.0,
+                "skipped": True,
+                "reason": "Query did not meet complexity threshold for multi-agent processing."
+            }
+
         start_time = time.time()
         agent_history = []
-        
+
         logger.info(f"Starting Chain of Agents processing for query: {query[:50]}...")
         
         for i, agent in enumerate(self.agents):

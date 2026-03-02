@@ -7,6 +7,12 @@ You can install CortexFlow using pip:
 
    pip install cortexflow
 
+For Vertex AI backend support:
+
+.. code-block:: bash
+
+   pip install "cortexflow[vertex]"
+
 Development Installation
 -----------------------
 
@@ -16,4 +22,4 @@ For development, you can clone the repository and install it in development mode
 
    git clone https://github.com/yourusername/cortexflow.git
    cd cortexflow
-   pip install -e . 
+   pip install -e .

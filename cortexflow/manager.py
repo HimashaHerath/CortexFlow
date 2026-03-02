@@ -15,6 +15,7 @@ import warnings
 
 from cortexflow.interfaces import ContextProvider
 from cortexflow.config import CortexFlowConfig
+from cortexflow.llm_client import create_llm_client
 from cortexflow.memory import (
     ContextSegment, 
     MemoryTier, 
@@ -116,6 +117,9 @@ class CortexFlowManager(ContextProvider):
                    f"{self.config.working_token_limit} working tokens, {self.config.archive_token_limit} archive tokens")
         
         try:
+            # Initialize LLM client
+            self.llm_client = create_llm_client(self.config)
+
             # Initialize components
             self.knowledge_store = KnowledgeStore(self.config)
             self.memory = ConversationMemory(self.config)
@@ -221,18 +225,30 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Message object that was added
         """
-        message = self.memory.add_message(role, content, metadata)
-        
-        # Perform classification only for user messages
+        # Perform classification and set importance metadata before adding to memory
         if role == "user" and self.classifier is not None:
             try:
-                # Classify content
                 result = self.classifier.classify(content)
-                message["classification"] = result
-                logger.debug(f"Message classified as: {result}")
+                metadata = metadata or {}
+                metadata["classification"] = result
+                # Derive importance from classification confidence (scale 0-1 to 0-10)
+                confidence = result.get("confidence", 0.5)
+                is_question = result.get("is_question", False)
+                # Questions and high-confidence content get higher importance
+                importance_score = confidence * 7.0 + (3.0 if is_question else 1.0)
+                importance_score = min(10.0, max(0.0, importance_score))
+                metadata["importance"] = importance_score
+                logger.debug(f"Message classified as: {result}, importance: {importance_score:.1f}")
             except Exception as e:
                 logger.error(f"Error classifying message: {e}")
-                
+        elif role == "assistant":
+            # For assistant messages, use a moderate default importance
+            metadata = metadata or {}
+            if "importance" not in metadata:
+                metadata["importance"] = 5.0
+
+        message = self.memory.add_message(role, content, metadata)
+
         # Apply dynamic weighting for user queries
         if role == "user" and self.weighting_engine and self.config.use_dynamic_weighting:
             try:
@@ -375,60 +391,138 @@ class CortexFlowManager(ContextProvider):
         """
         try:
             import requests
-            
+
             # Use model from config if not specified
             if model is None:
                 model = self.config.default_model
-                
+
+            # Initialize variables that both COA and standard paths need
+            knowledge = []
+            user_messages = []
+            query = ""
+
             # Get conversation context if no prompt provided
             if prompt is None:
                 context = self.get_conversation_context()
-                
+
                 # Extract messages
                 messages = context["messages"]
-                
+
                 # Add knowledge as system message if available
                 knowledge = context.get("knowledge", [])
                 if knowledge:
-                    knowledge_text = "\n".join(item["text"] for item in knowledge)
-                    
-                    # Add knowledge context as a system message
-                    messages = [{"role": "system", "content": f"Use this knowledge to answer the question:\n{knowledge_text}"}] + messages
-                
+                    knowledge_text = "\n".join(
+                        item.get("text", item.get("content", ""))
+                        for item in knowledge
+                        if item.get("text") or item.get("content")
+                    )
+
+                    # Check for contradictions among retrieved knowledge items
+                    contradiction_note = ""
+                    if self.uncertainty_handler and knowledge_text:
+                        try:
+                            # Extract entity IDs from knowledge items and check for contradictions
+                            seen_entity_ids = set()
+                            all_contradictions = []
+                            for item in knowledge:
+                                entity_id = item.get("entity_id")
+                                if entity_id and entity_id not in seen_entity_ids:
+                                    seen_entity_ids.add(entity_id)
+                                    contradictions = self.uncertainty_handler.detect_contradictions(
+                                        entity_id=entity_id, max_results=3
+                                    )
+                                    all_contradictions.extend(contradictions)
+
+                            if all_contradictions:
+                                contradiction_details = []
+                                for c in all_contradictions[:3]:  # Limit to top 3
+                                    contradiction_details.append(
+                                        f"  - {c.get('entity', 'unknown')}: "
+                                        f"'{c.get('target1', '?')}' vs '{c.get('target2', '?')}'"
+                                    )
+                                contradiction_note = (
+                                    "\n\nNote: The following knowledge items have detected contradictions. "
+                                    "Please acknowledge the uncertainty and present the most reliable information:\n"
+                                    + "\n".join(contradiction_details)
+                                )
+                                logger.info(f"Found {len(all_contradictions)} contradictions in retrieved knowledge")
+                        except Exception as e:
+                            logger.debug(f"Contradiction detection skipped: {e}")
+
+                    if knowledge_text:
+                        # Add knowledge context as a system message
+                        system_content = f"Use this knowledge to answer the question:\n{knowledge_text}"
+                        if contradiction_note:
+                            system_content += contradiction_note
+                        messages = [{"role": "system", "content": system_content}] + messages
+
                 # Format as prompt if needed
                 if not messages:
                     prompt = "Hello! How can I assist you today?"
-                    
-                # Get the most recent user query for Chain of Agents processing
-                user_messages = [msg for msg in messages if msg["role"] == "user"]
+
+                # Extract query from messages -- needed by both COA and standard paths
+                user_messages = [msg for msg in messages if msg.get("role") == "user"]
                 query = user_messages[-1]["content"] if user_messages else ""
-                
-                # Use Chain of Agents for complex queries if enabled
-                if (self.agent_chain_manager is not None and 
-                    hasattr(self.config, "use_chain_of_agents") and 
-                    self.config.use_chain_of_agents):
-                    
+
+                # Enrich context with inference results if available
+                inference_context = ""
+                if (hasattr(self, 'knowledge_store') and self.knowledge_store and
+                        hasattr(self.knowledge_store, 'inference_engine') and
+                        self.knowledge_store.inference_engine and query):
                     try:
-                        # Check if query is complex enough to warrant Chain of Agents
-                        # For now, use a simple length-based heuristic
-                        if len(query.split()) > 5 or "?" in query:
-                            logger.info(f"Processing query with Chain of Agents: {query[:50]}...")
-                            
-                            # Process with Chain of Agents
-                            coa_result = self.agent_chain_manager.process_query(
-                                query=query,
-                                context={"messages": messages, "knowledge": knowledge}
-                            )
-                            
+                        inference_engine = self.knowledge_store.inference_engine
+                        # Try backward chaining to find relevant logical derivations
+                        fact_pattern = inference_engine._extract_fact_from_question(query)
+                        if fact_pattern:
+                            success, explanation = inference_engine.backward_chain(fact_pattern)
+                            if success and explanation:
+                                inference_parts = []
+                                for step in explanation[:5]:
+                                    fact = step.get('fact', {})
+                                    if isinstance(fact, dict):
+                                        source = fact.get('source', '')
+                                        relation = fact.get('relation', '')
+                                        target = fact.get('target', '')
+                                        if source and relation and target:
+                                            inference_parts.append(f"- {source} {relation} {target}")
+                                    elif fact:
+                                        inference_parts.append(f"- {fact}")
+                                if inference_parts:
+                                    inference_context = "Logical inference results:\n" + "\n".join(inference_parts)
+                                    logger.info(f"Inference engine provided {len(inference_parts)} derivation steps")
+                    except Exception as e:
+                        logger.debug(f"Inference enrichment skipped: {e}")
+
+                # Prepend inference context to messages if available
+                if inference_context:
+                    # Add as a system message before the knowledge system message
+                    messages = [{"role": "system", "content": inference_context}] + messages
+
+                # Use Chain of Agents for complex queries if enabled
+                if (self.agent_chain_manager is not None and
+                    hasattr(self.config, "use_chain_of_agents") and
+                    self.config.use_chain_of_agents):
+
+                    try:
+                        logger.info(f"Processing query with Chain of Agents: {query[:50]}...")
+
+                        # process_query uses _is_complex_query() internally and
+                        # returns skipped=True for simple queries
+                        coa_result = self.agent_chain_manager.process_query(
+                            query=query,
+                            context={"messages": messages, "knowledge": knowledge}
+                        )
+
+                        if not coa_result.get("skipped"):
                             # Get the answer from the Chain of Agents
                             generated_text = coa_result.get("answer", "")
-                            
+
                             if generated_text:
                                 # Apply self-reflection if enabled
-                                if (self.reflection_engine and 
-                                    hasattr(self.config, "use_self_reflection") and 
+                                if (self.reflection_engine and
+                                    hasattr(self.config, "use_self_reflection") and
                                     self.config.use_self_reflection):
-                                    
+
                                     try:
                                         # Check response consistency
                                         consistency_result = self.reflection_engine.check_response_consistency(
@@ -436,7 +530,7 @@ class CortexFlowManager(ContextProvider):
                                             generated_text,
                                             knowledge
                                         )
-                                        
+
                                         # Revise if needed
                                         if not consistency_result.get("is_consistent", True):
                                             generated_text = self.reflection_engine.revise_response(
@@ -448,71 +542,62 @@ class CortexFlowManager(ContextProvider):
                                             logger.info("Response revised through self-reflection")
                                     except Exception as e:
                                         logger.error(f"Error in self-reflection: {e}")
-                                
+
                                 # Add the response to memory
                                 self.add_message("assistant", generated_text)
                                 logger.info(f"Chain of Agents generated response in {coa_result.get('total_processing_time', 0):.2f} seconds")
                                 return generated_text
-                            # If Chain of Agents fails, fall back to standard processing
+                            # If Chain of Agents produced no answer, fall back to standard processing
                             logger.warning("Chain of Agents failed to generate response, falling back to standard processing")
+                        else:
+                            logger.info(f"Chain of Agents skipped (simple query): {coa_result.get('reason', '')}")
                     except Exception as e:
                         logger.error(f"Error processing with Chain of Agents: {e}")
                         logger.error(traceback.format_exc())
                         # Continue with standard processing on error
             else:
                 messages = [{"role": "user", "content": prompt}]
-                
-            # Get Ollama URL
-            ollama_url = f"{self.config.ollama_host}/api/chat"
-            
-            payload = {
-                "model": model,
-                "messages": messages,
-                "stream": False
-            }
-            
-            logger.debug(f"Sending request to Ollama: {ollama_url}")
-            response = requests.post(ollama_url, json=payload, timeout=30)
-            
-            if response.status_code == 200:
-                result = response.json()
-                generated_text = result["message"]["content"]
-                
-                # Apply self-reflection if enabled
-                if (self.reflection_engine and 
-                    hasattr(self.config, "use_self_reflection") and 
+                # Extract query from the provided prompt for reflection
+                user_messages = [{"role": "user", "content": prompt}]
+                query = prompt
+
+            logger.debug("Sending request to LLM client")
+            generated_text = self.llm_client.generate(messages, model=model)
+
+            if not generated_text or generated_text.startswith("Error:"):
+                return f"Error generating response: {generated_text}"
+
+            # Apply self-reflection if enabled
+            if (self.reflection_engine and
+                    hasattr(self.config, "use_self_reflection") and
                     self.config.use_self_reflection and
                     len(user_messages) > 0):  # Need a user query for reflection
-                    
-                    try:
-                        # Check response consistency
-                        consistency_result = self.reflection_engine.check_response_consistency(
+
+                try:
+                    # Check response consistency
+                    consistency_result = self.reflection_engine.check_response_consistency(
+                        query,
+                        generated_text,
+                        knowledge
+                    )
+
+                    # Revise if needed
+                    if not consistency_result.get("is_consistent", True):
+                        generated_text = self.reflection_engine.revise_response(
                             query,
                             generated_text,
-                            knowledge
+                            knowledge,
+                            consistency_result
                         )
-                        
-                        # Revise if needed
-                        if not consistency_result.get("is_consistent", True):
-                            generated_text = self.reflection_engine.revise_response(
-                                query,
-                                generated_text,
-                                knowledge,
-                                consistency_result
-                            )
-                            logger.info("Response revised through self-reflection")
-                    except Exception as e:
-                        logger.error(f"Error in self-reflection: {e}")
-                
-                # Add the response to memory
-                self.add_message("assistant", generated_text)
-                
-                return generated_text
-            else:
-                error_message = f"Ollama error: {response.status_code} - {response.text}"
-                logger.error(error_message)
-                return f"Error generating response: {error_message}"
-                
+                        logger.info("Response revised through self-reflection")
+                except Exception as e:
+                    logger.error(f"Error in self-reflection: {e}")
+
+            # Add the response to memory
+            self.add_message("assistant", generated_text)
+
+            return generated_text
+
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             logger.error(traceback.format_exc())
@@ -521,81 +606,87 @@ class CortexFlowManager(ContextProvider):
     def generate_response_stream(self, prompt: str = None, model: str = None) -> Iterator[str]:
         """
         Generate a streaming response using the conversation context.
-        
+
+        Note: Chain of Agents processing is not supported in streaming mode.
+        If COA is enabled and the query is complex, this method will run COA
+        synchronously first and then stream the resulting text.
+
         Args:
             prompt: Optional prompt to use instead of the conversation context
             model: Model to use for generation
-            
+
         Yields:
             Chunks of the generated response
         """
         try:
             import requests
-            
+
             # Use model from config if not specified
             if model is None:
                 model = self.config.default_model
-                
+
             # Get conversation context if no prompt provided
             if prompt is None:
                 context = self.get_conversation_context()
-                
+
                 # Extract messages
                 messages = context["messages"]
-                
+
                 # Add knowledge as system message if available
                 knowledge = context.get("knowledge", [])
                 if knowledge:
-                    knowledge_text = "\n".join(item["text"] for item in knowledge)
-                    
-                    # Add knowledge context as a system message
-                    messages = [{"role": "system", "content": f"Use this knowledge to answer the question:\n{knowledge_text}"}] + messages
-                    
+                    knowledge_text = "\n".join(
+                        item.get("text", item.get("content", ""))
+                        for item in knowledge
+                        if item.get("text") or item.get("content")
+                    )
+
+                    if knowledge_text:
+                        # Add knowledge context as a system message
+                        messages = [{"role": "system", "content": f"Use this knowledge to answer the question:\n{knowledge_text}"}] + messages
+
                 # Format as prompt if needed
                 if not messages:
                     prompt = "Hello! How can I assist you today?"
-                    
-                # Skip Chain of Agents for streaming (would require more complex implementation)
+
+                # Check if Chain of Agents should handle this query
+                user_messages = [msg for msg in messages if msg.get("role") == "user"]
+                query = user_messages[-1]["content"] if user_messages else ""
+
+                if (self.agent_chain_manager is not None and
+                    hasattr(self.config, "use_chain_of_agents") and
+                    self.config.use_chain_of_agents and query):
+
+                    try:
+                        logger.info("Streaming mode: running COA synchronously before streaming result")
+                        coa_result = self.agent_chain_manager.process_query(
+                            query=query,
+                            context={"messages": messages, "knowledge": knowledge}
+                        )
+
+                        if not coa_result.get("skipped"):
+                            generated_text = coa_result.get("answer", "")
+                            if generated_text:
+                                # Stream the COA result character-by-character in chunks
+                                self.add_message("assistant", generated_text)
+                                chunk_size = 20
+                                for i in range(0, len(generated_text), chunk_size):
+                                    yield generated_text[i:i + chunk_size]
+                                return
+                    except Exception as e:
+                        logger.error(f"COA failed in streaming mode, falling back to standard streaming: {e}")
             else:
                 messages = [{"role": "user", "content": prompt}]
-                
-            # Get Ollama URL
-            ollama_url = f"{self.config.ollama_host}/api/chat"
-            
-            payload = {
-                "model": model,
-                "messages": messages,
-                "stream": True
-            }
-            
-            logger.debug(f"Sending streaming request to Ollama: {ollama_url}")
-            response = requests.post(ollama_url, json=payload, timeout=30, stream=True)
-            
-            if response.status_code == 200:
-                # Store the full response as we stream
-                full_response = ""
-                
-                # Process the streaming response
-                for line in response.iter_lines():
-                    if line:
-                        chunk_data = json.loads(line)
-                        if "message" in chunk_data:
-                            chunk = chunk_data["message"].get("content", "")
-                        else:
-                            chunk = chunk_data.get("response", "")
-                            
-                        if chunk:
-                            full_response += chunk
-                            yield chunk
-                
-                # After streaming completes, add the response to memory
-                self.add_message("assistant", full_response)
-                
-            else:
-                error_message = f"Ollama error: {response.status_code} - {response.text}"
-                logger.error(error_message)
-                yield f"Error generating response: {error_message}"
-                    
+
+            logger.debug("Sending streaming request to LLM client")
+            full_response = ""
+            for chunk in self.llm_client.generate_stream(messages, model=model):
+                full_response += chunk
+                yield chunk
+
+            # After streaming completes, add the response to memory
+            self.add_message("assistant", full_response)
+
         except Exception as e:
             logger.error(f"Error in streaming response: {e}")
             logger.error(traceback.format_exc())
@@ -873,7 +964,7 @@ class CortexFlowManager(ContextProvider):
     
     def clear_memory(self) -> None:
         """Clear the conversation memory."""
-        self.memory.clear()
+        self.memory.clear_memory()
         
         # Reset dynamic weighting to defaults if enabled
         if self.config.use_dynamic_weighting and self.weighting_engine:
@@ -881,31 +972,21 @@ class CortexFlowManager(ContextProvider):
     
     def close(self) -> None:
         """Close and clean up resources."""
-        try:
-            if self.memory:
-                self.memory.close()
-                
-            if self.knowledge_store:
-                self.knowledge_store.close()
-                
-            if self.uncertainty_handler:
-                self.uncertainty_handler.close()
-                
-            if self.performance_optimizer:
-                self.performance_optimizer.close()
-                
-            # Close ontology if it exists
-            if hasattr(self, 'ontology') and self.ontology:
-                self.ontology.close()
-                
-            # Close any graph_store directly owned by the manager
-            if hasattr(self, 'graph_store') and self.graph_store and \
-               (not hasattr(self, 'knowledge_store') or self.graph_store is not self.knowledge_store.graph_store):
-                self.graph_store.close()
-                
-            logger.info("CortexFlowManager closed")
-        except Exception as e:
-            logger.error(f"Error during close: {e}")
+        for component_name in ('memory', 'knowledge_store', 'uncertainty_handler',
+                               'performance_optimizer', 'ontology', 'graph_store'):
+            component = getattr(self, component_name, None)
+            if component and hasattr(component, 'close'):
+                try:
+                    # Avoid double-closing graph_store if it's owned by knowledge_store
+                    if component_name == 'graph_store':
+                        ks = getattr(self, 'knowledge_store', None)
+                        if ks and hasattr(ks, 'graph_store') and component is ks.graph_store:
+                            continue
+                    component.close()
+                except Exception as e:
+                    logger.error(f"Error closing {component_name}: {e}")
+
+        logger.info("CortexFlowManager closed")
 
     def __del__(self) -> None:
         """Destructor."""

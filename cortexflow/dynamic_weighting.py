@@ -30,10 +30,10 @@ class DynamicWeightingEngine:
         Initialize the dynamic weighting engine.
         
         Args:
-            config: AdaptiveContext configuration
+            config: CortexFlow configuration
         """
         self.config = config
-        
+
         # Default tier ratios (active:working:archive)
         self.default_ratios = {
             "active": 0.25,    # 25% of total tokens

@@ -15,7 +15,6 @@ Core Methods
 .. automethod:: cortexflow.CortexFlowManager.add_message
 .. automethod:: cortexflow.CortexFlowManager.generate_response
 .. automethod:: cortexflow.CortexFlowManager.remember_knowledge
-.. automethod:: cortexflow.CortexFlowManager.recall_knowledge
 .. automethod:: cortexflow.CortexFlowManager.close
 
 Example Usage
@@ -23,25 +22,28 @@ Example Usage
 
 .. code-block:: python
 
-    from cortexflow import CortexFlowManager, CortexFlowConfig
-    
-    # Create a configuration
+    from cortexflow import CortexFlowManager, CortexFlowConfig, MemoryConfig, LLMConfig
+
+    # Create a configuration using nested config
     config = CortexFlowConfig(
-        active_token_limit=2000,
-        working_token_limit=4000,
-        archive_token_limit=6000
+        memory=MemoryConfig(
+            active_token_limit=2000,
+            working_token_limit=4000,
+            archive_token_limit=6000,
+        ),
+        llm=LLMConfig(default_model="llama3"),
     )
-    
+
     # Initialize the manager
     manager = CortexFlowManager(config)
-    
+
     # Add messages
     manager.add_message("system", "You are a helpful assistant.")
     manager.add_message("user", "What's the capital of France?")
-    
+
     # Generate a response
     response = manager.generate_response()
     print(f"Assistant: {response}")
-    
+
     # Close the manager when done
-    manager.close() 
+    manager.close()

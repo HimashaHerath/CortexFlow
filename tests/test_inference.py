@@ -29,18 +29,18 @@ class TestInferenceEngine(unittest.TestCase):
         self.db_fd, self.db_path = tempfile.mkstemp()
         
         # Configure with test settings, disable features not needed for testing
-        self.config = CortexFlowConfig(
-            knowledge_store_path=self.db_path,
-            use_graph_rag=True,
-            use_inference_engine=True,
-            max_inference_depth=5,
-            max_forward_chain_iterations=3,
-            use_ml_classifier=False,     # Disable ML classifier for tests
-            use_reranking=False,         # Disable reranking for tests
-            use_chain_of_agents=False,   # Disable chain of agents for tests
-            use_self_reflection=False,   # Disable self-reflection for tests
-            use_dynamic_weighting=False  # Disable dynamic weighting for tests
-        )
+        self.config = CortexFlowConfig.from_dict({
+            "knowledge_store_path": self.db_path,
+            "use_graph_rag": False,
+            "use_inference_engine": True,
+            "max_inference_depth": 5,
+            "max_forward_chain_iterations": 3,
+            "use_ml_classifier": False,     # Disable ML classifier for tests
+            "use_reranking": False,         # Disable reranking for tests
+            "use_chain_of_agents": False,   # Disable chain of agents for tests
+            "use_self_reflection": False,   # Disable self-reflection for tests
+            "use_dynamic_weighting": False, # Disable dynamic weighting for tests
+        })
         
         # Create a mock rank_bm25 module if needed
         self._patch_bm25()

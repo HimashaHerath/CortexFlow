@@ -10,7 +10,7 @@ from cortexflow.memory import (
     ArchiveTier,
     ConversationMemory
 )
-from cortexflow.config import CortexFlowConfig
+from cortexflow.config import CortexFlowConfig, MemoryConfig
 
 class TestContextSegment:
     """Tests for the ContextSegment class"""
@@ -402,11 +402,11 @@ class TestConversationMemory:
     
     def test_init(self):
         """Test ConversationMemory initialization"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -418,11 +418,11 @@ class TestConversationMemory:
         
     def test_update_tier_limits(self):
         """Test updating memory tier limits"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -444,11 +444,11 @@ class TestConversationMemory:
         
     def test_add_message(self):
         """Test adding messages to memory"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -478,11 +478,11 @@ class TestConversationMemory:
         
     def test_get_context_messages(self):
         """Test getting context messages"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -504,11 +504,11 @@ class TestConversationMemory:
         
     def test_get_messages_by_role(self):
         """Test filtering messages by role"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -540,11 +540,11 @@ class TestConversationMemory:
         
     def test_get_last_message(self):
         """Test getting the last message"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -562,11 +562,11 @@ class TestConversationMemory:
         
     def test_get_conversation_summary(self):
         """Test getting conversation summary"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -587,11 +587,11 @@ class TestConversationMemory:
         
     def test_clear_memory(self):
         """Test clearing memory"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -613,11 +613,11 @@ class TestConversationMemory:
         
     def test_serialization(self):
         """Test serialization and deserialization"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         
@@ -649,11 +649,11 @@ class TestConversationMemory:
 
     def test_memory_tiers(self):
         """Test memory tier initialization and behavior"""
-        config = CortexFlowConfig(
+        config = CortexFlowConfig(memory=MemoryConfig(
             active_token_limit=100,
             working_token_limit=200,
             archive_token_limit=300
-        )
+        ))
         
         memory = ConversationMemory(config)
         

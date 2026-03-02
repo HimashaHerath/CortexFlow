@@ -342,70 +342,352 @@ class ConversationMemory:
     def add_message(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Add a new message to the conversation memory.
-        
+
         Args:
             role: Message role (user, assistant, system)
             content: Message content
             metadata: Optional metadata for the message
-            
+
         Returns:
             The message that was added
         """
         if not content:
             logger.warning("Attempted to add empty message content")
             return {}
-            
+
+        msg_metadata = metadata or {}
+        msg_timestamp = time.time()
+
         # Create the message
         message = {
             "id": self.next_message_id,
             "role": role,
             "content": content,
-            "timestamp": time.time(),
-            "metadata": metadata or {}
+            "timestamp": msg_timestamp,
+            "metadata": msg_metadata
         }
-        
+
         # Increment message ID
         self.next_message_id += 1
-        
-        # Add message to memory
+
+        # Add message to flat list (backward compatibility)
         self.messages.append(message)
         logger.debug(f"Added {role} message: {content[:50]}...")
-        
-        # Trim memory if necessary
-        if len(self.messages) > 100:  # Simple limit for now
-            self._trim_old_messages()
-            
+
+        # Create a ContextSegment and add to the active tier
+        importance = msg_metadata.get("importance", self._estimate_importance(role, content))
+        token_count = self._estimate_tokens(content)
+
+        segment = ContextSegment(
+            content=content,
+            importance=importance,
+            timestamp=msg_timestamp,
+            token_count=token_count,
+            segment_type=role,
+            metadata={**msg_metadata, "message_id": message["id"]}
+        )
+
+        # Try to add to active tier; if it won't fit, free space first
+        if not self.active_tier.add_segment(segment):
+            self._manage_tiers(needed_tokens=segment.token_count)
+            # Retry after making room
+            if not self.active_tier.add_segment(segment):
+                # If segment itself is larger than the entire active tier,
+                # compress it before adding
+                logger.warning(
+                    f"Segment too large for active tier ({token_count} tokens). "
+                    f"Compressing before adding."
+                )
+                compressor = self._get_compressor()
+                compressed = compressor.compress_segment(segment, 0.5)
+                self.active_tier.add_segment(compressed)
+
+        # Manage tier overflow
+        self._manage_tiers()
+
         return message
     
     def _trim_old_messages(self):
-        """Trim old messages to maintain reasonable memory size."""
-        # Keep all system messages and last 50 messages
-        system_messages = [m for m in self.messages if m["role"] == "system"]
-        recent_messages = self.messages[-50:]
-        
-        # Combine and deduplicate
-        kept_ids = set(m["id"] for m in system_messages + recent_messages)
-        self.messages = [m for m in self.messages if m["id"] in kept_ids]
-        
-        logger.debug(f"Trimmed messages to {len(self.messages)} entries")
-    
-    def get_context_messages(self) -> List[Dict[str, Any]]:
+        """Trim old messages based on tier management.
+
+        This method is kept for backward compatibility but now delegates
+        to the tier-based memory management system.
         """
-        Get messages for context window.
-        
+        self._manage_tiers()
+
+    @staticmethod
+    def _estimate_tokens(content: str) -> int:
+        """Estimate the token count for a piece of content.
+
+        Uses a rough word-to-token approximation: word_count * 1.3.
+
+        Args:
+            content: The text content
+
         Returns:
-            List of messages with role and content
+            Estimated token count
         """
-        # Convert to format expected by LLM APIs
-        formatted_messages = []
-        for message in self.messages:
-            formatted = {
-                "role": message["role"],
-                "content": message["content"]
+        word_count = len(content.split())
+        return max(1, int(word_count * 1.3))
+
+    @staticmethod
+    def _estimate_importance(role: str, content: str) -> float:
+        """Estimate the importance of a message based on simple heuristics.
+
+        Args:
+            role: Message role (system, user, assistant)
+            content: Message content
+
+        Returns:
+            Importance score between 0.0 and 10.0
+        """
+        # System messages are always critical
+        if role == "system":
+            return 9.0
+
+        # Short messages are generally less important
+        word_count = len(content.split())
+        if word_count < 10:
+            return 3.0
+
+        # User messages with questions or important keywords get higher score
+        if role == "user":
+            importance_keywords = {
+                "important", "critical", "urgent", "remember", "always",
+                "never", "must", "required", "error", "bug", "fix",
+                "explain", "why", "how"
             }
-            formatted_messages.append(formatted)
-            
-        return formatted_messages
+            content_lower = content.lower()
+            if "?" in content:
+                return 7.0
+            if any(kw in content_lower for kw in importance_keywords):
+                return 7.0
+            return 6.0
+
+        # Assistant messages get medium importance
+        if role == "assistant":
+            return 5.0
+
+        # Default for unknown roles
+        return 5.0
+
+    def _get_compressor(self):
+        """Get or create the context compressor instance.
+
+        Uses a lazy import to avoid circular dependency with compressor.py.
+        By default, creates a lightweight compressor using extractive
+        summarization only (no LLM dependency). If the full config includes
+        a working LLM client, callers can set self._compressor directly.
+
+        Returns:
+            ContextCompressor instance
+        """
+        if not hasattr(self, '_compressor') or self._compressor is None:
+            from .compressor import ContextCompressor
+            # Use the default (extractive-only) compressor to avoid blocking
+            # on LLM client initialization during memory management.
+            # The full LLM-backed compressor can be injected externally via
+            # self._compressor = ContextCompressor(config=...) if needed.
+            self._compressor = ContextCompressor.create_default()
+        return self._compressor
+
+    def _manage_tiers(self, needed_tokens: int = 0):
+        """Manage memory tier overflow by compressing and demoting segments.
+
+        Called after adding a segment to the active tier. Implements the
+        cascade: active -> working -> archive -> discard.
+
+        Args:
+            needed_tokens: If > 0, keep freeing active tier space until at
+                           least this many tokens are available (even if the
+                           tier is not technically "full").
+
+        System messages (importance >= 9.0) are never compressed or demoted.
+        """
+        compressor = self._get_compressor()
+
+        def _active_needs_space():
+            if self.active_tier.is_full:
+                return True
+            if needed_tokens > 0 and self.active_tier.available_tokens < needed_tokens:
+                return True
+            return False
+
+        # --- Active tier overflow: demote to working tier ---
+        while _active_needs_space():
+            idx = self._get_demotable_segment_index(self.active_tier)
+            if idx is None:
+                # Only system messages left, nothing to demote
+                logger.warning("Active tier full but contains only system-level segments")
+                break
+
+            segment = self.active_tier.remove_segment(idx)
+            if segment is None:
+                break
+
+            # Compress at 50% ratio for active -> working transition
+            compressed = compressor.compress_segment(segment, 0.5)
+            logger.debug(
+                f"Demoting segment from active to working tier "
+                f"({segment.token_count} -> {compressed.token_count} tokens)"
+            )
+
+            # If working tier can't fit it, manage working tier first
+            if not self.working_tier.add_segment(compressed):
+                self._manage_working_tier_overflow(compressor)
+                # Retry
+                if not self.working_tier.add_segment(compressed):
+                    # Working tier still can't fit - compress more aggressively
+                    compressed = compressor.compress_segment(compressed, 0.5)
+                    if not self.working_tier.add_segment(compressed):
+                        # Last resort: send directly to archive
+                        archive_compressed = compressor.compress_segment(compressed, 0.3)
+                        if not self.archive_tier.add_segment(archive_compressed):
+                            logger.warning("All tiers full, discarding segment")
+
+        # --- Also check working tier independently ---
+        self._manage_working_tier_overflow(compressor)
+
+        # Update stats after tier management
+        self._update_tier_usage_stats()
+
+    def _manage_working_tier_overflow(self, compressor):
+        """Handle working tier overflow by demoting to archive.
+
+        Args:
+            compressor: ContextCompressor instance to use
+        """
+        while self.working_tier.is_full:
+            idx = self._get_demotable_segment_index(self.working_tier)
+            if idx is None:
+                logger.warning("Working tier full but contains only system-level segments")
+                break
+
+            segment = self.working_tier.remove_segment(idx)
+            if segment is None:
+                break
+
+            # Compress at 30% ratio for working -> archive transition
+            compressed = compressor.compress_segment(segment, 0.3)
+            logger.debug(
+                f"Demoting segment from working to archive tier "
+                f"({segment.token_count} -> {compressed.token_count} tokens)"
+            )
+
+            if not self.archive_tier.add_segment(compressed):
+                # Archive is full: discard least important archive segment
+                self._manage_archive_tier_overflow()
+                # Retry
+                if not self.archive_tier.add_segment(compressed):
+                    logger.warning("Archive tier full after cleanup, discarding segment")
+
+    def _manage_archive_tier_overflow(self):
+        """Handle archive tier overflow by discarding least important segments."""
+        while self.archive_tier.is_full:
+            idx = self._get_demotable_segment_index(self.archive_tier)
+            if idx is None:
+                logger.warning("Archive tier full but contains only system-level segments")
+                break
+
+            discarded = self.archive_tier.remove_segment(idx)
+            if discarded is None:
+                break
+            logger.debug(
+                f"Discarding least important archive segment "
+                f"(importance={discarded.importance:.1f}, "
+                f"tokens={discarded.token_count})"
+            )
+
+    @staticmethod
+    def _get_demotable_segment_index(tier) -> Optional[int]:
+        """Get the index of the least important non-system segment in a tier.
+
+        System messages (importance >= 9.0) are never demoted or discarded.
+
+        Args:
+            tier: A MemoryTier instance
+
+        Returns:
+            Index of the segment to demote, or None if only system segments exist
+        """
+        if not tier.segments:
+            return None
+
+        # Filter to non-system segments (importance < 9.0)
+        candidates = [
+            (i, seg) for i, seg in enumerate(tier.segments)
+            if seg.segment_type != "system" and seg.importance < 9.0
+        ]
+
+        if not candidates:
+            return None
+
+        # Return the least important (factoring in age like get_least_important_segment)
+        return min(candidates, key=lambda pair: (pair[1].importance, -pair[1].age))[0]
+    
+    def get_context_messages(self, token_budget: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Get messages for context window from the tier system.
+
+        Returns segments from all tiers, prioritizing active (full content),
+        then working (compressed), then archive (heavily compressed).
+        Respects an optional token budget.
+
+        Args:
+            token_budget: Maximum total tokens to return. If None, uses
+                          the sum of all tier limits.
+
+        Returns:
+            List of messages with role and content, ordered chronologically
+        """
+        if token_budget is None:
+            token_budget = (
+                self.active_token_limit
+                + self.working_token_limit
+                + self.archive_token_limit
+            )
+
+        formatted_segments = []
+        tokens_used = 0
+
+        # Collect segments from all tiers with priority ordering:
+        # Active tier gets priority, then working, then archive
+        tier_sources = [
+            self.active_tier,
+            self.working_tier,
+            self.archive_tier,
+        ]
+
+        all_segments = []
+        for tier in tier_sources:
+            for segment in tier.segments:
+                all_segments.append(segment)
+
+        # If tiers are empty, fall back to self.messages for backward compat
+        if not all_segments and self.messages:
+            formatted_messages = []
+            for message in self.messages:
+                formatted_messages.append({
+                    "role": message["role"],
+                    "content": message["content"]
+                })
+            return formatted_messages
+
+        # Sort all collected segments chronologically by timestamp
+        all_segments.sort(key=lambda s: s.timestamp)
+
+        # Build the output, respecting token budget
+        for segment in all_segments:
+            if tokens_used + segment.token_count > token_budget:
+                # Budget exhausted - stop adding
+                break
+            formatted_segments.append({
+                "role": segment.segment_type,
+                "content": segment.content
+            })
+            tokens_used += segment.token_count
+
+        return formatted_segments
     
     def get_messages_by_role(self, role: str) -> List[Dict[str, Any]]:
         """

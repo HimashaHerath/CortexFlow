@@ -26,11 +26,10 @@ import time
 import json
 import sqlite3
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple, Union, ContextManager, Protocol, runtime_checkable
+from typing import List, Dict, Any, Optional, Tuple, Protocol, runtime_checkable
 from sqlitedict import SqliteDict
 from datetime import datetime
 import logging
-from collections import defaultdict
 import random
 from contextlib import contextmanager
 import warnings
@@ -60,7 +59,6 @@ if BM25_ENABLED:
     BM25Okapi = bm25_deps['BM25Okapi']
 
 from cortexflow.config import CortexFlowConfig
-from cortexflow.graph_store import GraphStore
 from cortexflow.interfaces import KnowledgeStoreInterface
 
 @runtime_checkable
@@ -96,7 +94,11 @@ class BM25SearchStrategy:
         Returns:
             List of results with BM25 scores
         """
-        if not BM25_ENABLED or not knowledge_store.bm25_index:
+        if not BM25_ENABLED:
+            logging.warning("BM25 search unavailable: rank_bm25 library is not installed")
+            return []
+        if not knowledge_store.bm25_index:
+            logging.warning("BM25 search unavailable: BM25 index has not been built yet (no documents indexed)")
             return []
             
         # Tokenize query
@@ -159,7 +161,11 @@ class DenseVectorSearchStrategy:
         Returns:
             List of matching items with similarity scores
         """
-        if not VECTOR_ENABLED or query_embedding is None:
+        if not VECTOR_ENABLED:
+            logging.warning("Dense vector search unavailable: sentence-transformers library is not installed")
+            return []
+        if query_embedding is None:
+            logging.warning("Dense vector search unavailable: query embedding is None (embedding generation may have failed)")
             return []
         
         results = []
@@ -250,17 +256,21 @@ class HybridSearchStrategy:
         # Get sparse BM25 results
         sparse_results = knowledge_store.search_strategy(
             strategy="bm25",
-            query=query, 
+            query=query,
             max_results=knowledge_store.rerank_top_k
         )
-        
+
         # Get dense vector results
         dense_results = knowledge_store.search_strategy(
             strategy="dense_vector",
-            query_embedding=query_embedding, 
+            query_embedding=query_embedding,
             max_results=knowledge_store.rerank_top_k
         )
-        
+
+        if not sparse_results and not dense_results:
+            logging.warning("Hybrid search returned no results: both BM25 and dense vector searches returned empty")
+            return []
+
         # Combine results
         combined_results = {}
         
@@ -321,53 +331,44 @@ class KeywordSearchStrategy:
             List of results
         """
         results = []
-        
-        if knowledge_store.conn is not None:
-            # Using in-memory database
-            conn = knowledge_store.conn
-        else:
-            # Using file-based database
-            conn = sqlite3.connect(knowledge_store.db_path)
-        
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        try:
-            query_terms = query.lower().split()
-            
-            # Build a query that searches across all fields
-            sql_query = '''
-            SELECT * FROM fact_triples 
-            WHERE subject LIKE ? OR predicate LIKE ? OR object LIKE ?
-            ORDER BY confidence DESC
-            LIMIT ?
-            '''
-            
-            # Improve search by expanding query with synonyms and related terms
-            expanded_query = knowledge_store._expand_query(query)
-            for term in expanded_query:
-                param = f"%{term}%"
-                cursor.execute(sql_query, (param, param, param, max_results))
-                fact_results = [dict(row) for row in cursor.fetchall()]
-                
-                # Add facts to results with trust marker
-                for fact in fact_results:
-                    results.append({
-                        'type': 'fact',
-                        'content': f"{knowledge_store.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}",
-                        'confidence': fact['confidence'],
-                        'timestamp': fact['timestamp'],
-                        'source': fact['source'] if fact['source'] else "memory"
-                    })
-                
-                if len(results) >= max_results:
-                    break
-        except sqlite3.OperationalError as e:
-            logging.error(f"SQLite error in keyword search: {e}")
-        
-        if knowledge_store.conn is None:
-            conn.close()
-            
+
+        with knowledge_store.get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            try:
+                query_terms = query.lower().split()
+
+                # Build a query that searches across all fields
+                sql_query = '''
+                SELECT * FROM fact_triples
+                WHERE subject LIKE ? OR predicate LIKE ? OR object LIKE ?
+                ORDER BY confidence DESC
+                LIMIT ?
+                '''
+
+                # Improve search by expanding query with synonyms and related terms
+                expanded_query = knowledge_store._expand_query(query)
+                for term in expanded_query:
+                    param = f"%{term}%"
+                    cursor.execute(sql_query, (param, param, param, max_results))
+                    fact_results = [dict(row) for row in cursor.fetchall()]
+
+                    # Add facts to results with trust marker
+                    for fact in fact_results:
+                        results.append({
+                            'type': 'fact',
+                            'content': f"{knowledge_store.trust_marker} {fact['subject']} {fact['predicate']} {fact['object']}",
+                            'confidence': fact['confidence'],
+                            'timestamp': fact['timestamp'],
+                            'source': fact['source'] if fact['source'] else "memory"
+                        })
+
+                    if len(results) >= max_results:
+                        break
+            except sqlite3.OperationalError as e:
+                logging.error(f"SQLite error in keyword search: {e}")
+
         # Search summaries if needed
         if len(results) < max_results and hasattr(knowledge_store, 'vector_store'):
             summary_scores = []
@@ -402,8 +403,12 @@ class KeywordSearchStrategy:
                         'timestamp': summary['timestamp'],
                         'score': score
                     })
-                    
+
+        if not results:
+            logging.warning("Keyword search returned no results for query: %s", query)
+
         return results
+
 
 class KnowledgeStore(KnowledgeStoreInterface):
     """Persistent storage for important facts and retrievable context."""
@@ -457,8 +462,17 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 self.use_inference_engine = False
         
         # Initialize database connection
+        self.conn = None
         self._init_db()
-        
+
+        # Set up in-memory connection right after _init_db so get_connection() works
+        try:
+            self.conn = sqlite3.connect("")
+            self._copy_db_to_memory()
+        except Exception as e:
+            logging.error(f"Error creating in-memory database: {e}")
+            self.conn = None
+
         # Initialize vector embedding model
         self.model = None
         self.embedding_dimension = 384
@@ -513,25 +527,20 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 logging.error(f"Error initializing ontology: {e}")
                 self.use_ontology = False
             
-        # In-memory connection for better performance
-        self.conn = None
-        try:
-            self.conn = sqlite3.connect("")
-            self._copy_db_to_memory()
-        except Exception as e:
-            logging.error(f"Error creating in-memory database: {e}")
-            self.conn = None
-        
         logging.info(f"Knowledge store initialized with vector retrieval: {VECTOR_ENABLED}, BM25: {BM25_ENABLED}")
         
         # Add embedding cache
         self.embedding_cache = {}
         self.max_cache_size = 1000  # Limit cache size
-        
+
         # Add tracking for index updates
         self.last_indexed_fact_id = 0
         self.last_indexed_knowledge_id = 0
-        
+
+        # Initialize summary and vector storage for conversation summaries
+        self.summaries = {}
+        self.vector_store = {}
+
         # Initialize search strategies
         self._search_strategies = {
             "bm25": BM25SearchStrategy(),
@@ -539,6 +548,9 @@ class KnowledgeStore(KnowledgeStoreInterface):
             "hybrid": HybridSearchStrategy(),
             "keyword": KeywordSearchStrategy()
         }
+
+        # Track whether this instance has been closed
+        self._closed = False
     
     @contextmanager
     def get_connection(self) -> sqlite3.Connection:
@@ -554,7 +566,11 @@ class KnowledgeStore(KnowledgeStoreInterface):
             # Using in-memory database
             yield self.conn
         else:
-            # Create a new connection to the file-based database
+            # Fall back to file-based database (slower than in-memory)
+            logging.warning(
+                "In-memory connection unavailable, falling back to file-based "
+                "connection at %s (this is slower)", self.db_path
+            )
             conn = sqlite3.connect(self.db_path)
             try:
                 yield conn
@@ -808,10 +824,11 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         doc_text = f"{item['subject']} {item['predicate']} {item['object']}"
                         try:
                             tokenized_doc = word_tokenize(doc_text.lower())
-                        except:
+                        except Exception as e:
                             # Fallback to simple whitespace tokenization
+                            logging.warning("NLTK tokenization failed, using whitespace fallback: %s", e)
                             tokenized_doc = doc_text.lower().split()
-                        
+
                         self.bm25_corpus.append(tokenized_doc)
                         self.id_to_doc_mapping[doc_id] = {
                             'id': item['id'],
@@ -820,18 +837,19 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         }
                         self.doc_to_id_mapping[doc_text] = doc_id
                         doc_id += 1
-                    
+
                     # Add knowledge items to the corpus
                     last_id = getattr(self, 'last_indexed_knowledge_id', 0)
                     cursor.execute('SELECT id, text FROM knowledge_items WHERE id > ?', (last_id,))
-                    
+
                     for item in cursor.fetchall():
                         # Create document text and tokenize
                         doc_text = item['text']
                         try:
                             tokenized_doc = word_tokenize(doc_text.lower())
-                        except:
+                        except Exception as e:
                             # Fallback to simple whitespace tokenization
+                            logging.warning("NLTK tokenization failed, using whitespace fallback: %s", e)
                             tokenized_doc = doc_text.lower().split()
                         
                         self.bm25_corpus.append(tokenized_doc)
@@ -1506,20 +1524,24 @@ class KnowledgeStore(KnowledgeStoreInterface):
     def extract_facts_from_text(self, text: str) -> List[Tuple[str, str, str]]:
         """
         Extract fact triples from text.
-        
+
+        Delegates to graph_store.extract_relations() for NLP-based extraction
+        when the graph store is available (see graph_store.py for the full
+        entity/relation extraction pipeline using spaCy). Falls back to a
+        simple heuristic SVO extraction when the graph store is unavailable.
+
         Args:
             text: Input text to extract facts from
-            
+
         Returns:
             List of (subject, predicate, object) triples
         """
-        # Extract graph-based relations if available
+        # Delegate to graph_store for NLP-based extraction when available
         if hasattr(self, 'graph_store') and self.graph_store is not None:
             try:
                 return self.graph_store.extract_relations(text)
             except Exception as e:
-                logging.error(f"Error extracting relations from graph store: {e}")
-                # Fall back to simple extraction
+                logging.error(f"Error extracting relations via graph store, falling back to heuristic: {e}")
         
         # Simple pattern-based extraction fallback
         facts = []
@@ -1701,22 +1723,9 @@ class KnowledgeStore(KnowledgeStoreInterface):
         return self.remember_explicit(text, source or "system", confidence)
     
     def remember_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> List[int]:
-        """
-        Remember knowledge from text.
-        
-        DEPRECATED: Use add_knowledge() instead.
-        
-        Args:
-            text: Text to remember
-            source: Source of the knowledge
-            confidence: Confidence score for the facts
-            
-        Returns:
-            List of IDs for stored facts
-        """
-        import warnings
+        """Deprecated: Use add_knowledge() instead."""
         warnings.warn(
-            "remember_knowledge() is deprecated; use add_knowledge() instead",
+            "remember_knowledge() is deprecated, use add_knowledge()",
             DeprecationWarning, stacklevel=2
         )
         return self.add_knowledge(text, source, confidence)
@@ -1768,38 +1777,50 @@ class KnowledgeStore(KnowledgeStoreInterface):
         return expanded
     
     def close(self):
-        """Clean up resources."""
-        try:
-            if hasattr(self, 'facts') and self.facts is not None:
-                self.facts.close()
-        except Exception as e:
-            logging.error(f"Error closing facts: {e}")
-            
-        try:
-            if hasattr(self, 'summaries') and self.summaries is not None:
-                self.summaries.close()
-        except Exception as e:
-            logging.error(f"Error closing summaries: {e}")
-            
+        """Clean up resources. Safe to call multiple times."""
+        if getattr(self, '_closed', False):
+            return
+
         try:
             if hasattr(self, 'graph_store') and self.graph_store is not None:
                 self.graph_store.close()
+                self.graph_store = None
         except Exception as e:
             logging.error(f"Error closing graph store: {e}")
-            
+
         try:
             if hasattr(self, 'conn') and self.conn is not None:
                 self.conn.close()
                 self.conn = None
         except Exception as e:
             logging.error(f"Error closing database connection: {e}")
-    
+
+        # Clear in-memory caches
+        if hasattr(self, 'embedding_cache'):
+            self.embedding_cache.clear()
+        if hasattr(self, 'summaries'):
+            self.summaries.clear()
+        if hasattr(self, 'vector_store'):
+            self.vector_store.clear()
+
+        self._closed = True
+
     def __del__(self):
-        """Destructor to clean up resources."""
+        """Destructor to clean up resources. Safe to call multiple times."""
         try:
             self.close()
-        except Exception as e:
-            logging.error(f"Error in __del__: {e}")
+        except Exception:
+            # Avoid errors during interpreter shutdown when logging may be unavailable
+            pass
+
+    def __enter__(self):
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager and clean up resources."""
+        self.close()
+        return False
             
     def get_snapshots(self) -> List[Dict[str, Any]]:
         """
@@ -1993,8 +2014,12 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """
         results = []
         
-        # Get vector search results
-        vector_results = self._vector_search(query, max_results * 2) if VECTOR_ENABLED else []
+        # Get vector search results (generate embedding from query text first)
+        vector_results = []
+        if VECTOR_ENABLED and self.model is not None:
+            query_embedding = self._generate_embedding(query)
+            if query_embedding is not None:
+                vector_results = self._dense_vector_search(query_embedding, max_results * 2)
         
         # Get BM25 search results
         bm25_results = self._bm25_search(query, max_results * 2) if BM25_ENABLED else []

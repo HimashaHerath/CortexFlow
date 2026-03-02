@@ -1,6 +1,6 @@
-# AdaptiveContext Research-Based Improvements
+# CortexFlow Research-Based Improvements
 
-This document tracks research-based improvements for the AdaptiveContext system, categorized by implementation status.
+This document tracks research-based improvements for the CortexFlow system, categorized by implementation status.
 
 ## Already Implemented ✅
 
