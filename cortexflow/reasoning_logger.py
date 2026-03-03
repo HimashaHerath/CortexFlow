@@ -4,13 +4,14 @@ Reasoning Path Logger for CortexFlow.
 This module provides functionality to log and analyze reasoning paths
 in the CortexFlow knowledge graph system.
 """
+from __future__ import annotations
 
 import logging
 import json
 import os
 import sqlite3
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Set, Tuple, Union
+from typing import Any
 import uuid
 import traceback
 
@@ -135,7 +136,7 @@ class ReasoningLogger:
             self.logger.error(f"Failed to initialize database: {e}")
             self.db_path = None
     
-    def start_reasoning(self, query: str, metadata: Dict[str, Any] = None) -> str:
+    def start_reasoning(self, query: str, metadata: dict[str, Any] = None) -> str:
         """
         Start a new reasoning session.
         
@@ -181,8 +182,8 @@ class ReasoningLogger:
         self, 
         step_type: str, 
         description: str,
-        entities: List[str] = None,
-        relations: List[str] = None,
+        entities: list[str] = None,
+        relations: list[str] = None,
         confidence: float = None
     ):
         """
@@ -251,7 +252,7 @@ class ReasoningLogger:
             except Exception as e:
                 self.logger.error(f"Failed to record reasoning step: {e}")
     
-    def log_path(self, path: List[str], score: float = None, hop_count: int = None):
+    def log_path(self, path: list[str], score: float = None, hop_count: int = None):
         """
         Log a reasoning path.
         
@@ -301,7 +302,7 @@ class ReasoningLogger:
             except Exception as e:
                 self.logger.error(f"Failed to record reasoning path: {e}")
     
-    def end_reasoning(self, success: bool = True, metadata: Dict[str, Any] = None):
+    def end_reasoning(self, success: bool = True, metadata: dict[str, Any] = None):
         """
         End the current reasoning session.
         
@@ -347,7 +348,7 @@ class ReasoningLogger:
         self.current_path = None
         self.current_reasoning_id = None
     
-    def get_reasoning_session(self, session_id: str) -> Dict[str, Any]:
+    def get_reasoning_session(self, session_id: str) -> dict[str, Any]:
         """
         Get information about a reasoning session.
         
@@ -431,7 +432,7 @@ class ReasoningLogger:
             self.logger.error(f"Failed to get reasoning session: {e}")
             return {}
     
-    def get_recent_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_recent_sessions(self, limit: int = 10) -> list[dict[str, Any]]:
         """
         Get recent reasoning sessions.
         
@@ -524,7 +525,7 @@ class ReasoningLogger:
             self.logger.error(f"Failed to export session data: {e}")
             return False
     
-    def analyze_session(self, session_id: str) -> Dict[str, Any]:
+    def analyze_session(self, session_id: str) -> dict[str, Any]:
         """
         Analyze a reasoning session for insights.
         
@@ -657,7 +658,7 @@ class ReasoningLogger:
             self.logger.error(f"Failed to delete reasoning session: {e}")
             return False
 
-    def create_context_manager(self, query: str, metadata: Dict[str, Any] = None):
+    def create_context_manager(self, query: str, metadata: dict[str, Any] = None):
         """
         Create a context manager for automatic reasoning session management.
         
@@ -673,7 +674,7 @@ class ReasoningLogger:
 class ReasoningContext:
     """Context manager for automatic reasoning session management."""
     
-    def __init__(self, logger: ReasoningLogger, query: str, metadata: Dict[str, Any] = None):
+    def __init__(self, logger: ReasoningLogger, query: str, metadata: dict[str, Any] = None):
         """
         Initialize the reasoning context.
         

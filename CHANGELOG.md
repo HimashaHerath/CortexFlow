@@ -5,9 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] - 2026-03-03
 
 ### Added
+- **LiteLLM integration** — new `LiteLLMClient` supporting 100+ LLM providers (OpenAI, Anthropic, Cohere, Azure, Bedrock, etc.) through a unified interface
+- **Async LLM interface** — `agenerate()` and `agenerate_from_prompt()` methods on `LLMProviderInterface` with native async support in LiteLLMClient
+- **Dependabot** — automated weekly dependency updates for pip and GitHub Actions
+- **Security scanning** — TruffleHog secret scanning and dependency review on PRs via GitHub Actions
 - Personal Fact Extraction for deep memory recall:
   - New `fact_detector.py` module with regex-based `PersonalFactDetector` class
   - Detects names, occupations, locations, preferences, possessions, and age statements
@@ -79,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved error messaging and logging for missing dependencies
 
 ### Changed
+- **Python 3.10+ required** — dropped Python 3.8 and 3.9 support, added 3.13 and 3.14
+- **Ruff replaces flake8/black/isort** — single Rust-based tool for linting and formatting (10-100x faster)
+- **Modern type hints** — all modules use PEP 604/585 syntax (`list[str]`, `X | None`) via `from __future__ import annotations`
+- **CI modernized** — Python 3.10-3.14 matrix, Ruff linting, `--cov-fail-under=80` coverage threshold
+- **Coverage threshold** — CI enforces 80% minimum code coverage
 - Refactored search methods in knowledge.py using strategy pattern:
   - Created abstract `SearchStrategy` interface
   - Implemented concrete strategy classes for BM25, dense vector, hybrid, and keyword search

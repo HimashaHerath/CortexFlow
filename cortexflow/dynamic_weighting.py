@@ -3,11 +3,12 @@ CortexFlow Dynamic Weighting module.
 
 This module provides dynamic memory allocation for CortexFlow.
 """
+from __future__ import annotations
 
 import logging
 import re
 import time
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any
 import numpy as np
 from collections import deque
 
@@ -229,7 +230,7 @@ class DynamicWeightingEngine:
         
         return doc_type
     
-    def calculate_optimal_weights(self, query_complexity: float, document_type: str) -> Dict[str, float]:
+    def calculate_optimal_weights(self, query_complexity: float, document_type: str) -> dict[str, float]:
         """
         Calculate optimal tier weights based on query complexity and document type.
         
@@ -288,7 +289,7 @@ class DynamicWeightingEngine:
         
         return weights
     
-    def update_tier_allocations(self) -> Dict[str, int]:
+    def update_tier_allocations(self) -> dict[str, int]:
         """
         Update memory tier allocations based on current weights.
         
@@ -384,7 +385,7 @@ class DynamicWeightingEngine:
         logger.info(f"Detected conversation pattern: {self.conversation_type}")
         logger.info(f"Updated weights based on pattern: {self.current_tier_weights}")
 
-    def process_query(self, query: str, context_content: str = None) -> Dict[str, int]:
+    def process_query(self, query: str, context_content: str = None) -> dict[str, int]:
         """
         Process a user query and update memory tier allocations.
         
@@ -419,7 +420,7 @@ class DynamicWeightingEngine:
         # Update tier allocations based on current weights
         return self.update_tier_allocations()
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get statistics about the dynamic weighting engine.
         

@@ -3,9 +3,10 @@ CortexFlow Inference Engine module.
 
 This module provides logical reasoning capabilities over the knowledge graph.
 """
+from __future__ import annotations
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple, Set, Union, Generator
+from typing import Any, Generator
 import json
 import time
 import re
@@ -31,10 +32,10 @@ class LogicalRule:
     
     def __init__(self, 
                  name: str,
-                 premise: List[Dict[str, Any]], 
-                 conclusion: Dict[str, Any],
+                 premise: list[dict[str, Any]], 
+                 conclusion: dict[str, Any],
                  confidence: float = 0.8,
-                 metadata: Dict[str, Any] = None):
+                 metadata: dict[str, Any] = None):
         """
         Initialize a logical rule.
         
@@ -76,10 +77,10 @@ class InferenceEngine:
             logging.warning("Graph store not available. Inference engine capabilities will be limited.")
         
         # Knowledge base of rules
-        self.rules: List[LogicalRule] = []
+        self.rules: list[LogicalRule] = []
         
         # Cache for inferred facts to avoid redundant computation
-        self.inference_cache: Dict[str, Dict[str, Any]] = {}
+        self.inference_cache: dict[str, dict[str, Any]] = {}
         
         # Initialize rule base with default rules
         self._initialize_default_rules()
@@ -122,9 +123,9 @@ class InferenceEngine:
             metadata={"category": "inheritance"}
         )
     
-    def add_rule(self, name: str, premise: List[Dict[str, Any]], 
-                 conclusion: Dict[str, Any], confidence: float = 0.8,
-                 metadata: Dict[str, Any] = None) -> None:
+    def add_rule(self, name: str, premise: list[dict[str, Any]], 
+                 conclusion: dict[str, Any], confidence: float = 0.8,
+                 metadata: dict[str, Any] = None) -> None:
         """
         Add a new logical rule to the rule base.
         
@@ -139,7 +140,7 @@ class InferenceEngine:
         self.rules.append(rule)
         logging.info(f"Added inference rule: {rule.name}")
     
-    def get_rules(self) -> List[LogicalRule]:
+    def get_rules(self) -> list[LogicalRule]:
         """Get all rules in the rule base."""
         return self.rules
     
@@ -147,7 +148,7 @@ class InferenceEngine:
         """Clear the inference cache."""
         self.inference_cache.clear()
     
-    def forward_chain(self, iterations: int = 3) -> List[Dict[str, Any]]:
+    def forward_chain(self, iterations: int = 3) -> list[dict[str, Any]]:
         """
         Apply forward chaining to derive new facts.
         
@@ -195,7 +196,7 @@ class InferenceEngine:
         
         return inferred_facts
     
-    def backward_chain(self, query: Dict[str, Any], depth: int = 3) -> Tuple[bool, List[Dict[str, Any]]]:
+    def backward_chain(self, query: dict[str, Any], depth: int = 3) -> tuple[bool, list[dict[str, Any]]]:
         """
         Apply backward chaining to answer a query.
         
@@ -262,7 +263,7 @@ class InferenceEngine:
         # If we get here, no rules could prove the query
         return False, explanation
     
-    def abductive_reasoning(self, observation: Dict[str, Any], max_hypotheses: int = 3) -> List[Dict[str, Any]]:
+    def abductive_reasoning(self, observation: dict[str, Any], max_hypotheses: int = 3) -> list[dict[str, Any]]:
         """
         Perform abductive reasoning to generate hypotheses explaining an observation.
         
@@ -319,7 +320,7 @@ class InferenceEngine:
         
         return hypotheses[:max_hypotheses]
     
-    def answer_why_question(self, query: str) -> List[Dict[str, Any]]:
+    def answer_why_question(self, query: str) -> list[dict[str, Any]]:
         """
         Answer a 'why' question using backward chaining.
         
@@ -356,7 +357,7 @@ class InferenceEngine:
                     "message": "The system could not find evidence to prove or explain this fact."
                 }]
     
-    def _extract_fact_from_question(self, question: str) -> Optional[Dict[str, Any]]:
+    def _extract_fact_from_question(self, question: str) -> dict[str, Any] | None:
         """
         Extract a fact pattern from a why question.
         
@@ -416,7 +417,7 @@ class InferenceEngine:
                 
         return None
     
-    def _format_explanation(self, explanation: List[Dict[str, Any]], original_query: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _format_explanation(self, explanation: list[dict[str, Any]], original_query: dict[str, Any]) -> list[dict[str, Any]]:
         """
         Format the explanation trail in a user-friendly way.
         
@@ -461,11 +462,11 @@ class InferenceEngine:
         
         return formatted
     
-    def _fact_to_str(self, fact: Dict[str, Any]) -> str:
+    def _fact_to_str(self, fact: dict[str, Any]) -> str:
         """Convert a fact dictionary to a string."""
         return f"{fact.get('source', '?')} {fact.get('relation', '?')} {fact.get('target', '?')}"
     
-    def _match_premises(self, premises: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    def _match_premises(self, premises: list[dict[str, Any]]) -> list[dict[str, str]]:
         """
         Find all variable bindings that satisfy the premises.
         
@@ -515,7 +516,7 @@ class InferenceEngine:
         
         return bindings_list
     
-    def _find_bindings_for_pattern(self, pattern: Dict[str, Any]) -> List[Dict[str, str]]:
+    def _find_bindings_for_pattern(self, pattern: dict[str, Any]) -> list[dict[str, str]]:
         """
         Find variable bindings that satisfy a single pattern.
         
@@ -569,7 +570,7 @@ class InferenceEngine:
         
         return bindings_list
     
-    def _apply_bindings(self, pattern: Dict[str, Any], bindings: Dict[str, str]) -> Dict[str, Any]:
+    def _apply_bindings(self, pattern: dict[str, Any], bindings: dict[str, str]) -> dict[str, Any]:
         """
         Apply variable bindings to a pattern.
         
@@ -590,7 +591,7 @@ class InferenceEngine:
         
         return result
     
-    def _merge_bindings(self, bindings1: Dict[str, str], bindings2: Dict[str, str]) -> Optional[Dict[str, str]]:
+    def _merge_bindings(self, bindings1: dict[str, str], bindings2: dict[str, str]) -> dict[str, str] | None:
         """
         Merge two sets of variable bindings if they are consistent.
         
@@ -610,7 +611,7 @@ class InferenceEngine:
         
         return result
     
-    def _find_rules_for_query(self, query: Dict[str, Any]) -> List[LogicalRule]:
+    def _find_rules_for_query(self, query: dict[str, Any]) -> list[LogicalRule]:
         """
         Find rules whose conclusions match the given query.
         
@@ -629,7 +630,7 @@ class InferenceEngine:
         
         return matching_rules
     
-    def _match_conclusion(self, conclusion: Dict[str, Any], query: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    def _match_conclusion(self, conclusion: dict[str, Any], query: dict[str, Any]) -> dict[str, str] | None:
         """
         Match a rule conclusion against a query, extracting variable bindings.
         
@@ -659,7 +660,7 @@ class InferenceEngine:
         
         return bindings
     
-    def _patterns_match(self, pattern1: Dict[str, Any], pattern2: Dict[str, Any]) -> bool:
+    def _patterns_match(self, pattern1: dict[str, Any], pattern2: dict[str, Any]) -> bool:
         """
         Check if two patterns are compatible (can be unified).
         
@@ -689,7 +690,7 @@ class InferenceEngine:
         
         return True
     
-    def _is_fact_in_kb(self, fact: Dict[str, Any]) -> bool:
+    def _is_fact_in_kb(self, fact: dict[str, Any]) -> bool:
         """
         Check if a fact exists in the knowledge base.
         
@@ -720,7 +721,7 @@ class InferenceEngine:
         
         return len(relations) > 0
     
-    def _is_new_fact(self, fact: Dict[str, Any]) -> bool:
+    def _is_new_fact(self, fact: dict[str, Any]) -> bool:
         """
         Check if a fact is new (not already in the knowledge base).
         
@@ -753,7 +754,7 @@ class InferenceEngine:
         
         return True
     
-    def _add_inferred_fact(self, fact: Dict[str, Any], rule: LogicalRule) -> Optional[int]:
+    def _add_inferred_fact(self, fact: dict[str, Any], rule: LogicalRule) -> int | None:
         """
         Add an inferred fact to the knowledge base.
         
@@ -812,7 +813,7 @@ class InferenceEngine:
             return None
     
     def _query_graph_facts(self, source_entity: str = None, relation_type: str = None, 
-                         target_entity: str = None, limit: int = 100) -> List[Dict[str, Any]]:
+                         target_entity: str = None, limit: int = 100) -> list[dict[str, Any]]:
         """
         Query facts from the graph store.
         

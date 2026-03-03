@@ -3,10 +3,11 @@ CortexFlow Graph Store module.
 
 This module provides graph-based knowledge representation for CortexFlow.
 """
+from __future__ import annotations
 
 import sqlite3
 import logging
-from typing import List, Dict, Any, Optional, Tuple, Set, Union
+from typing import Any
 import json
 import time
 import re
@@ -152,7 +153,7 @@ class RelationExtractor:
         self.relation_classifier = RelationExtractor._rebel_classifier
         self.relation_tokenizer = RelationExtractor._rebel_tokenizer
     
-    def _init_relation_patterns(self) -> Dict[str, List[Dict[str, Any]]]:
+    def _init_relation_patterns(self) -> dict[str, list[dict[str, Any]]]:
         """
         Initialize common relation patterns for rule-based extraction.
         
@@ -186,7 +187,7 @@ class RelationExtractor:
         }
         return patterns
     
-    def extract_relations(self, text: str) -> List[Tuple[str, str, str]]:
+    def extract_relations(self, text: str) -> list[tuple[str, str, str]]:
         """
         Extract subject-predicate-object triples from text using multiple techniques.
         
@@ -242,7 +243,7 @@ class RelationExtractor:
         
         return unique_relations
     
-    def extract_svo_from_dependency(self, doc) -> List[Tuple[str, str, str]]:
+    def extract_svo_from_dependency(self, doc) -> list[tuple[str, str, str]]:
         """
         Extract Subject-Verb-Object triples from a document using dependency parsing.
         
@@ -299,7 +300,7 @@ class RelationExtractor:
         
         return triples
     
-    def extract_prep_relations(self, doc) -> List[Tuple[str, str, str]]:
+    def extract_prep_relations(self, doc) -> list[tuple[str, str, str]]:
         """
         Extract relations based on prepositional phrases like "X in Y".
         
@@ -326,7 +327,7 @@ class RelationExtractor:
         
         return prep_relations
     
-    def extract_with_semantic_roles(self, text: str) -> List[Tuple[str, str, str]]:
+    def extract_with_semantic_roles(self, text: str) -> list[tuple[str, str, str]]:
         """
         Extract relations using semantic role labeling (SRL).
         
@@ -420,7 +421,7 @@ class RelationExtractor:
             logging.error(f"Error in semantic role labeling: {e}")
             return []
     
-    def classify_relations(self, text: str) -> List[Tuple[str, str, str]]:
+    def classify_relations(self, text: str) -> list[tuple[str, str, str]]:
         """
         Use a pretrained model to classify relationship types between entities.
         
@@ -455,7 +456,7 @@ class RelationExtractor:
             logging.error(f"Error in relation classification: {e}")
             return []
     
-    def extract_with_patterns(self, text: str) -> List[Tuple[str, str, str]]:
+    def extract_with_patterns(self, text: str) -> list[tuple[str, str, str]]:
         """
         Extract relations using pattern-based rules.
         
@@ -948,7 +949,7 @@ class GraphStore:
             if self.conn is None:
                 conn.close()
     
-    def extract_entities(self, text: str) -> List[Dict[str, Any]]:
+    def extract_entities(self, text: str) -> list[dict[str, Any]]:
         """
         Extract named entities from text using multiple techniques including
         advanced NER models, entity linking, and fuzzy matching.
@@ -1235,7 +1236,7 @@ class GraphStore:
                 
         return linked_entities
     
-    def _link_entity(self, entity_text: str) -> Optional[Dict[str, Any]]:
+    def _link_entity(self, entity_text: str) -> dict[str, Any] | None:
         """
         Link entity mention to canonical entity using exact, fuzzy, and embedding-based matching.
         
@@ -1280,7 +1281,7 @@ class GraphStore:
         # No match found
         return None
     
-    def _extract_domain_specific_entities(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_domain_specific_entities(self, text: str) -> list[dict[str, Any]]:
         """
         Extract domain-specific entities based on patterns.
         This can be extended for specialized knowledge domains.
@@ -1331,7 +1332,7 @@ class GraphStore:
                 
         return domain_entities
     
-    def extract_relations(self, text: str) -> List[Tuple[str, str, str]]:
+    def extract_relations(self, text: str) -> list[tuple[str, str, str]]:
         """
         Extract subject-predicate-object triples from text using semantic role labeling
         and enhanced dependency parsing techniques.
@@ -1417,7 +1418,7 @@ class GraphStore:
                 
         return relations
     
-    def _extract_svo_from_dependency(self, sent) -> List[Tuple[str, str, str]]:
+    def _extract_svo_from_dependency(self, sent) -> list[tuple[str, str, str]]:
         """
         Extract Subject-Verb-Object triples from a sentence using dependency parsing.
         Uses more advanced patterns than the basic implementation.
@@ -1470,7 +1471,7 @@ class GraphStore:
         
         return triples
     
-    def _extract_prep_relations(self, sent) -> List[Tuple[str, str, str]]:
+    def _extract_prep_relations(self, sent) -> list[tuple[str, str, str]]:
         """
         Extract relations based on prepositional phrases like "X in Y".
         
@@ -1496,7 +1497,7 @@ class GraphStore:
         
         return prep_relations
     
-    def _extract_with_semantic_roles(self, text: str) -> List[Tuple[str, str, str]]:
+    def _extract_with_semantic_roles(self, text: str) -> list[tuple[str, str, str]]:
         """
         Extract relations using semantic role labeling (SRL) if available.
         Requires AllenNLP SRL model.
@@ -1551,7 +1552,7 @@ class GraphStore:
             logging.warning("AllenNLP SRL not available. Semantic role extraction is disabled.")
             return []
         
-    def _extract_with_coreference(self, text: str) -> List[Tuple[str, str, str]]:
+    def _extract_with_coreference(self, text: str) -> list[tuple[str, str, str]]:
         """
         Extract relations with coreference resolution to connect entities.
 
@@ -1599,7 +1600,7 @@ class GraphStore:
         # Return the span text
         return token.doc[leftmost.i:rightmost.i + 1].text
     
-    def add_entity(self, entity: str, entity_type: str = None, metadata: Dict[str, Any] = None,
+    def add_entity(self, entity: str, entity_type: str = None, metadata: dict[str, Any] = None,
                   provenance: str = None, confidence: float = 0.8,
                   temporal_start: str = None, temporal_end: str = None,
                   extraction_method: str = None, changed_by: str = None) -> int:
@@ -1850,7 +1851,7 @@ class GraphStore:
                 conn.close()
     
     def add_relation(self, source_entity: str, relation_type: str, target_entity: str, 
-                     weight: float = 1.0, metadata: Dict[str, Any] = None,
+                     weight: float = 1.0, metadata: dict[str, Any] = None,
                      provenance: str = None, confidence: float = 0.5,
                      temporal_start: str = None, temporal_end: str = None,
                      extraction_method: str = None, changed_by: str = None) -> bool:
@@ -2387,8 +2388,8 @@ class GraphStore:
             logging.error(f"Traceback: {traceback.format_exc()}")
             # Don't raise - this is a best-effort operation
     
-    def add_nary_relation(self, relation_type: str, participants: Dict[str, str], 
-                        metadata: Dict[str, Any] = None, provenance: str = None, 
+    def add_nary_relation(self, relation_type: str, participants: dict[str, str], 
+                        metadata: dict[str, Any] = None, provenance: str = None, 
                         confidence: float = 0.5) -> int:
         """
         Add an n-ary relation involving multiple entities with different roles.
@@ -2513,7 +2514,7 @@ class GraphStore:
             if self.conn is None:
                 conn.close()
     
-    def get_nary_relation(self, relation_id: int) -> Optional[Dict[str, Any]]:
+    def get_nary_relation(self, relation_id: int) -> dict[str, Any] | None:
         """
         Get details of an n-ary relation by ID.
         
@@ -2585,7 +2586,7 @@ class GraphStore:
     def query_nary_relations(self, relation_type: str = None, 
                           participant_entity: str = None, 
                           participant_role: str = None,
-                          limit: int = 100) -> List[Dict[str, Any]]:
+                          limit: int = 100) -> list[dict[str, Any]]:
         """
         Query n-ary relations with optional filters.
         
@@ -2665,7 +2666,7 @@ class GraphStore:
             if self.conn is None:
                 conn.close()
     
-    def get_entity_metadata(self, entity_id: int) -> Dict[str, Any]:
+    def get_entity_metadata(self, entity_id: int) -> dict[str, Any]:
         """
         Get full metadata for an entity.
         
@@ -2716,7 +2717,7 @@ class GraphStore:
             if self.conn is None:
                 conn.close()
     
-    def get_relation_metadata(self, relation_id: int) -> Dict[str, Any]:
+    def get_relation_metadata(self, relation_id: int) -> dict[str, Any]:
         """
         Get full metadata for a relation.
         
@@ -2832,7 +2833,7 @@ class GraphStore:
             logging.error(f"Error processing text to graph: {e}")
             return 0
     
-    def _extract_complex_events(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_complex_events(self, text: str) -> list[dict[str, Any]]:
         """
         Extract complex events and scenarios as n-ary relations with roles.
         
@@ -2926,7 +2927,7 @@ class GraphStore:
         return complex_events
     
     def get_entity_neighbors(self, entity: str, direction: str = "both", 
-                           relation_type: str = None, limit: int = 10) -> List[Dict[str, Any]]:
+                           relation_type: str = None, limit: int = 10) -> list[dict[str, Any]]:
         """
         Get neighbors of an entity in the graph.
         
@@ -3029,7 +3030,7 @@ class GraphStore:
             if self.conn is None:
                 conn.close()
     
-    def build_knowledge_subgraph(self, query: str, max_nodes: int = 20) -> Dict[str, Any]:
+    def build_knowledge_subgraph(self, query: str, max_nodes: int = 20) -> dict[str, Any]:
         """
         Build a knowledge subgraph relevant to a query.
         
@@ -3201,7 +3202,7 @@ class GraphStore:
             logging.error(f"Error building knowledge subgraph: {e}")
             return {"nodes": [], "edges": []}
             
-    def get_entity_id(self, entity_text: str) -> Optional[Dict[str, Any]]:
+    def get_entity_id(self, entity_text: str) -> dict[str, Any] | None:
         """
         Get entity ID from text.
         
@@ -3246,7 +3247,7 @@ class GraphStore:
             logging.error(f"Error getting entity ID: {e}")
             return None
     
-    def path_query(self, start_entity: str, end_entity: str, max_hops: int = 3) -> List[List[Dict[str, Any]]]:
+    def path_query(self, start_entity: str, end_entity: str, max_hops: int = 3) -> list[list[dict[str, Any]]]:
         """
         Find paths between two entities in the graph.
         
@@ -3347,7 +3348,7 @@ class GraphStore:
     
     def weighted_path_query(self, start_entity: str, end_entity: str, 
                           max_hops: int = 3, importance_weight: float = 0.6, 
-                          confidence_weight: float = 0.4) -> List[List[Dict[str, Any]]]:
+                          confidence_weight: float = 0.4) -> list[list[dict[str, Any]]]:
         """
         Find weighted paths between entities considering relation importance and confidence.
         
@@ -3502,7 +3503,7 @@ class GraphStore:
             logging.error(f"Error in weighted path query: {e}")
             return []
     
-    def bidirectional_search(self, start_entity: str, end_entity: str, max_hops: int = 3) -> List[List[Dict[str, Any]]]:
+    def bidirectional_search(self, start_entity: str, end_entity: str, max_hops: int = 3) -> list[list[dict[str, Any]]]:
         """
         Find paths between entities using bidirectional search for efficiency.
         
@@ -3885,9 +3886,9 @@ class GraphStore:
             return []
     
     def constrained_path_search(self, start_entity: str, end_entity: str, 
-                              allowed_relations: List[str] = None,
-                              forbidden_relations: List[str] = None,
-                              max_hops: int = 3) -> List[List[Dict[str, Any]]]:
+                              allowed_relations: list[str] = None,
+                              forbidden_relations: list[str] = None,
+                              max_hops: int = 3) -> list[list[dict[str, Any]]]:
         """
         Find paths with constraints on relation types.
         
@@ -4009,7 +4010,7 @@ class GraphStore:
     
     def contract_graph(self, min_edge_weight: float = 0.2, 
                       min_confidence: float = 0.3,
-                      combine_parallel_edges: bool = True) -> Dict[str, Any]:
+                      combine_parallel_edges: bool = True) -> dict[str, Any]:
         """
         Contract the graph to handle large knowledge graphs efficiently.
         Removes low-weight/confidence edges and combines parallel edges.
@@ -4112,7 +4113,7 @@ class GraphStore:
             return {"success": False, "reason": str(e)}
     
     def create_graph_abstraction(self, community_resolution: float = 1.0, 
-                               min_community_size: int = 3) -> Dict[str, Any]:
+                               min_community_size: int = 3) -> dict[str, Any]:
         """
         Create a hierarchical abstraction of the graph using community detection.
         Useful for navigating and querying large knowledge graphs.
@@ -4262,7 +4263,7 @@ class GraphStore:
             return {"success": False, "reason": str(e)}
     
     def path_query_with_abstraction(self, start_entity: str, end_entity: str, 
-                                  max_hops: int = 5) -> List[List[Dict[str, Any]]]:
+                                  max_hops: int = 5) -> list[list[dict[str, Any]]]:
         """
         Find paths between entities using graph abstraction for efficiency.
         
@@ -4549,7 +4550,7 @@ class GraphMerger:
             "conflicts_resolved": 0
         }
     
-    def merge_entity(self, entity: str, entity_type: str = None, metadata: Dict[str, Any] = None,
+    def merge_entity(self, entity: str, entity_type: str = None, metadata: dict[str, Any] = None,
                     provenance: str = None, confidence: float = 0.8,
                     temporal_start: str = None, temporal_end: str = None,
                     extraction_method: str = None) -> int:
@@ -4738,7 +4739,7 @@ class GraphMerger:
                 return -1
     
     def merge_relation(self, source_entity: str, relation_type: str, target_entity: str,
-                      weight: float = 1.0, metadata: Dict[str, Any] = None,
+                      weight: float = 1.0, metadata: dict[str, Any] = None,
                       provenance: str = None, confidence: float = 0.5,
                       temporal_start: str = None, temporal_end: str = None,
                       extraction_method: str = None) -> bool:
@@ -4983,7 +4984,7 @@ class GraphMerger:
         
         return False
     
-    def merge_from_text(self, text: str, source: str) -> Dict[str, int]:
+    def merge_from_text(self, text: str, source: str) -> dict[str, int]:
         """
         Process text to extract entities and relations, then merge them into the graph.
         
@@ -5031,7 +5032,7 @@ class GraphMerger:
             "relations": processed_relations
         }
     
-    def detect_conflicts(self) -> List[Dict[str, Any]]:
+    def detect_conflicts(self) -> list[dict[str, Any]]:
         """
         Detect conflicting information in the knowledge graph.
         
@@ -5198,7 +5199,7 @@ class GraphMerger:
         self.stats["conflicts_resolved"] += resolved
         return resolved
     
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> dict[str, int]:
         """
         Get statistics about the merging operations.
         

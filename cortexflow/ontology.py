@@ -8,18 +8,19 @@ based on new information. It supports:
 - Properties and constraints for entity types
 - Dynamic schema evolution
 """
+from __future__ import annotations
 
 import logging
 import json
 import time
 import sqlite3
-from typing import Dict, List, Any, Optional, Set, Tuple, Union
+from typing import Any
 
 class OntologyClass:
     """Represents a class in the ontology with inheritance capabilities."""
     
-    def __init__(self, name: str, parent_classes: List[str] = None, properties: Dict[str, Any] = None,
-                 constraints: Dict[str, Any] = None, metadata: Dict[str, Any] = None):
+    def __init__(self, name: str, parent_classes: list[str] = None, properties: dict[str, Any] = None,
+                 constraints: dict[str, Any] = None, metadata: dict[str, Any] = None):
         """
         Initialize an ontology class.
         
@@ -39,7 +40,7 @@ class OntologyClass:
         self.creation_time = time.time()
         self.last_modified_time = self.creation_time
         
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the class to a dictionary for storage."""
         return {
             "name": self.name,
@@ -52,7 +53,7 @@ class OntologyClass:
         }
         
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'OntologyClass':
+    def from_dict(cls, data: dict[str, Any]) -> 'OntologyClass':
         """Create an OntologyClass instance from a dictionary."""
         instance = cls(
             name=data["name"],
@@ -68,9 +69,9 @@ class OntologyClass:
 class RelationType:
     """Represents a type of relationship in the ontology with inheritance capabilities."""
     
-    def __init__(self, name: str, parent_types: List[str] = None, source_classes: List[str] = None,
-                 target_classes: List[str] = None, cardinality: str = "many-to-many",
-                 properties: Dict[str, Any] = None, metadata: Dict[str, Any] = None):
+    def __init__(self, name: str, parent_types: list[str] = None, source_classes: list[str] = None,
+                 target_classes: list[str] = None, cardinality: str = "many-to-many",
+                 properties: dict[str, Any] = None, metadata: dict[str, Any] = None):
         """
         Initialize a relationship type.
         
@@ -94,7 +95,7 @@ class RelationType:
         self.creation_time = time.time()
         self.last_modified_time = self.creation_time
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the relationship type to a dictionary for storage."""
         return {
             "name": self.name,
@@ -109,7 +110,7 @@ class RelationType:
         }
         
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'RelationType':
+    def from_dict(cls, data: dict[str, Any]) -> 'RelationType':
         """Create a RelationType instance from a dictionary."""
         instance = cls(
             name=data["name"],
@@ -135,10 +136,10 @@ class Ontology:
             db_path: Path to the SQLite database
         """
         self.db_path = db_path
-        self.classes: Dict[str, OntologyClass] = {}
-        self.relation_types: Dict[str, RelationType] = {}
-        self.class_hierarchy: Dict[str, List[str]] = {}  # Maps class name to subclass names
-        self.relation_hierarchy: Dict[str, List[str]] = {}  # Maps relation type to subtype names
+        self.classes: dict[str, OntologyClass] = {}
+        self.relation_types: dict[str, RelationType] = {}
+        self.class_hierarchy: dict[str, list[str]] = {}  # Maps class name to subclass names
+        self.relation_hierarchy: dict[str, list[str]] = {}  # Maps relation type to subtype names
         
         # Initialize database tables for ontology
         self._init_db()
@@ -358,15 +359,15 @@ class Ontology:
         finally:
             conn.close()
     
-    def get_class(self, name: str) -> Optional[OntologyClass]:
+    def get_class(self, name: str) -> OntologyClass | None:
         """Get a class by name."""
         return self.classes.get(name)
     
-    def get_relation_type(self, name: str) -> Optional[RelationType]:
+    def get_relation_type(self, name: str) -> RelationType | None:
         """Get a relation type by name."""
         return self.relation_types.get(name)
     
-    def get_all_subclasses(self, class_name: str, include_indirect: bool = True) -> List[str]:
+    def get_all_subclasses(self, class_name: str, include_indirect: bool = True) -> list[str]:
         """
         Get all subclasses of a given class.
         
@@ -391,7 +392,7 @@ class Ontology:
             
         return list(set(all_subclasses))  # Remove duplicates
     
-    def get_all_subtypes(self, relation_type: str, include_indirect: bool = True) -> List[str]:
+    def get_all_subtypes(self, relation_type: str, include_indirect: bool = True) -> list[str]:
         """
         Get all subtypes of a given relation type.
         
@@ -464,9 +465,9 @@ class Ontology:
                 
         return False
     
-    def update_class(self, name: str, properties: Dict[str, Any] = None, 
-                   parent_classes: List[str] = None, constraints: Dict[str, Any] = None,
-                   metadata: Dict[str, Any] = None) -> bool:
+    def update_class(self, name: str, properties: dict[str, Any] = None, 
+                   parent_classes: list[str] = None, constraints: dict[str, Any] = None,
+                   metadata: dict[str, Any] = None) -> bool:
         """
         Update an existing class in the ontology.
         
@@ -530,10 +531,10 @@ class Ontology:
         finally:
             conn.close()
     
-    def update_relation_type(self, name: str, parent_types: List[str] = None,
-                           source_classes: List[str] = None, target_classes: List[str] = None,
-                           cardinality: str = None, properties: Dict[str, Any] = None,
-                           metadata: Dict[str, Any] = None) -> bool:
+    def update_relation_type(self, name: str, parent_types: list[str] = None,
+                           source_classes: list[str] = None, target_classes: list[str] = None,
+                           cardinality: str = None, properties: dict[str, Any] = None,
+                           metadata: dict[str, Any] = None) -> bool:
         """
         Update an existing relation type in the ontology.
         
@@ -606,7 +607,7 @@ class Ontology:
             conn.close()
     
     def suggest_new_class(self, entity_name: str, entity_type: str, 
-                        entity_properties: Dict[str, Any]) -> Optional[OntologyClass]:
+                        entity_properties: dict[str, Any]) -> OntologyClass | None:
         """
         Suggest a new class in the ontology based on entity patterns.
         This enables automatic ontology evolution.
@@ -648,7 +649,7 @@ class Ontology:
         return suggested_class
     
     def suggest_new_relation_type(self, source_entity: str, relation: str, 
-                                target_entity: str) -> Optional[RelationType]:
+                                target_entity: str) -> RelationType | None:
         """
         Suggest a new relation type in the ontology based on observed patterns.
         This enables automatic ontology evolution.

@@ -3,17 +3,18 @@ CortexFlow Dependency Utilities module.
 
 This module provides utilities for handling optional dependencies in CortexFlow.
 """
+from __future__ import annotations
 
 import logging
 import importlib
-from typing import Dict, Tuple, Optional, List, Any
+from typing import Any
 
 def check_dependency(
     module_name: str, 
-    import_name: Optional[str] = None, 
-    warning_message: Optional[str] = None,
-    classes: Optional[List[str]] = None
-) -> Tuple[bool, Dict[str, Any]]:
+    import_name: str | None = None, 
+    warning_message: str | None = None,
+    classes: list[str] | None = None
+) -> tuple[bool, dict[str, Any]]:
     """
     Check if a dependency is available and return its status along with any requested classes.
     
@@ -51,10 +52,10 @@ def check_dependency(
 
 def import_optional_dependency(
     module_name: str, 
-    import_name: Optional[str] = None,
-    warning_message: Optional[str] = None,
-    classes: Optional[List[str]] = None
-) -> Dict[str, Any]:
+    import_name: str | None = None,
+    warning_message: str | None = None,
+    classes: list[str] | None = None
+) -> dict[str, Any]:
     """
     Import an optional dependency and return a dictionary with an ENABLED flag and imported objects.
     

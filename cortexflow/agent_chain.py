@@ -12,11 +12,12 @@ require multi-hop reasoning over long contexts.
 Based on research from Google's "Chain of Agents: Large Language Models
 Collaborating on Long Context Tasks" (2025).
 """
+from __future__ import annotations
 
 import logging
 import json
 import time
-from typing import List, Dict, Any, Optional, Tuple, Union, Callable
+from typing import Any, Callable
 import traceback
 
 from cortexflow.config import CortexFlowConfig
@@ -33,7 +34,7 @@ class Agent:
         name: str, 
         role: str, 
         config: CortexFlowConfig,
-        knowledge_store: Optional[KnowledgeStore] = None
+        knowledge_store: KnowledgeStore | None = None
     ):
         """
         Initialize an agent with a specific role.
@@ -53,9 +54,9 @@ class Agent:
     def process(
         self, 
         query: str,
-        context: Dict[str, Any], 
-        agent_history: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        context: dict[str, Any], 
+        agent_history: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """
         Process a query with the agent's specialized capability.
         
@@ -89,9 +90,9 @@ class ExplorerAgent(Agent):
     def process(
         self, 
         query: str,
-        context: Dict[str, Any], 
-        agent_history: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        context: dict[str, Any], 
+        agent_history: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """
         Explore the knowledge base to find relevant information.
         
@@ -140,7 +141,7 @@ class ExplorerAgent(Agent):
             "knowledge_items": knowledge_items
         }
     
-    def _create_explorer_prompt(self, query: str, context: Dict[str, Any]) -> str:
+    def _create_explorer_prompt(self, query: str, context: dict[str, Any]) -> str:
         """Create a prompt that guides the model to explore related topics."""
         return f"""You are the Explorer Agent. Your task is to explore information related to the user's query
 without directly answering it. Focus on finding related topics, concepts, and facts that might be useful
@@ -157,7 +158,7 @@ Your task:
 Output your exploration findings in a clear, structured format.
 """
 
-    def _format_knowledge_context(self, knowledge_items: List[Dict[str, Any]]) -> str:
+    def _format_knowledge_context(self, knowledge_items: list[dict[str, Any]]) -> str:
         """Format knowledge items as context for the LLM."""
         if not knowledge_items:
             return "No relevant knowledge found in the knowledge base."
@@ -168,7 +169,7 @@ Output your exploration findings in a clear, structured format.
             
         return "KNOWLEDGE CONTEXT:\n" + "\n".join(formatted_items)
     
-    def _process_with_llm(self, prompt: str, knowledge_context: str) -> Dict[str, Any]:
+    def _process_with_llm(self, prompt: str, knowledge_context: str) -> dict[str, Any]:
         """Process the prompt and knowledge context with an LLM.
 
         Args:
@@ -222,9 +223,9 @@ class AnalyzerAgent(Agent):
     def process(
         self, 
         query: str,
-        context: Dict[str, Any], 
-        agent_history: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        context: dict[str, Any], 
+        agent_history: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """
         Analyze relationships between facts from the Explorer agent.
         
@@ -254,7 +255,7 @@ class AnalyzerAgent(Agent):
             "analysis_results": analysis_results
         }
     
-    def _create_analyzer_prompt(self, query: str, explorer_results: Dict[str, Any]) -> str:
+    def _create_analyzer_prompt(self, query: str, explorer_results: dict[str, Any]) -> str:
         """Create a prompt for the analyzer agent."""
         exploration_text = explorer_results.get("exploration_results", {}).get("exploration_text", "No exploration results")
         
@@ -277,7 +278,7 @@ Your task:
 Output your analysis in a clear, structured format.
 """
 
-    def _process_with_llm(self, prompt: str) -> Dict[str, Any]:
+    def _process_with_llm(self, prompt: str) -> dict[str, Any]:
         """Process the prompt with an LLM.
 
         Args:
@@ -329,9 +330,9 @@ class SynthesizerAgent(Agent):
     def process(
         self, 
         query: str,
-        context: Dict[str, Any], 
-        agent_history: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        context: dict[str, Any], 
+        agent_history: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """
         Synthesize information from previous agents to answer the query.
         
@@ -370,8 +371,8 @@ class SynthesizerAgent(Agent):
     def _create_synthesizer_prompt(
         self, 
         query: str, 
-        explorer_results: Dict[str, Any], 
-        analyzer_results: Dict[str, Any]
+        explorer_results: dict[str, Any], 
+        analyzer_results: dict[str, Any]
     ) -> str:
         """Create a prompt for the synthesizer agent."""
         exploration_text = explorer_results.get("exploration_results", {}).get("exploration_text", "No exploration results")
@@ -398,7 +399,7 @@ Your task:
 Provide your answer directly.
 """
 
-    def _process_with_llm(self, prompt: str) -> Dict[str, Any]:
+    def _process_with_llm(self, prompt: str) -> dict[str, Any]:
         """Process the prompt with an LLM.
 
         Args:
@@ -487,7 +488,7 @@ class AgentChainManager:
 
         return is_long or (has_conjunctions and len(words) > 8) or has_analysis_words
 
-    def _batch_process_with_llm(self, prompts: List[str]) -> List[str]:
+    def _batch_process_with_llm(self, prompts: list[str]) -> list[str]:
         """Process multiple prompts with LLM in a single batch."""
         if not prompts:
             return []
@@ -497,7 +498,7 @@ class AgentChainManager:
             logger.error(f"Error in batch LLM processing: {e}")
             return [""] * len(prompts)
 
-    def process_query(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def process_query(self, query: str, context: dict[str, Any] = None) -> dict[str, Any]:
         """Process a query through the chain of agents.
 
         If the query is not complex enough to warrant multi-agent processing,

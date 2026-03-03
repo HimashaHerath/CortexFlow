@@ -1,14 +1,17 @@
 """
 CortexFlow LLM Client module.
 
-Provides a unified interface for interacting with LLM backends (Ollama, Vertex AI/Gemini).
+Provides a unified interface for interacting with LLM backends
+(Ollama, Vertex AI/Gemini, LiteLLM).
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import os
 from abc import abstractmethod
-from typing import Dict, Iterator, List, Optional
+from typing import Any, Iterator
 
 import requests
 
@@ -21,7 +24,7 @@ class LLMClient(LLMProviderInterface):
     """Abstract base for LLM clients."""
 
     @abstractmethod
-    def generate(self, messages: List[Dict], model: str = None, **kwargs) -> str:
+    def generate(self, messages: list[dict], model: str = None, **kwargs) -> str:
         """Generate a response from a list of role/content messages."""
 
     @abstractmethod
@@ -29,10 +32,10 @@ class LLMClient(LLMProviderInterface):
         """Generate a response from a raw string prompt."""
 
     @abstractmethod
-    def generate_stream(self, messages: List[Dict], model: str = None, **kwargs) -> Iterator[str]:
+    def generate_stream(self, messages: list[dict], model: str = None, **kwargs) -> Iterator[str]:
         """Stream a response from a list of role/content messages."""
 
-    def batch_generate_from_prompts(self, prompts: List[str], model: str = None) -> List[str]:
+    def batch_generate_from_prompts(self, prompts: list[str], model: str = None) -> list[str]:
         """Generate responses for multiple prompts sequentially."""
         return [self.generate_from_prompt(p, model=model) for p in prompts]
 
@@ -48,7 +51,7 @@ class OllamaClient(LLMClient):
         self.ollama_host = ollama_host.rstrip("/")
         self.default_model = default_model
 
-    def generate(self, messages: List[Dict], model: str = None, **kwargs) -> str:
+    def generate(self, messages: list[dict], model: str = None, **kwargs) -> str:
         model = model or self.default_model
         url = f"{self.ollama_host}/api/chat"
         payload = {"model": model, "messages": messages, "stream": False}
@@ -74,7 +77,7 @@ class OllamaClient(LLMClient):
             logger.error(f"OllamaClient.generate_from_prompt error: {exc}")
             return f"Error: {exc}"
 
-    def generate_stream(self, messages: List[Dict], model: str = None, **kwargs) -> Iterator[str]:
+    def generate_stream(self, messages: list[dict], model: str = None, **kwargs) -> Iterator[str]:
         model = model or self.default_model
         url = f"{self.ollama_host}/api/chat"
         payload = {"model": model, "messages": messages, "stream": True}
@@ -96,9 +99,9 @@ class OllamaClient(LLMClient):
             logger.error(f"OllamaClient.generate_stream error: {exc}")
             yield f"Error: {exc}"
 
-    def batch_generate_from_prompts(self, prompts: List[str], model: str = None) -> List[str]:
+    def batch_generate_from_prompts(self, prompts: list[str], model: str = None) -> list[str]:
         model = model or self.default_model
-        results = []
+        results: list[str] = []
         url = f"{self.ollama_host}/api/generate"
         try:
             with requests.Session() as session:
@@ -126,14 +129,14 @@ class VertexAIClient(LLMClient):
     """LLM client backed by Vertex AI / Gemini models via google-genai SDK.
 
     Auth priority:
-      1. GOOGLE_APPLICATION_CREDENTIALS / config.vertex_credentials_path → service account
+      1. GOOGLE_APPLICATION_CREDENTIALS / config.vertex_credentials_path -> service account
          (uses google.genai.Client with vertexai=True and scoped credentials)
       2. Application Default Credentials (vertexai=True, ADC)
     """
 
     _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
-    def __init__(self, config):
+    def __init__(self, config: Any):
         """
         Args:
             config: CortexFlowConfig (or just config.llm).
@@ -149,7 +152,7 @@ class VertexAIClient(LLMClient):
             getattr(llm, "vertex_location", None)
             or os.environ.get("VERTEX_LOCATION", "us-central1")
         )
-        # "global" is not a valid Vertex AI region — map to us-central1
+        # "global" is not a valid Vertex AI region -- map to us-central1
         self.location = raw_location if raw_location != "global" else "us-central1"
 
         credentials_path = (
@@ -206,7 +209,7 @@ class VertexAIClient(LLMClient):
             location=self.location,
         )
 
-    def _messages_to_prompt(self, messages: List[Dict]) -> str:
+    def _messages_to_prompt(self, messages: list[dict]) -> str:
         """Convert OpenAI-style messages list to a single prompt string."""
         parts = []
         for msg in messages:
@@ -220,7 +223,7 @@ class VertexAIClient(LLMClient):
                 parts.append(f"[User]: {content}")
         return "\n\n".join(parts)
 
-    def generate(self, messages: List[Dict], model: str = None, **kwargs) -> str:
+    def generate(self, messages: list[dict], model: str = None, **kwargs) -> str:
         prompt = self._messages_to_prompt(messages)
         return self.generate_from_prompt(prompt, model=model, **kwargs)
 
@@ -235,7 +238,7 @@ class VertexAIClient(LLMClient):
             logger.error(f"VertexAIClient.generate_from_prompt error: {exc}")
             return f"Error: {exc}"
 
-    def generate_stream(self, messages: List[Dict], model: str = None, **kwargs) -> Iterator[str]:
+    def generate_stream(self, messages: list[dict], model: str = None, **kwargs) -> Iterator[str]:
         model = model or self.default_model
         prompt = self._messages_to_prompt(messages)
         try:
@@ -251,6 +254,100 @@ class VertexAIClient(LLMClient):
         except Exception as exc:
             logger.error(f"VertexAIClient.generate_stream error: {exc}")
             yield f"Error: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# LiteLLM client (unified multi-provider)
+# ---------------------------------------------------------------------------
+
+class LiteLLMClient(LLMClient):
+    """LLM client backed by LiteLLM, supporting 100+ providers.
+
+    Supports OpenAI, Anthropic, Cohere, Azure, Bedrock, Vertex AI, and many more
+    through a single unified interface.
+
+    Install: pip install cortexflow[litellm]
+    """
+
+    def __init__(self, default_model: str = "gpt-4o-mini", **litellm_kwargs: Any):
+        """
+        Args:
+            default_model: Default model string (e.g. "gpt-4o-mini", "claude-sonnet-4-20250514",
+                          "anthropic/claude-sonnet-4-20250514", "vertex_ai/gemini-2.0-flash").
+            **litellm_kwargs: Extra keyword args passed to litellm.completion().
+        """
+        try:
+            import litellm  # noqa: F401
+        except ImportError as exc:
+            raise ImportError(
+                "litellm package not installed. Run: pip install cortexflow[litellm]"
+            ) from exc
+
+        self.default_model = default_model
+        self._litellm_kwargs = litellm_kwargs
+
+    def generate(self, messages: list[dict], model: str = None, **kwargs) -> str:
+        import litellm
+
+        model = model or self.default_model
+        merged = {**self._litellm_kwargs, **kwargs}
+        merged.pop("timeout", None)  # litellm handles its own timeout
+        try:
+            response = litellm.completion(
+                model=model,
+                messages=messages,
+                **merged,
+            )
+            return response.choices[0].message.content
+        except Exception as exc:
+            logger.error(f"LiteLLMClient.generate error: {exc}")
+            return f"Error: {exc}"
+
+    def generate_from_prompt(self, prompt: str, model: str = None, **kwargs) -> str:
+        messages = [{"role": "user", "content": prompt}]
+        return self.generate(messages, model=model, **kwargs)
+
+    def generate_stream(self, messages: list[dict], model: str = None, **kwargs) -> Iterator[str]:
+        import litellm
+
+        model = model or self.default_model
+        merged = {**self._litellm_kwargs, **kwargs}
+        merged.pop("timeout", None)
+        try:
+            response = litellm.completion(
+                model=model,
+                messages=messages,
+                stream=True,
+                **merged,
+            )
+            for chunk in response:
+                delta = chunk.choices[0].delta
+                if delta and delta.content:
+                    yield delta.content
+        except Exception as exc:
+            logger.error(f"LiteLLMClient.generate_stream error: {exc}")
+            yield f"Error: {exc}"
+
+    async def agenerate(self, messages: list[dict[str, str]], model: str = None, **kwargs) -> str:
+        import litellm
+
+        model = model or self.default_model
+        merged = {**self._litellm_kwargs, **kwargs}
+        merged.pop("timeout", None)
+        try:
+            response = await litellm.acompletion(
+                model=model,
+                messages=messages,
+                **merged,
+            )
+            return response.choices[0].message.content
+        except Exception as exc:
+            logger.error(f"LiteLLMClient.agenerate error: {exc}")
+            return f"Error: {exc}"
+
+    async def agenerate_from_prompt(self, prompt: str, model: str = None, **kwargs) -> str:
+        messages = [{"role": "user", "content": prompt}]
+        return await self.agenerate(messages, model=model, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +367,11 @@ def create_llm_client(config) -> LLMClient:
     if backend == "vertex_ai":
         logger.info("LLM backend: Vertex AI / Gemini")
         return VertexAIClient(config)
+
+    if backend == "litellm":
+        default_model = getattr(llm, "default_model", "gpt-4o-mini")
+        logger.info(f"LLM backend: LiteLLM (model={default_model})")
+        return LiteLLMClient(default_model=default_model)
 
     # Default: Ollama
     ollama_host = getattr(llm, "ollama_host", "http://localhost:11434")

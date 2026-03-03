@@ -3,13 +3,14 @@ CortexFlow Manager module.
 
 This module provides the main manager class for the CortexFlow system.
 """
+from __future__ import annotations
 
 import time
 import json
 import logging
 import requests
 import traceback
-from typing import List, Dict, Any, Optional, Union, Iterator, Tuple
+from typing import Any, Iterator
 import re
 import warnings
 
@@ -202,7 +203,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(traceback.format_exc())
             raise
     
-    def _update_memory_tier_limits(self, new_limits: Dict[str, int]) -> None:
+    def _update_memory_tier_limits(self, new_limits: dict[str, int]) -> None:
         """
         Update memory tier token limits based on dynamic weighting.
         
@@ -223,7 +224,7 @@ class CortexFlowManager(ContextProvider):
         except Exception as e:
             logger.error(f"Error updating memory tier limits: {e}")
     
-    def add_message(self, role: str, content: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+    def add_message(self, role: str, content: str, metadata: dict[str, Any] = None) -> dict[str, Any]:
         """
         Add a message to the conversation.
         
@@ -290,7 +291,7 @@ class CortexFlowManager(ContextProvider):
                 
         return message
     
-    def get_conversation_context(self, max_tokens: int = None) -> Dict[str, Any]:
+    def get_conversation_context(self, max_tokens: int = None) -> dict[str, Any]:
         """
         Get the full conversation context for generating a response.
         
@@ -328,7 +329,7 @@ class CortexFlowManager(ContextProvider):
         
         return context
     
-    def get_dynamic_weighting_stats(self) -> Dict[str, Any]:
+    def get_dynamic_weighting_stats(self) -> dict[str, Any]:
         """
         Get statistics about the dynamic weighting engine.
         
@@ -359,7 +360,7 @@ class CortexFlowManager(ContextProvider):
         except Exception as e:
             logger.error(f"Error resetting dynamic weighting: {e}")
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get system-wide statistics.
         
@@ -716,7 +717,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(traceback.format_exc())
             yield f"Error generating streaming response: {str(e)}"
     
-    def remember_knowledge(self, text: str, source: str = None, confidence: float = None) -> List[int]:
+    def remember_knowledge(self, text: str, source: str = None, confidence: float = None) -> list[int]:
         """
         Store important knowledge in the knowledge store.
         
@@ -736,7 +737,7 @@ class CortexFlowManager(ContextProvider):
         )
         return self.add_knowledge(text, source, confidence)
     
-    def add_knowledge(self, text: str, source: str = None, confidence: float = None) -> List[int]:
+    def add_knowledge(self, text: str, source: str = None, confidence: float = None) -> list[int]:
         """
         Store important knowledge in the knowledge store.
         
@@ -803,7 +804,7 @@ class CortexFlowManager(ContextProvider):
         return item_ids
             
     def detect_contradictions(self, entity_id=None, relation_type=None, 
-                          max_results=100) -> List[Dict[str, Any]]:
+                          max_results=100) -> list[dict[str, Any]]:
         """
         Detect contradictions in the knowledge graph.
         
@@ -825,8 +826,8 @@ class CortexFlowManager(ContextProvider):
             max_results=max_results
         )
         
-    def resolve_contradiction(self, contradiction: Dict[str, Any], 
-                           strategy: str = None) -> Dict[str, Any]:
+    def resolve_contradiction(self, contradiction: dict[str, Any], 
+                           strategy: str = None) -> dict[str, Any]:
         """
         Resolve a contradiction using the specified strategy.
         
@@ -847,7 +848,7 @@ class CortexFlowManager(ContextProvider):
         return self.uncertainty_handler.resolve_contradiction(contradiction, strategy)
         
     def update_source_reliability(self, source_name: str, reliability_score: float,
-                              metadata: Dict[str, Any] = None) -> None:
+                              metadata: dict[str, Any] = None) -> None:
         """
         Update the reliability score for a knowledge source.
         
@@ -883,7 +884,7 @@ class CortexFlowManager(ContextProvider):
         return self.uncertainty_handler.get_source_reliability(source_name)
         
     def add_probability_distribution(self, entity_id: int, relation_id: int,
-                                  distribution_type: str, distribution_data: Dict[str, Any]) -> None:
+                                  distribution_type: str, distribution_data: dict[str, Any]) -> None:
         """
         Add a probability distribution to represent uncertainty about a fact.
         
@@ -904,7 +905,7 @@ class CortexFlowManager(ContextProvider):
             distribution_data=distribution_data
         )
         
-    def get_probability_distribution(self, entity_id: int, relation_id: int) -> Optional[Dict[str, Any]]:
+    def get_probability_distribution(self, entity_id: int, relation_id: int) -> dict[str, Any] | None:
         """
         Get the probability distribution for a fact.
         
@@ -924,8 +925,8 @@ class CortexFlowManager(ContextProvider):
             relation_id=relation_id
         )
         
-    def reason_with_incomplete_information(self, query: Dict[str, Any],
-                                       available_knowledge: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def reason_with_incomplete_information(self, query: dict[str, Any],
+                                       available_knowledge: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Reason with incomplete information to provide best possible answers.
         
@@ -952,7 +953,7 @@ class CortexFlowManager(ContextProvider):
         
     def get_belief_revision_history(self, entity_id: int = None, 
                                  relation_id: int = None,
-                                 limit: int = 10) -> List[Dict[str, Any]]:
+                                 limit: int = 10) -> list[dict[str, Any]]:
         """
         Get the revision history for beliefs about an entity or relation.
         
@@ -974,7 +975,7 @@ class CortexFlowManager(ContextProvider):
             limit=limit
         )
     
-    def get_knowledge(self, query: str) -> List[Dict[str, Any]]:
+    def get_knowledge(self, query: str) -> list[dict[str, Any]]:
         """
         Get relevant knowledge for a query.
         
@@ -1016,7 +1017,7 @@ class CortexFlowManager(ContextProvider):
         """Destructor."""
         self.close()
 
-    def get_context(self) -> Dict[str, Any]:
+    def get_context(self) -> dict[str, Any]:
         """Get the current context for model consumption."""
         return self.get_conversation_context()
         
@@ -1024,7 +1025,7 @@ class CortexFlowManager(ContextProvider):
         """Clear all context data."""
         self.clear_memory()
 
-    def answer_why_question(self, query: str) -> List[Dict[str, Any]]:
+    def answer_why_question(self, query: str) -> list[dict[str, Any]]:
         """
         Answer a why-question using backward chaining logical reasoning.
         
@@ -1043,7 +1044,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error answering why question: {e}")
             return [{"type": "error", "message": f"Error processing question: {str(e)}"}]
     
-    def generate_novel_implications(self, iterations: int = None) -> List[Dict[str, Any]]:
+    def generate_novel_implications(self, iterations: int = None) -> list[dict[str, Any]]:
         """
         Generate novel implications using forward chaining.
         
@@ -1065,7 +1066,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error generating implications: {e}")
             return []
     
-    def generate_hypotheses(self, observation: str, max_hypotheses: int = None) -> List[Dict[str, Any]]:
+    def generate_hypotheses(self, observation: str, max_hypotheses: int = None) -> list[dict[str, Any]]:
         """
         Generate hypotheses to explain an observation using abductive reasoning.
         
@@ -1088,8 +1089,8 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error generating hypotheses: {e}")
             return []
     
-    def add_logical_rule(self, name: str, premise_patterns: List[Dict[str, Any]], 
-                       conclusion_pattern: Dict[str, Any], confidence: float = 0.8) -> bool:
+    def add_logical_rule(self, name: str, premise_patterns: list[dict[str, Any]], 
+                       conclusion_pattern: dict[str, Any], confidence: float = 0.8) -> bool:
         """
         Add a logical rule to the inference engine.
         
@@ -1117,7 +1118,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error adding logical rule: {e}")
             return False
     
-    def optimize_query(self, query: Dict[str, Any]) -> Dict[str, Any]:
+    def optimize_query(self, query: dict[str, Any]) -> dict[str, Any]:
         """
         Generate an optimized query plan for knowledge graph operations.
         
@@ -1136,7 +1137,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error generating optimized query plan: {e}")
             return {"status": "error", "message": str(e)}
     
-    def partition_graph(self, method: str = None, partition_count: int = None) -> Dict[str, Any]:
+    def partition_graph(self, method: str = None, partition_count: int = None) -> dict[str, Any]:
         """
         Partition the knowledge graph for improved performance.
         
@@ -1164,7 +1165,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error partitioning graph: {e}")
             return {"status": "error", "message": str(e)}
     
-    def create_hop_indexes(self, max_hops: int = None) -> Dict[str, Any]:
+    def create_hop_indexes(self, max_hops: int = None) -> dict[str, Any]:
         """
         Create indexes for multi-hop queries to speed up traversal.
         
@@ -1189,7 +1190,7 @@ class CortexFlowManager(ContextProvider):
     
     def optimize_path_query(self, start_entity: str, end_entity: str, 
                        max_hops: int = 3, 
-                       relation_constraints: List[str] = None) -> Dict[str, Any]:
+                       relation_constraints: list[str] = None) -> dict[str, Any]:
         """
         Optimize a path query between entities using the query planning system.
         
@@ -1219,7 +1220,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error optimizing path query: {e}")
             return {"status": "error", "message": str(e)}
     
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_performance_stats(self) -> dict[str, Any]:
         """
         Get performance statistics from the optimizer.
         
@@ -1235,7 +1236,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error getting performance stats: {e}")
             return {"status": "error", "message": str(e)}
     
-    def clear_performance_caches(self) -> Dict[str, Any]:
+    def clear_performance_caches(self) -> dict[str, Any]:
         """
         Clear all performance optimization caches.
         
@@ -1272,7 +1273,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error caching reasoning pattern: {e}")
             return False
     
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         """
         Get cache statistics including hit rates.
         
@@ -1289,7 +1290,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error getting cache stats: {e}")
             return {"status": "error", "message": str(e)}
     
-    def multi_hop_query(self, query: str) -> Dict[str, Any]:
+    def multi_hop_query(self, query: str) -> dict[str, Any]:
         """
         Perform multi-hop reasoning on a query.
         
@@ -1379,7 +1380,7 @@ class CortexFlowManager(ContextProvider):
             logger.error(f"Error in multi_hop_query: {e}")
             return {"path": [], "entities": [], "score": 0.0}
     
-    def _extract_entity_pair(self, query: str) -> Optional[Tuple[str, str]]:
+    def _extract_entity_pair(self, query: str) -> tuple[str, str] | None:
         """
         Extract a pair of entities from a query for path finding.
         
@@ -1409,7 +1410,7 @@ class CortexFlowManager(ContextProvider):
             
         return None
         
-    def query(self, query_text: str) -> Dict[str, Any]:
+    def query(self, query_text: str) -> dict[str, Any]:
         """
         General query interface that routes to specialized query methods.
         
@@ -1461,7 +1462,7 @@ class CortexFlowManager(ContextProvider):
                 
         return False
     
-    def _extract_answer(self, query: str, knowledge_items: List[Dict[str, Any]]) -> str:
+    def _extract_answer(self, query: str, knowledge_items: list[dict[str, Any]]) -> str:
         """
         Extract an answer from knowledge items.
         

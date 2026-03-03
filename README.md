@@ -2,9 +2,11 @@
 
 CortexFlow is a multi-tier memory optimization system for LLMs that implements a cognitive-inspired architecture to maximize context utilization and enable complex reasoning.
 
-[![PyPI version](https://badge.fury.io/py/cortexflow-llm.svg)](https://badge.fury.io/py/cortexflow-llm)
-[![Documentation Status](https://readthedocs.org/projects/cortexflow-llm/badge/?version=latest)](https://cortexflow-llm.readthedocs.io/en/latest/?badge=latest)
+[![PyPI version](https://badge.fury.io/py/cortexflow-llm.svg)](https://pypi.org/project/cortexflow-llm/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Documentation Status](https://readthedocs.org/projects/cortexflow/badge/?version=latest)](https://cortexflow.readthedocs.io/en/latest/?badge=latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 ## Overview
 
@@ -36,6 +38,10 @@ CortexFlow dynamically manages context information, retaining important elements
   - Query planning for optimizing reasoning paths
   - Caching for common reasoning patterns
 
+## Requirements
+
+- Python 3.10 or higher
+
 ## Installation
 
 ```bash
@@ -47,7 +53,12 @@ For the graph-based knowledge features:
 pip install "cortexflow-llm[graph]"
 ```
 
-For the full package with all dependencies (including enhanced NLP capabilities):
+For LiteLLM multi-provider support (OpenAI, Anthropic, Cohere, Azure, Bedrock, etc.):
+```bash
+pip install "cortexflow-llm[litellm]"
+```
+
+For the full package with all dependencies:
 ```bash
 pip install "cortexflow-llm[all]"
 ```
@@ -391,9 +402,34 @@ response = manager.generate_response()
 
 Enable via config: `use_fact_extraction=True` in `MemoryConfig`, or `.with_fact_extraction()` on the builder. Disabled by default for backward compatibility.
 
-## Vertex AI Integration
+## LLM Backends
 
-CortexFlow supports Google Vertex AI as an alternative LLM backend alongside Ollama:
+CortexFlow supports three LLM backends: **Ollama** (default, local), **Vertex AI / Gemini**, and **LiteLLM** (100+ providers).
+
+### LiteLLM (Multi-Provider)
+
+Use any LLM provider (OpenAI, Anthropic, Cohere, Azure, Bedrock, etc.) through a unified interface:
+
+```bash
+pip install "cortexflow-llm[litellm]"
+```
+
+```python
+from cortexflow.llm_client import LiteLLMClient
+
+# OpenAI
+client = LiteLLMClient(default_model="gpt-4o-mini")
+
+# Anthropic
+client = LiteLLMClient(default_model="anthropic/claude-sonnet-4-20250514")
+
+# Async support
+response = await client.agenerate([{"role": "user", "content": "Hello"}])
+```
+
+Set `backend = "litellm"` in your LLM config or `CORTEXFLOW_LLM_BACKEND=litellm` env var.
+
+### Vertex AI / Gemini
 
 ```bash
 pip install "cortexflow-llm[vertex]"
@@ -402,7 +438,6 @@ pip install "cortexflow-llm[vertex]"
 ```python
 from cortexflow import ConfigBuilder, CortexFlowManager
 
-# Configure with Vertex AI using the builder pattern
 config = (ConfigBuilder()
     .with_vertex_ai(
         project_id="your-gcp-project",
@@ -479,6 +514,19 @@ python -m pytest tests/test_evidence_benchmark.py::TestEvidenceBenchmark::test_0
 ## Documentation
 
 For full documentation, visit [cortexflow-llm.readthedocs.io](https://cortexflow-llm.readthedocs.io).
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+
+# Lint and format
+ruff check cortexflow       # lint
+ruff format cortexflow      # format
+
+# Run tests with coverage
+pytest --cov=cortexflow --cov-fail-under=80 tests/
+```
 
 ## Contributing
 

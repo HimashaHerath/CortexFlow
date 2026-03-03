@@ -3,10 +3,11 @@ CortexFlow Configuration module.
 
 This module provides the configuration class for the CortexFlow system.
 """
+from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field, fields
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 @dataclass
 class MemoryConfig:
@@ -17,7 +18,7 @@ class MemoryConfig:
     use_dynamic_weighting: bool = False
     dynamic_weighting_learning_rate: float = 0.1
     dynamic_weighting_min_tier_size: int = 1000
-    dynamic_weighting_default_ratios: Dict[str, float] = field(default_factory=lambda: {
+    dynamic_weighting_default_ratios: dict[str, float] = field(default_factory=lambda: {
         "active": 0.25,
         "working": 0.35,
         "archive": 0.40
@@ -105,10 +106,10 @@ class LLMConfig:
     # Backend selection
     backend: str = "ollama"           # "ollama" or "vertex_ai"
     # Vertex AI fields (None = read from env vars at runtime)
-    vertex_project_id: Optional[str] = None
-    vertex_location: Optional[str] = None
-    vertex_api_key: Optional[str] = None
-    vertex_credentials_path: Optional[str] = None
+    vertex_project_id: str | None = None
+    vertex_location: str | None = None
+    vertex_api_key: str | None = None
+    vertex_credentials_path: str | None = None
     vertex_model: str = "gemini-1.5-flash"
 
 @dataclass
@@ -151,7 +152,7 @@ class CortexFlowConfig:
     debug_mode: bool = False
     
     # Optional custom configuration
-    custom_config: Dict[str, Any] = field(default_factory=dict)
+    custom_config: dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
         """Initialize any derived settings after creation."""
@@ -176,13 +177,13 @@ class CortexFlowConfig:
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     @staticmethod
-    def _extract_section(config_dict: Dict[str, Any], config_class) -> Dict[str, Any]:
+    def _extract_section(config_dict: dict[str, Any], config_class) -> dict[str, Any]:
         """Extract keys from config_dict that belong to the given dataclass."""
         valid_fields = {f.name for f in fields(config_class)}
         return {k: v for k, v in config_dict.items() if k in valid_fields}
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> 'CortexFlowConfig':
+    def from_dict(cls, config_dict: dict[str, Any]) -> 'CortexFlowConfig':
         """
         Create configuration from a dictionary.
 
@@ -223,14 +224,14 @@ class CortexFlowConfig:
 
         return cls(**top_config_dict)
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert configuration to a flat dictionary.
 
         Returns:
             Dictionary representation of configuration
         """
-        config_dict: Dict[str, Any] = {}
+        config_dict: dict[str, Any] = {}
 
         # Flatten all nested dataclass sections into a single dict
         for section_field in fields(self):
@@ -355,7 +356,7 @@ class ConfigBuilder:
             self._debug_mode = debug_mode
         return self
     
-    def with_custom_config(self, custom_config: Dict[str, Any]) -> 'ConfigBuilder':
+    def with_custom_config(self, custom_config: dict[str, Any]) -> 'ConfigBuilder':
         """Configure custom settings."""
         self._custom_config = custom_config
         return self

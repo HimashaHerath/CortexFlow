@@ -4,10 +4,11 @@ Traversal Profiler for CortexFlow.
 This module provides functionality for profiling and optimizing graph traversal operations
 in the CortexFlow knowledge graph.
 """
+from __future__ import annotations
 
 import time
 import logging
-from typing import Dict, List, Any, Optional, Tuple, Callable
+from typing import Any, Callable
 from datetime import datetime
 import json
 import os
@@ -23,7 +24,7 @@ class TraversalProfile:
     Represents a profile of a graph traversal operation.
     """
     
-    def __init__(self, name: str, metadata: Dict[str, Any] = None):
+    def __init__(self, name: str, metadata: dict[str, Any] = None):
         """
         Initialize a traversal profile.
         
@@ -50,7 +51,7 @@ class TraversalProfile:
         self.end_time = datetime.now()
         self.duration = (self.end_time - self.start_time).total_seconds()
     
-    def add_step(self, step_name: str, duration: float, metadata: Dict[str, Any] = None):
+    def add_step(self, step_name: str, duration: float, metadata: dict[str, Any] = None):
         """
         Add a step to the traversal profile.
         
@@ -65,7 +66,7 @@ class TraversalProfile:
             "metadata": metadata or {}
         })
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "name": self.name,
@@ -133,7 +134,7 @@ class TraversalProfiler:
         """Destructor to ensure resources are cleaned up."""
         self.close()
     
-    def start_profile(self, name: str, metadata: Dict[str, Any] = None) -> Optional[TraversalProfile]:
+    def start_profile(self, name: str, metadata: dict[str, Any] = None) -> TraversalProfile | None:
         """
         Start profiling a traversal operation.
         
@@ -161,7 +162,7 @@ class TraversalProfiler:
         
         return profile
     
-    def stop_profile(self) -> Optional[TraversalProfile]:
+    def stop_profile(self) -> TraversalProfile | None:
         """
         Stop profiling the current traversal operation.
         
@@ -182,7 +183,7 @@ class TraversalProfiler:
         
         return profile
     
-    def log_traversal_step(self, step_name: str, duration: float, metadata: Dict[str, Any] = None):
+    def log_traversal_step(self, step_name: str, duration: float, metadata: dict[str, Any] = None):
         """
         Log a step in the current traversal profile.
         
@@ -299,7 +300,7 @@ class TraversalProfiler:
                 "suggestions": suggestions
             })
     
-    def get_optimization_suggestions(self) -> List[Dict[str, Any]]:
+    def get_optimization_suggestions(self) -> list[dict[str, Any]]:
         """
         Get optimization suggestions based on traversal profiles.
         
@@ -308,7 +309,7 @@ class TraversalProfiler:
         """
         return self.optimization_suggestions
     
-    def get_aggregated_stats(self) -> Dict[str, Any]:
+    def get_aggregated_stats(self) -> dict[str, Any]:
         """
         Get aggregated statistics from all profiles.
         

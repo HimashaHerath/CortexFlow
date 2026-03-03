@@ -7,11 +7,12 @@ This module provides capabilities to:
 3. Resolve conflicts based on source reliability and recency
 4. Reason with incomplete information
 """
+from __future__ import annotations
 
 import logging
 import json
 import sqlite3
-from typing import Dict, List, Any, Tuple, Optional, Union
+from typing import Any
 from datetime import datetime
 import math
 
@@ -171,7 +172,7 @@ class UncertaintyHandler:
             if self.conn is None:
                 conn.close()
     
-    def detect_contradictions(self, entity_id=None, relation_type=None, max_results=100) -> List[Dict[str, Any]]:
+    def detect_contradictions(self, entity_id=None, relation_type=None, max_results=100) -> list[dict[str, Any]]:
         """
         Detect contradictions in the knowledge graph.
         
@@ -276,8 +277,8 @@ class UncertaintyHandler:
         
         return contradictions
     
-    def resolve_contradiction(self, contradiction: Dict[str, Any], 
-                           strategy: str = "auto") -> Dict[str, Any]:
+    def resolve_contradiction(self, contradiction: dict[str, Any], 
+                           strategy: str = "auto") -> dict[str, Any]:
         """
         Resolve a contradiction using the specified strategy.
         
@@ -400,8 +401,8 @@ class UncertaintyHandler:
         
         return resolution_result
     
-    def _record_contradiction_resolution(self, contradiction: Dict[str, Any], 
-                                      resolution: Dict[str, Any]):
+    def _record_contradiction_resolution(self, contradiction: dict[str, Any], 
+                                      resolution: dict[str, Any]):
         """Record a contradiction resolution in the database."""
         if self.conn is not None:
             conn = self.conn
@@ -463,7 +464,7 @@ class UncertaintyHandler:
             if self.conn is None:
                 conn.close()
     
-    def _apply_resolution(self, resolution: Dict[str, Any]):
+    def _apply_resolution(self, resolution: dict[str, Any]):
         """Apply the resolution by updating the graph store."""
         if not self.graph_store:
             logger.warning("Graph store not available. Cannot apply resolution.")
@@ -527,7 +528,7 @@ class UncertaintyHandler:
                 conn.close()
     
     def add_probability_distribution(self, entity_id: int, relation_id: int, 
-                                  distribution_type: str, distribution_data: Dict[str, Any]):
+                                  distribution_type: str, distribution_data: dict[str, Any]):
         """
         Add a probability distribution to represent uncertainty about a fact.
         
@@ -571,7 +572,7 @@ class UncertaintyHandler:
             if self.conn is None:
                 conn.close()
     
-    def get_probability_distribution(self, entity_id: int, relation_id: int) -> Optional[Dict[str, Any]]:
+    def get_probability_distribution(self, entity_id: int, relation_id: int) -> dict[str, Any] | None:
         """
         Get the probability distribution for a fact.
         
@@ -617,7 +618,7 @@ class UncertaintyHandler:
                 conn.close()
     
     def update_source_reliability(self, source_name: str, reliability_score: float, 
-                              metadata: Dict[str, Any] = None):
+                              metadata: dict[str, Any] = None):
         """
         Update the reliability score for a source.
         
@@ -793,7 +794,7 @@ class UncertaintyHandler:
                 conn.close()
     
     def get_belief_revision_history(self, entity_id: int = None, relation_id: int = None, 
-                                 limit: int = 10) -> List[Dict[str, Any]]:
+                                 limit: int = 10) -> list[dict[str, Any]]:
         """
         Get the revision history for a belief.
         
@@ -864,8 +865,8 @@ class UncertaintyHandler:
                 
         return revisions
     
-    def reason_with_incomplete_information(self, query: Dict[str, Any], 
-                                       available_knowledge: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def reason_with_incomplete_information(self, query: dict[str, Any], 
+                                       available_knowledge: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Reason with incomplete information to provide best possible answers.
         
@@ -924,8 +925,8 @@ class UncertaintyHandler:
         
         return result
     
-    def _identify_missing_information(self, query: Dict[str, Any], 
-                                   available_knowledge: List[Dict[str, Any]]) -> List[str]:
+    def _identify_missing_information(self, query: dict[str, Any], 
+                                   available_knowledge: list[dict[str, Any]]) -> list[str]:
         """Identify what information is missing to answer a query."""
         missing = []
         
@@ -946,8 +947,8 @@ class UncertaintyHandler:
         
         return missing
     
-    def _find_partial_matches(self, query: Dict[str, Any], 
-                           available_knowledge: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _find_partial_matches(self, query: dict[str, Any], 
+                           available_knowledge: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Find partial matches for a query with incomplete information."""
         matches = []
         

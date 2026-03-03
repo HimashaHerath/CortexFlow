@@ -3,9 +3,10 @@ CortexFlow Reasoning Engine module.
 
 This module provides advanced reasoning capabilities over the knowledge graph.
 """
+from __future__ import annotations
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple, Set, Union, Generator
+from typing import Any, Generator
 import json
 import time
 import copy
@@ -37,12 +38,12 @@ class ReasoningStep:
         self,
         step_id: str,
         description: str,
-        input_entities: List[str] = None,
-        output_entities: List[str] = None,
-        relations_used: List[str] = None,
+        input_entities: list[str] = None,
+        output_entities: list[str] = None,
+        relations_used: list[str] = None,
         confidence: float = 1.0,
         explanation: str = "",
-        metadata: Dict[str, Any] = None
+        metadata: dict[str, Any] = None
     ):
         """
         Initialize a reasoning step.
@@ -66,7 +67,7 @@ class ReasoningStep:
         self.explanation = explanation
         self.metadata = metadata or {}
         
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "step_id": self.step_id,
@@ -80,7 +81,7 @@ class ReasoningStep:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ReasoningStep':
+    def from_dict(cls, data: dict[str, Any]) -> 'ReasoningStep':
         """Create from dictionary representation."""
         return cls(
             step_id=data.get("step_id", ""),
@@ -117,14 +118,14 @@ class ReasoningState:
         """
         self.query_id = query_id
         self.original_query = original_query
-        self.steps: List[ReasoningStep] = []
-        self.current_entities: Set[str] = set()
+        self.steps: list[ReasoningStep] = []
+        self.current_entities: set[str] = set()
         self.current_step_index: int = 0
         self.completed: bool = False
-        self.result: Dict[str, Any] = {}
+        self.result: dict[str, Any] = {}
         self.start_time = time.time()
-        self.end_time: Optional[float] = None
-        self.metadata: Dict[str, Any] = {}
+        self.end_time: float | None = None
+        self.metadata: dict[str, Any] = {}
         
     def add_step(self, step: ReasoningStep) -> None:
         """Add a reasoning step to the state."""
@@ -132,7 +133,7 @@ class ReasoningState:
         self.current_entities.update(step.output_entities)
         self.current_step_index += 1
         
-    def complete(self, result: Dict[str, Any]) -> None:
+    def complete(self, result: dict[str, Any]) -> None:
         """Mark the reasoning process as complete."""
         self.completed = True
         self.result = result
@@ -143,7 +144,7 @@ class ReasoningState:
         end = self.end_time or time.time()
         return end - self.start_time
         
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "query_id": self.query_id,
@@ -176,7 +177,7 @@ class QueryPlanner:
         self.inference_engine = getattr(knowledge_store, 'inference_engine', None)
         self.graph_store = getattr(knowledge_store, 'graph_store', None)
         
-    def plan_query(self, query: str) -> List[Dict[str, Any]]:
+    def plan_query(self, query: str) -> list[dict[str, Any]]:
         """
         Break down a complex query into reasoning steps.
         
@@ -199,7 +200,7 @@ class QueryPlanner:
         else:
             return self._plan_generic_query(query, entities, relations)
     
-    def _extract_query_components(self, query: str) -> Tuple[List[str], List[str]]:
+    def _extract_query_components(self, query: str) -> tuple[list[str], list[str]]:
         """Extract entities and relations from the query."""
         entities = []
         relations = []
@@ -230,7 +231,7 @@ class QueryPlanner:
         temporal_indicators = ["when", "before", "after", "during", "timeline", "history", "evolution"]
         return any(indicator in query.lower() for indicator in temporal_indicators)
     
-    def _plan_causal_query(self, query: str, entities: List[str], relations: List[str]) -> List[Dict[str, Any]]:
+    def _plan_causal_query(self, query: str, entities: list[str], relations: list[str]) -> list[dict[str, Any]]:
         """Plan steps for a causal query."""
         steps = []
         
@@ -256,7 +257,7 @@ class QueryPlanner:
         
         return steps
     
-    def _plan_comparison_query(self, query: str, entities: List[str], relations: List[str]) -> List[Dict[str, Any]]:
+    def _plan_comparison_query(self, query: str, entities: list[str], relations: list[str]) -> list[dict[str, Any]]:
         """Plan steps for a comparison query."""
         steps = []
         
@@ -281,7 +282,7 @@ class QueryPlanner:
         
         return steps
     
-    def _plan_temporal_query(self, query: str, entities: List[str], relations: List[str]) -> List[Dict[str, Any]]:
+    def _plan_temporal_query(self, query: str, entities: list[str], relations: list[str]) -> list[dict[str, Any]]:
         """Plan steps for a temporal query."""
         steps = []
         
@@ -301,7 +302,7 @@ class QueryPlanner:
         
         return steps
     
-    def _plan_generic_query(self, query: str, entities: List[str], relations: List[str]) -> List[Dict[str, Any]]:
+    def _plan_generic_query(self, query: str, entities: list[str], relations: list[str]) -> list[dict[str, Any]]:
         """Plan steps for a generic query."""
         steps = []
         
@@ -357,11 +358,11 @@ class ReasoningEngine:
         self.query_planner = QueryPlanner(knowledge_store, config)
         
         # Active reasoning states
-        self.active_states: Dict[str, ReasoningState] = {}
+        self.active_states: dict[str, ReasoningState] = {}
         
         logger.info("Reasoning engine initialized")
     
-    def reason(self, query: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def reason(self, query: str, context: dict[str, Any] = None) -> dict[str, Any]:
         """
         Perform multi-step reasoning to answer a complex query.
         
@@ -433,8 +434,8 @@ class ReasoningEngine:
         query: str,
         strategy: str,
         state: ReasoningState,
-        step_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        step_plan: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a reasoning step using the specified strategy."""
         if strategy == ReasoningStrategy.FORWARD_CHAINING.value:
             return self._forward_chaining_step(query, state, step_plan)
@@ -455,8 +456,8 @@ class ReasoningEngine:
         self, 
         query: str,
         state: ReasoningState,
-        step_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        step_plan: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a forward chaining reasoning step."""
         if not self.inference_engine:
             return {
@@ -500,8 +501,8 @@ class ReasoningEngine:
         self, 
         query: str,
         state: ReasoningState,
-        step_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        step_plan: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a backward chaining reasoning step."""
         if not self.inference_engine:
             return {
@@ -556,8 +557,8 @@ class ReasoningEngine:
         self, 
         query: str,
         state: ReasoningState,
-        step_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        step_plan: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute an abductive reasoning step."""
         if not self.inference_engine:
             return {
@@ -617,8 +618,8 @@ class ReasoningEngine:
         self, 
         query: str,
         state: ReasoningState,
-        step_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        step_plan: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a bidirectional search step."""
         if not self.graph_store:
             return {
@@ -691,8 +692,8 @@ class ReasoningEngine:
         self, 
         query: str,
         state: ReasoningState,
-        step_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        step_plan: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a weighted path search step."""
         if not self.graph_store:
             return {
@@ -767,8 +768,8 @@ class ReasoningEngine:
         self, 
         query: str,
         state: ReasoningState,
-        step_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        step_plan: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a constrained path search step."""
         if not self.graph_store:
             return {
@@ -845,8 +846,8 @@ class ReasoningEngine:
         self, 
         query: str,
         state: ReasoningState,
-        step_plan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        step_plan: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a default reasoning step."""
         # Extract entities
         entities = step_plan.get("entities", [])
@@ -890,7 +891,7 @@ class ReasoningEngine:
             "explanation": f"Explored {len(neighbors)} neighboring entities."
         }
     
-    def _generate_path_explanation(self, path: List[Dict[str, Any]]) -> str:
+    def _generate_path_explanation(self, path: list[dict[str, Any]]) -> str:
         """
         Generate a human-readable explanation of a path.
         
@@ -915,7 +916,7 @@ class ReasoningEngine:
         
         return " → ".join(explanation)
     
-    def _prepare_result(self, state: ReasoningState) -> Dict[str, Any]:
+    def _prepare_result(self, state: ReasoningState) -> dict[str, Any]:
         """Prepare the final result from a reasoning state."""
         if not state.steps:
             return {

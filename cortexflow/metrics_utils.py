@@ -2,9 +2,10 @@
 Utility functions for evaluating RAG systems.
 This module provides standardized metrics for retrieval quality evaluation.
 """
+from __future__ import annotations
 
 import numpy as np
-from typing import List, Dict, Any, Set, Tuple
+from typing import Any
 
 def normalize_text(text: str) -> str:
     """
@@ -28,7 +29,7 @@ def normalize_text(text: str) -> str:
     
     return text
 
-def extract_entities(text: str) -> Set[str]:
+def extract_entities(text: str) -> set[str]:
     """
     Extract potential entities from text.
     
@@ -50,7 +51,7 @@ def extract_entities(text: str) -> Set[str]:
     
     return set(tokens + bigrams)
 
-def calculate_precision(expected_entities: List[str], retrieved_texts: List[str]) -> float:
+def calculate_precision(expected_entities: list[str], retrieved_texts: list[str]) -> float:
     """
     Calculate precision of retrieved results.
     
@@ -74,7 +75,7 @@ def calculate_precision(expected_entities: List[str], retrieved_texts: List[str]
     
     return relevant_count / len(retrieved_texts)
 
-def calculate_recall(expected_entities: List[str], retrieved_texts: List[str]) -> float:
+def calculate_recall(expected_entities: list[str], retrieved_texts: list[str]) -> float:
     """
     Calculate recall of retrieved results.
     
@@ -116,7 +117,7 @@ def calculate_f1(precision: float, recall: float) -> float:
         return 0.0
     return 2 * (precision * recall) / (precision + recall)
 
-def calculate_mrr(expected_entities: List[str], ranked_results: List[str]) -> float:
+def calculate_mrr(expected_entities: list[str], ranked_results: list[str]) -> float:
     """
     Calculate Mean Reciprocal Rank (MRR) for ranking quality.
     
@@ -140,7 +141,7 @@ def calculate_mrr(expected_entities: List[str], ranked_results: List[str]) -> fl
     
     return 0.0  # No relevant results found
 
-def calculate_path_accuracy(expected_path: List[str], actual_path: str) -> float:
+def calculate_path_accuracy(expected_path: list[str], actual_path: str) -> float:
     """
     Calculate accuracy of a graph path.
     
@@ -191,7 +192,7 @@ def evaluate_hop_accuracy(expected_hops: int, actual_hops: int) -> float:
     hop_ratio = min(actual_hops / expected_hops, expected_hops / actual_hops) if actual_hops > 0 else 0
     return hop_ratio
 
-def evaluate_llm_answer(answer: str, expected_entities: List[str]) -> float:
+def evaluate_llm_answer(answer: str, expected_entities: list[str]) -> float:
     """
     Evaluate accuracy of LLM answer against expected entities.
     
@@ -218,7 +219,7 @@ def evaluate_llm_answer(answer: str, expected_entities: List[str]) -> float:
     
     return found_count / len(expected_entities)
 
-def calculate_benchmark_metrics(query_results: List[Dict[str, Any]], expected_data: Dict[str, Any]) -> Dict[str, float]:
+def calculate_benchmark_metrics(query_results: list[dict[str, Any]], expected_data: dict[str, Any]) -> dict[str, float]:
     """
     Calculate comprehensive metrics for benchmark evaluation.
     

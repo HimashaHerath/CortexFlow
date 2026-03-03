@@ -3,13 +3,14 @@ CortexFlow Classifier module.
 
 This module provides content classification functionality for CortexFlow.
 """
+from __future__ import annotations
 
 import time
 import logging
 import numpy as np
 
 logger = logging.getLogger(__name__)
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 import re
 import json
 from cortexflow.config import CortexFlowConfig
@@ -171,7 +172,7 @@ class LLMClassifier:
         Rate the importance as a single number between 0.0 and 1.0:
         """
     
-    def classify(self, segment: ContextSegment, context: List[ContextSegment] = None) -> float:
+    def classify(self, segment: ContextSegment, context: list[ContextSegment] = None) -> float:
         """
         Classify importance using LLM.
         
@@ -269,7 +270,7 @@ class ImportanceClassifier:
         if hasattr(config, 'llm_weight'):
             self.llm_weight = config.llm_weight
             
-    def classify(self, segment: ContextSegment, context: List[ContextSegment] = None) -> float:
+    def classify(self, segment: ContextSegment, context: list[ContextSegment] = None) -> float:
         """
         Classify the importance of a context segment.
 
@@ -358,7 +359,7 @@ class ContentClassifier:
             except Exception as e:
                 logger.error(f"Error loading classifier model: {e}")
     
-    def classify(self, content: str) -> Dict[str, Any]:
+    def classify(self, content: str) -> dict[str, Any]:
         """
         Classify the content of a message.
         

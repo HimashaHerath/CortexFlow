@@ -5,9 +5,9 @@ Lightweight regex-based detector for personal facts in conversation messages.
 No external dependencies required (uses stdlib re). Optional spaCy NER boost
 when available.
 """
+from __future__ import annotations
 
 import re
-from typing import List, Dict, Optional
 
 
 class PersonalFactDetector:
@@ -90,7 +90,7 @@ class PersonalFactDetector:
         """
         return bool(self._QUICK_HINTS.search(text))
 
-    def detect_facts(self, text: str) -> List[Dict]:
+    def detect_facts(self, text: str) -> list[dict]:
         """Extract personal facts from text.
 
         Args:
@@ -99,7 +99,7 @@ class PersonalFactDetector:
         Returns:
             List of dicts with keys: fact_text, fact_type, confidence, value.
         """
-        facts: List[Dict] = []
+        facts: list[dict] = []
         seen_values: set = set()
 
         for fact_type, patterns in self._PATTERNS.items():

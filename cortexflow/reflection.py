@@ -3,12 +3,13 @@ CortexFlow Reflection module.
 
 This module provides self-reflection capabilities for CortexFlow.
 """
+from __future__ import annotations
 
 import logging
 import json
 import time
 import re
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import Any
 
 from cortexflow.config import CortexFlowConfig
 from cortexflow.knowledge import KnowledgeStore
@@ -29,7 +30,7 @@ class ReflectionEngine:
     def __init__(
         self, 
         config: CortexFlowConfig,
-        knowledge_store: Optional[KnowledgeStore] = None,
+        knowledge_store: KnowledgeStore | None = None,
     ):
         """
         Initialize the reflection engine with configuration.
@@ -58,8 +59,8 @@ class ReflectionEngine:
     def verify_knowledge_relevance(
         self,
         query: str,
-        knowledge_items: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        knowledge_items: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Verify the relevance of knowledge items to the query.
 
@@ -111,7 +112,7 @@ class ReflectionEngine:
             # Fall back to original items if parsing fails
             return knowledge_items
     
-    def _extract_claims(self, response: str) -> List[str]:
+    def _extract_claims(self, response: str) -> list[str]:
         """Extract key claims from a response using sentence splitting.
 
         Splits the response into sentences and filters out very short or
@@ -135,9 +136,9 @@ class ReflectionEngine:
 
     def _compute_kb_support_ratio(
         self,
-        claims: List[str],
-        knowledge_items: List[Dict[str, Any]]
-    ) -> Tuple[float, List[Dict[str, Any]]]:
+        claims: list[str],
+        knowledge_items: list[dict[str, Any]]
+    ) -> tuple[float, list[dict[str, Any]]]:
         """Compute what fraction of claims have supporting evidence in the KB.
 
         For each claim, checks whether any knowledge item contains overlapping
@@ -195,8 +196,8 @@ class ReflectionEngine:
         self,
         query: str,
         response: str,
-        knowledge_items: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        knowledge_items: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Check for inconsistencies between response and knowledge items.
 
@@ -263,8 +264,8 @@ class ReflectionEngine:
         self,
         query: str,
         original_response: str,
-        knowledge_items: List[Dict[str, Any]],
-        consistency_result: Dict[str, Any]
+        knowledge_items: list[dict[str, Any]],
+        consistency_result: dict[str, Any]
     ) -> str:
         """
         Revise the response based on detected inconsistencies.
@@ -312,7 +313,7 @@ class ReflectionEngine:
     def _create_relevance_prompt(
         self, 
         query: str, 
-        knowledge_items: List[Dict[str, Any]]
+        knowledge_items: list[dict[str, Any]]
     ) -> str:
         """Create a prompt for knowledge relevance verification."""
         knowledge_texts = []
@@ -353,7 +354,7 @@ RELEVANCE ASSESSMENT:"""
         self, 
         query: str, 
         response: str, 
-        knowledge_items: List[Dict[str, Any]]
+        knowledge_items: list[dict[str, Any]]
     ) -> str:
         """Create a prompt for response consistency checking."""
         knowledge_texts = []
@@ -391,8 +392,8 @@ CONSISTENCY ASSESSMENT:"""
         self, 
         query: str, 
         original_response: str, 
-        knowledge_items: List[Dict[str, Any]],
-        consistency_result: Dict[str, Any]
+        knowledge_items: list[dict[str, Any]],
+        consistency_result: dict[str, Any]
     ) -> str:
         """Create a prompt for response revision."""
         knowledge_texts = []
@@ -449,8 +450,8 @@ REVISED RESPONSE:"""
     def _parse_relevance_response(
         self, 
         response: str, 
-        knowledge_items: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        knowledge_items: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Parse the relevance assessment response."""
         try:
             # Extract JSON from response
@@ -500,7 +501,7 @@ REVISED RESPONSE:"""
                 for item in knowledge_items
             ]
     
-    def _parse_consistency_response(self, response: str) -> Dict[str, Any]:
+    def _parse_consistency_response(self, response: str) -> dict[str, Any]:
         """Parse the consistency check response."""
         try:
             # Extract JSON from response

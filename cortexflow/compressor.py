@@ -3,9 +3,10 @@ CortexFlow Compressor module.
 
 This module provides context compression functionality for CortexFlow.
 """
+from __future__ import annotations
 
 import re
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
 from cortexflow.config import CortexFlowConfig
 from cortexflow.memory import ContextSegment
@@ -48,7 +49,7 @@ class ExtractiveSummarizer:
             "he", "she", "his", "her", "i", "you", "we", "my", "your", "our"
         }
     
-    def extract_keywords(self, text: str, top_n: int = 10) -> List[str]:
+    def extract_keywords(self, text: str, top_n: int = 10) -> list[str]:
         """
         Extract key terms from text.
         
@@ -85,7 +86,7 @@ class ExtractiveSummarizer:
             cls._fact_detector = PersonalFactDetector(use_spacy=False)
         return cls._fact_detector
 
-    def rank_sentences(self, text: str, keywords: List[str]) -> List[Tuple[str, float]]:
+    def rank_sentences(self, text: str, keywords: list[str]) -> list[tuple[str, float]]:
         """
         Rank sentences by keyword presence.
 
@@ -233,7 +234,7 @@ class LLMSummarizer:
 class ContextCompressor:
     """Context compressor that manages different compression strategies."""
 
-    def __init__(self, config: Optional[CortexFlowConfig] = None):
+    def __init__(self, config: CortexFlowConfig | None = None):
         """
         Initialize context compressor.
 
@@ -313,7 +314,7 @@ class ContextCompressor:
             metadata={**segment.metadata, "compressed": True, "original_length": len(content)}
         )
     
-    def progressive_compress(self, segments: List[ContextSegment], target_token_count: int) -> List[ContextSegment]:
+    def progressive_compress(self, segments: list[ContextSegment], target_token_count: int) -> list[ContextSegment]:
         """
         Progressively compress segments to meet target token count.
         

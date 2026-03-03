@@ -20,13 +20,14 @@ Migration Guide for CortexFlow 0.5.0 Knowledge Module Changes:
 
 For any issues or questions, please refer to the documentation or open an issue on the GitHub repository.
 """
+from __future__ import annotations
 
 import os
 import time
 import json
 import sqlite3
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 from sqlitedict import SqliteDict
 from datetime import datetime
 import logging
@@ -65,7 +66,7 @@ from cortexflow.interfaces import KnowledgeStoreInterface
 class SearchStrategy(Protocol):
     """Strategy interface for search methods."""
     
-    def search(self, knowledge_store: 'KnowledgeStore', **kwargs) -> List[Dict[str, Any]]:
+    def search(self, knowledge_store: 'KnowledgeStore', **kwargs) -> list[dict[str, Any]]:
         """
         Execute the search strategy.
         
@@ -82,7 +83,7 @@ class SearchStrategy(Protocol):
 class BM25SearchStrategy:
     """BM25 search strategy for keyword-based retrieval."""
     
-    def search(self, knowledge_store: 'KnowledgeStore', query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    def search(self, knowledge_store: 'KnowledgeStore', query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform BM25 search for keyword-based retrieval.
         
@@ -149,7 +150,7 @@ class BM25SearchStrategy:
 class DenseVectorSearchStrategy:
     """Dense vector search strategy using embeddings."""
     
-    def search(self, knowledge_store: 'KnowledgeStore', query_embedding: np.ndarray, max_results: int = 10) -> List[Dict[str, Any]]:
+    def search(self, knowledge_store: 'KnowledgeStore', query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform vector similarity search for embeddings.
         
@@ -240,7 +241,7 @@ class DenseVectorSearchStrategy:
 class HybridSearchStrategy:
     """Hybrid search strategy combining dense vector and sparse BM25 results."""
     
-    def search(self, knowledge_store: 'KnowledgeStore', query: str, query_embedding: np.ndarray, max_results: int = 10) -> List[Dict[str, Any]]:
+    def search(self, knowledge_store: 'KnowledgeStore', query: str, query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform hybrid search combining dense vector and sparse BM25 results.
         
@@ -318,7 +319,7 @@ class HybridSearchStrategy:
 class KeywordSearchStrategy:
     """Basic keyword search strategy."""
     
-    def search(self, knowledge_store: 'KnowledgeStore', query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    def search(self, knowledge_store: 'KnowledgeStore', query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Basic keyword search as fallback when vector/BM25 is not available.
         
@@ -687,7 +688,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
             logging.error("In-memory connection not initialized")
             self.conn = None
     
-    def _generate_embedding(self, text: str) -> Optional[np.ndarray]:
+    def _generate_embedding(self, text: str) -> np.ndarray | None:
         """
         Generate embedding vector for text with caching.
         
@@ -926,7 +927,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return fact_id
     
-    def get_facts_about(self, subject: str) -> List[Dict[str, Any]]:
+    def get_facts_about(self, subject: str) -> list[dict[str, Any]]:
         """
         Retrieve facts about a subject.
         
@@ -951,7 +952,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return facts
     
-    def get_facts_by_predicate(self, predicate: str) -> List[Dict[str, Any]]:
+    def get_facts_by_predicate(self, predicate: str) -> list[dict[str, Any]]:
         """
         Retrieve facts by predicate.
         
@@ -1029,7 +1030,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return count
     
-    def store_conversation_summary(self, summary: str, keywords: List[str], 
+    def store_conversation_summary(self, summary: str, keywords: list[str], 
                                  timestamp: float = None) -> str:
         """
         Store a conversation summary with keywords.
@@ -1072,7 +1073,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return summary_id
     
-    def _bm25_search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    def _bm25_search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform BM25 search for keyword-based retrieval.
         
@@ -1085,7 +1086,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """
         return self.search_strategy(strategy="bm25", query=query, max_results=max_results)
     
-    def _dense_vector_search(self, query_embedding: np.ndarray, max_results: int = 10) -> List[Dict[str, Any]]:
+    def _dense_vector_search(self, query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform vector similarity search for embeddings.
         
@@ -1098,7 +1099,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """
         return self.search_strategy(strategy="dense_vector", query_embedding=query_embedding, max_results=max_results)
     
-    def _hybrid_search(self, query: str, query_embedding: np.ndarray, max_results: int = 10) -> List[Dict[str, Any]]:
+    def _hybrid_search(self, query: str, query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform hybrid search combining dense vector and sparse BM25 results.
         
@@ -1112,7 +1113,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """
         return self.search_strategy(strategy="hybrid", query=query, query_embedding=query_embedding, max_results=max_results)
     
-    def _keyword_search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    def _keyword_search(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Basic keyword search as fallback when vector/BM25 is not available.
         
@@ -1125,7 +1126,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """
         return self.search_strategy(strategy="keyword", query=query, max_results=max_results)
     
-    def search_strategy(self, strategy: str, **kwargs) -> List[Dict[str, Any]]:
+    def search_strategy(self, strategy: str, **kwargs) -> list[dict[str, Any]]:
         """
         Use a specific search strategy.
         
@@ -1142,7 +1143,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
             
         return self._search_strategies[strategy].search(self, **kwargs)
     
-    def _rerank_results(self, query: str, results: List[Dict[str, Any]], max_results: int = 5) -> List[Dict[str, Any]]:
+    def _rerank_results(self, query: str, results: list[dict[str, Any]], max_results: int = 5) -> list[dict[str, Any]]:
         """
         Re-rank search results for improved relevance.
         
@@ -1208,7 +1209,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
             # Fall back to original results on error
             return results[:max_results]
         
-    def get_relevant_knowledge(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    def get_relevant_knowledge(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Get relevant knowledge for a query using hybrid search.
         
@@ -1301,7 +1302,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
             
         return final_results
     
-    def _graph_search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    def _graph_search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Get knowledge from graph store relevant to the query.
         
@@ -1491,7 +1492,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return results
     
-    def _format_path_as_text(self, path: List[Dict[str, Any]]) -> str:
+    def _format_path_as_text(self, path: list[dict[str, Any]]) -> str:
         """
         Format a graph path as readable text.
         
@@ -1521,7 +1522,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return " → ".join(path_segments)
     
-    def extract_facts_from_text(self, text: str) -> List[Tuple[str, str, str]]:
+    def extract_facts_from_text(self, text: str) -> list[tuple[str, str, str]]:
         """
         Extract fact triples from text.
 
@@ -1570,7 +1571,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return facts
     
-    def remember_explicit(self, text: str, source: str = "user_command", confidence: float = 0.95) -> List[int]:
+    def remember_explicit(self, text: str, source: str = "user_command", confidence: float = 0.95) -> list[int]:
         """
         Explicitly add knowledge to the knowledge store, with special handling for facts marked with a trust marker.
         
@@ -1708,7 +1709,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return item_id
     
-    def add_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> List[int]:
+    def add_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> list[int]:
         """
         Add knowledge to the system, the primary method for adding knowledge programmatically.
         
@@ -1722,7 +1723,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """
         return self.remember_explicit(text, source or "system", confidence)
     
-    def remember_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> List[int]:
+    def remember_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> list[int]:
         """Deprecated: Use add_knowledge() instead."""
         warnings.warn(
             "remember_knowledge() is deprecated, use add_knowledge()",
@@ -1730,7 +1731,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         )
         return self.add_knowledge(text, source, confidence)
     
-    def _expand_query(self, query: str) -> List[str]:
+    def _expand_query(self, query: str) -> list[str]:
         """
         Expand a query with synonyms and related terms to improve search.
         
@@ -1822,7 +1823,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         self.close()
         return False
             
-    def get_snapshots(self) -> List[Dict[str, Any]]:
+    def get_snapshots(self) -> list[dict[str, Any]]:
         """
         Get snapshots of the knowledge store for consistency evaluation.
         
@@ -1875,7 +1876,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
             
         return snapshots
     
-    def take_snapshot(self) -> Dict[str, Any]:
+    def take_snapshot(self) -> dict[str, Any]:
         """
         Take a snapshot of the current knowledge state.
         
@@ -1938,7 +1939,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         return snapshot
 
     # Implement methods required by KnowledgeStoreInterface
-    def remember(self, text: str, source: Optional[str] = None) -> List[int]:
+    def remember(self, text: str, source: str | None = None) -> list[int]:
         """
         Store knowledge in the system as required by KnowledgeStoreInterface.
         
@@ -1951,7 +1952,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """
         return self.add_knowledge(text, source)
     
-    def retrieve(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Retrieve knowledge relevant to the query as required by KnowledgeStoreInterface.
         
@@ -2000,7 +2001,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         # Clear embedding cache
         self.embedding_cache = {}
     
-    def retrieve_context(self, query: str, max_results: int = 5, min_score: float = 0.0) -> List[Dict[str, Any]]:
+    def retrieve_context(self, query: str, max_results: int = 5, min_score: float = 0.0) -> list[dict[str, Any]]:
         """
         Retrieve relevant context for a query.
         
@@ -2227,7 +2228,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         
         return deduplicated_results[:max_results]
     
-    def generate_hypotheses(self, observation: str, max_hypotheses: int = 3) -> List[Dict[str, Any]]:
+    def generate_hypotheses(self, observation: str, max_hypotheses: int = 3) -> list[dict[str, Any]]:
         """
         Generate hypotheses to explain an observation using abductive reasoning.
         

@@ -3,23 +3,25 @@ Core interfaces for CortexFlow.
 All components should implement these interfaces for consistency and extensibility.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Iterator
+from typing import Any, Iterator
 
 
 class ContextProvider(ABC):
     """Base interface for context providers."""
-    
+
     @abstractmethod
-    def add_message(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def add_message(self, role: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """Add a message to the context."""
         pass
-    
+
     @abstractmethod
-    def get_context(self) -> Dict[str, Any]:
+    def get_context(self) -> dict[str, Any]:
         """Get the current context for model consumption."""
         pass
-    
+
     @abstractmethod
     def clear_context(self) -> None:
         """Clear all context data."""
@@ -28,17 +30,17 @@ class ContextProvider(ABC):
 
 class MemoryTierInterface(ABC):
     """Interface for memory tiers."""
-    
+
     @abstractmethod
     def add_content(self, content: Any, importance: float) -> bool:
         """Add content to this tier."""
         pass
-    
+
     @abstractmethod
     def get_content(self) -> Any:
         """Get all content from this tier."""
         pass
-    
+
     @abstractmethod
     def update_size(self, new_size: int) -> bool:
         """Update the size/capacity of this tier."""
@@ -49,7 +51,7 @@ class KnowledgeStoreInterface(ABC):
     """Interface for knowledge stores."""
 
     @abstractmethod
-    def add_knowledge(self, text: str, source: Optional[str] = None, confidence: float = 0.95) -> List[int]:
+    def add_knowledge(self, text: str, source: str | None = None, confidence: float = 0.95) -> list[int]:
         """Store knowledge in the system.
 
         Args:
@@ -63,7 +65,7 @@ class KnowledgeStoreInterface(ABC):
         pass
 
     @abstractmethod
-    def retrieve(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """Retrieve knowledge relevant to the query."""
         pass
 
@@ -77,7 +79,7 @@ class LLMProviderInterface(ABC):
     """Interface for LLM providers."""
 
     @abstractmethod
-    def generate(self, messages: List[Dict[str, str]], model: str = None, **kwargs) -> str:
+    def generate(self, messages: list[dict[str, str]], model: str = None, **kwargs) -> str:
         """Generate a response from a list of role/content messages."""
         pass
 
@@ -87,6 +89,14 @@ class LLMProviderInterface(ABC):
         pass
 
     @abstractmethod
-    def generate_stream(self, messages: List[Dict[str, str]], model: str = None, **kwargs) -> Iterator[str]:
+    def generate_stream(self, messages: list[dict[str, str]], model: str = None, **kwargs) -> Iterator[str]:
         """Stream a response from a list of role/content messages."""
-        pass 
+        pass
+
+    async def agenerate(self, messages: list[dict[str, str]], model: str = None, **kwargs) -> str:
+        """Async generate a response. Default delegates to sync."""
+        return self.generate(messages, model=model, **kwargs)
+
+    async def agenerate_from_prompt(self, prompt: str, model: str = None, **kwargs) -> str:
+        """Async generate from prompt. Default delegates to sync."""
+        return self.generate_from_prompt(prompt, model=model, **kwargs)

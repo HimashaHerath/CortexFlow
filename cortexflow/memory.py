@@ -3,11 +3,12 @@ CortexFlow Memory module.
 
 This module provides the memory management system for the CortexFlow.
 """
+from __future__ import annotations
 
 import time
 import logging
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
 from .config import CortexFlowConfig
 from .interfaces import MemoryTierInterface
@@ -22,7 +23,7 @@ class ContextSegment:
     timestamp: float
     token_count: int
     segment_type: str  # 'user', 'assistant', 'system', etc.
-    metadata: Dict[str, Any] = None
+    metadata: dict[str, Any] = None
     
     def __post_init__(self):
         if self.metadata is None:
@@ -47,7 +48,7 @@ class MemoryTier(MemoryTierInterface):
         """
         self.name = name
         self.max_tokens = max_tokens
-        self.segments: List[ContextSegment] = []
+        self.segments: list[ContextSegment] = []
         self.current_token_count = 0
     
     def add_content(self, content: Any, importance: float) -> bool:
@@ -91,7 +92,7 @@ class MemoryTier(MemoryTierInterface):
         self.current_token_count += segment.token_count
         return True
     
-    def remove_segment(self, index: int) -> Optional[ContextSegment]:
+    def remove_segment(self, index: int) -> ContextSegment | None:
         """
         Remove a segment at the specified index.
         
@@ -128,7 +129,7 @@ class MemoryTier(MemoryTierInterface):
         """
         return self.update_token_limit(new_size)
         
-    def get_segments_by_importance(self, threshold: float) -> List[ContextSegment]:
+    def get_segments_by_importance(self, threshold: float) -> list[ContextSegment]:
         """
         Get segments with importance greater than or equal to the threshold.
         
@@ -140,7 +141,7 @@ class MemoryTier(MemoryTierInterface):
         """
         return [segment for segment in self.segments if segment.importance >= threshold]
     
-    def get_least_important_segment(self) -> Optional[int]:
+    def get_least_important_segment(self) -> int | None:
         """
         Find the index of the least important segment.
         
@@ -339,7 +340,7 @@ class ConversationMemory:
                 
         return success
     
-    def add_message(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def add_message(self, role: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Add a new message to the conversation memory.
 
@@ -619,7 +620,7 @@ class ConversationMemory:
             )
 
     @staticmethod
-    def _get_demotable_segment_index(tier) -> Optional[int]:
+    def _get_demotable_segment_index(tier) -> int | None:
         """Get the index of the least important non-system segment in a tier.
 
         System messages (importance >= 9.0) are never demoted or discarded.
@@ -645,7 +646,7 @@ class ConversationMemory:
         # Return the least important (factoring in age like get_least_important_segment)
         return min(candidates, key=lambda pair: (pair[1].importance, -pair[1].age))[0]
     
-    def get_context_messages(self, token_budget: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_context_messages(self, token_budget: int | None = None) -> list[dict[str, Any]]:
         """
         Get messages for context window from the tier system.
 
@@ -709,7 +710,7 @@ class ConversationMemory:
 
         return formatted_segments
     
-    def get_messages_by_role(self, role: str) -> List[Dict[str, Any]]:
+    def get_messages_by_role(self, role: str) -> list[dict[str, Any]]:
         """
         Get messages with specified role.
         
@@ -721,7 +722,7 @@ class ConversationMemory:
         """
         return [m for m in self.messages if m["role"] == role]
     
-    def get_last_message(self) -> Optional[Dict[str, Any]]:
+    def get_last_message(self) -> dict[str, Any] | None:
         """
         Get the most recent message.
         
@@ -789,7 +790,7 @@ class ConversationMemory:
             if len(self.tier_stats[tier]["usage_history"]) > 50:
                 self.tier_stats[tier]["usage_history"] = self.tier_stats[tier]["usage_history"][-50:]
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get memory statistics.
         
@@ -841,7 +842,7 @@ class ConversationMemory:
         
         logger.info("Conversation memory cleared")
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert memory to serializable dictionary.
         
@@ -859,7 +860,7 @@ class ConversationMemory:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], config: CortexFlowConfig) -> 'ConversationMemory':
+    def from_dict(cls, data: dict[str, Any], config: CortexFlowConfig) -> 'ConversationMemory':
         """
         Create from serialized dictionary.
         

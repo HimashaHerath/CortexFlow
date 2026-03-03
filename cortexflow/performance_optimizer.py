@@ -3,11 +3,12 @@ CortexFlow Performance Optimizer module.
 
 This module provides performance optimization capabilities for the knowledge graph in CortexFlow.
 """
+from __future__ import annotations
 
 import logging
 import time
 import json
-from typing import List, Dict, Any, Optional, Tuple, Set, Union
+from typing import Any
 import sqlite3
 from collections import defaultdict, Counter
 import heapq
@@ -46,7 +47,7 @@ class ReasoningPattern:
     Represents a reasoning pattern for caching purposes.
     """
     
-    def __init__(self, pattern_key: str, hop_count: int = 0, entities: List[str] = None, path: List[str] = None):
+    def __init__(self, pattern_key: str, hop_count: int = 0, entities: list[str] = None, path: list[str] = None):
         """
         Initialize a reasoning pattern.
         
@@ -69,7 +70,7 @@ class ReasoningPattern:
         self.hit_count += 1
         self.last_accessed = datetime.now()
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "pattern_key": self.pattern_key,
@@ -82,7 +83,7 @@ class ReasoningPattern:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ReasoningPattern':
+    def from_dict(cls, data: dict[str, Any]) -> 'ReasoningPattern':
         """Create from dictionary."""
         pattern = cls(
             pattern_key=data["pattern_key"],
@@ -216,7 +217,7 @@ class PerformanceOptimizer:
         except Exception as e:
             logger.error(f"Failed to save reasoning patterns: {e}")
     
-    def partition_graph(self, method: str = "louvain", partition_count: int = None) -> Dict[str, Any]:
+    def partition_graph(self, method: str = "louvain", partition_count: int = None) -> dict[str, Any]:
         """
         Partition the knowledge graph to improve query performance.
         
@@ -374,7 +375,7 @@ class PerformanceOptimizer:
             logger.error(f"Error during graph partitioning: {e}")
             return {"partitions": 0, "status": "failed", "reason": str(e)}
     
-    def create_hop_indexes(self, max_hops: int = 2, index_frequent_paths: bool = True) -> Dict[str, Any]:
+    def create_hop_indexes(self, max_hops: int = 2, index_frequent_paths: bool = True) -> dict[str, Any]:
         """
         Create indexes for multi-hop queries.
         
@@ -686,7 +687,7 @@ class PerformanceOptimizer:
         
         return indexes_created
     
-    def generate_query_plan(self, query: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_query_plan(self, query: dict[str, Any]) -> dict[str, Any]:
         """
         Generate an optimized query plan for reasoning over the knowledge graph.
         
@@ -843,7 +844,7 @@ class PerformanceOptimizer:
                 "error": str(e)
             }
     
-    def generate_pattern_key(self, pattern: Dict[str, Any]) -> str:
+    def generate_pattern_key(self, pattern: dict[str, Any]) -> str:
         """
         Generate a unique key for a reasoning pattern.
         
@@ -876,7 +877,7 @@ class PerformanceOptimizer:
         key_string = "|".join(components)
         return hashlib.md5(key_string.encode()).hexdigest()
     
-    def extract_pattern_from_query(self, query: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_pattern_from_query(self, query: dict[str, Any]) -> dict[str, Any]:
         """
         Extract a reasoning pattern from a query.
         
@@ -918,7 +919,7 @@ class PerformanceOptimizer:
         
         return pattern
     
-    def cache_reasoning_pattern(self, pattern_data: Dict[str, Any], result: Any) -> str:
+    def cache_reasoning_pattern(self, pattern_data: dict[str, Any], result: Any) -> str:
         """
         Cache a reasoning pattern and its result.
         
@@ -962,7 +963,7 @@ class PerformanceOptimizer:
         
         return pattern_key
     
-    def get_cached_reasoning(self, pattern_data: Dict[str, Any]) -> Tuple[bool, Any]:
+    def get_cached_reasoning(self, pattern_data: dict[str, Any]) -> tuple[bool, Any]:
         """
         Get cached reasoning result for a pattern.
         
@@ -1027,7 +1028,7 @@ class PerformanceOptimizer:
                     if key in self.reasoning_patterns:
                         del self.reasoning_patterns[key]
     
-    def optimize_query_execution(self, query: Dict[str, Any]) -> Dict[str, Any]:
+    def optimize_query_execution(self, query: dict[str, Any]) -> dict[str, Any]:
         """
         Optimize a query for execution.
         
@@ -1069,7 +1070,7 @@ class PerformanceOptimizer:
         
         return optimized_query
     
-    def _generate_cache_key(self, query: Dict[str, Any]) -> str:
+    def _generate_cache_key(self, query: dict[str, Any]) -> str:
         """
         Generate a cache key for a query.
         
@@ -1083,7 +1084,7 @@ class PerformanceOptimizer:
         normalized = json.dumps(query, sort_keys=True)
         return hashlib.md5(normalized.encode()).hexdigest()
     
-    def clear_caches(self) -> Dict[str, int]:
+    def clear_caches(self) -> dict[str, int]:
         """
         Clear all caches.
         
@@ -1104,7 +1105,7 @@ class PerformanceOptimizer:
             "reasoning_cache_cleared": reasoning_cache_size
         }
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get performance optimization statistics.
         

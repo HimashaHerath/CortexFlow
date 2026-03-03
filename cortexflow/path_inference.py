@@ -3,9 +3,10 @@ CortexFlow Path Inference module.
 
 This module provides advanced path-based inference capabilities for the knowledge graph.
 """
+from __future__ import annotations
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple, Set, Union, Generator
+from typing import Any
 import json
 import copy
 
@@ -28,7 +29,7 @@ class BidirectionalSearch:
         start_entity: str,
         end_entity: str,
         max_hops: int = 3
-    ) -> List[List[Dict[str, Any]]]:
+    ) -> list[list[dict[str, Any]]]:
         """
         Find paths between start and end entities using bidirectional search.
         
@@ -98,10 +99,10 @@ class BidirectionalSearch:
     
     def _expand_frontier(
         self,
-        frontier: Dict[str, List[Dict[str, Any]]],
-        visited: Set[str],
+        frontier: dict[str, list[dict[str, Any]]],
+        visited: set[str],
         direction: str
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         Expand a frontier in the search.
         
@@ -170,10 +171,10 @@ class BidirectionalSearch:
     
     def _construct_paths(
         self,
-        meeting_points: Set[str],
-        forward_paths: Dict[str, List[Dict[str, Any]]],
-        backward_paths: Dict[str, List[Dict[str, Any]]]
-    ) -> List[List[Dict[str, Any]]]:
+        meeting_points: set[str],
+        forward_paths: dict[str, list[dict[str, Any]]],
+        backward_paths: dict[str, list[dict[str, Any]]]
+    ) -> list[list[dict[str, Any]]]:
         """
         Construct full paths from meeting points.
         
@@ -221,7 +222,7 @@ class WeightedPathSearch:
         max_hops: int = 3,
         importance_weight: float = 0.5,
         confidence_weight: float = 0.5
-    ) -> List[List[Dict[str, Any]]]:
+    ) -> list[list[dict[str, Any]]]:
         """
         Find weighted paths between start and end entities.
         
@@ -360,10 +361,10 @@ class ConstrainedPathSearch:
         self,
         start_entity: str,
         end_entity: str,
-        allowed_relations: Optional[List[str]] = None,
-        excluded_relations: Optional[List[str]] = None,
+        allowed_relations: list[str] | None = None,
+        excluded_relations: list[str] | None = None,
         max_hops: int = 3
-    ) -> List[List[Dict[str, Any]]]:
+    ) -> list[list[dict[str, Any]]]:
         """
         Find paths with relation constraints.
         
@@ -482,7 +483,7 @@ class PathExplainer:
         """
         self.graph_store = graph_store
     
-    def explain_path(self, path: List[Dict[str, Any]]) -> str:
+    def explain_path(self, path: list[dict[str, Any]]) -> str:
         """
         Generate a human-readable explanation of a path.
         
