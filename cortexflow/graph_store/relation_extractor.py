@@ -4,6 +4,7 @@ RelationExtractor class and shared SVO extraction helpers.
 Provides advanced relation extraction capabilities using dependency parsing,
 semantic role labeling, and relation classification.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,7 +17,10 @@ from ._deps import SPACY_ENABLED, spacy
 # Shared SVO extraction helpers (used by both RelationExtractor and GraphStore)
 # ---------------------------------------------------------------------------
 
-def _extract_svo_triples_from_sentence(sent, get_span_text) -> list[tuple[str, str, str]]:
+
+def _extract_svo_triples_from_sentence(
+    sent, get_span_text
+) -> list[tuple[str, str, str]]:
     """Extract Subject-Verb-Object triples from a single spaCy sentence span.
 
     Args:
@@ -95,13 +99,19 @@ class RelationExtractor:
         self.srl_predictor = None
         try:
             from allennlp.predictors.predictor import Predictor
+
             self.srl_predictor = Predictor.from_path(
-                "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz")
+                "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz"
+            )
             logging.info("SRL model loaded successfully")
         except ImportError:
-            logging.warning("AllenNLP SRL not available. Semantic role labeling is disabled.")
+            logging.warning(
+                "AllenNLP SRL not available. Semantic role labeling is disabled."
+            )
         except Exception as e:
-            logging.warning(f"AllenNLP SRL model failed to load. Semantic role labeling is disabled: {e}")
+            logging.warning(
+                f"AllenNLP SRL model failed to load. Semantic role labeling is disabled: {e}"
+            )
 
         # Define relation patterns and templates
         self.relation_patterns = self._init_relation_patterns()
@@ -126,7 +136,10 @@ class RelationExtractor:
             ],
             "located_in": [
                 {"pattern": r"([^\s]+) is (?:in|at|on) ([^\s]+)", "groups": (1, 2)},
-                {"pattern": r"([^\s]+) is located (?:in|at|on) ([^\s]+)", "groups": (1, 2)},
+                {
+                    "pattern": r"([^\s]+) is located (?:in|at|on) ([^\s]+)",
+                    "groups": (1, 2),
+                },
             ],
             "has_property": [
                 {"pattern": r"([^\s]+) has (?:a|an)? ([^\s]+)", "groups": (1, 2)},
@@ -176,6 +189,7 @@ class RelationExtractor:
             except Exception as e:
                 logging.error(f"Error in relation extraction: {e}")
                 import traceback
+
                 logging.error(f"Traceback: {traceback.format_exc()}")
 
         # Deduplicate relations
@@ -252,8 +266,8 @@ class RelationExtractor:
 
             # Extract relations from SRL output
             relations = []
-            for verb_data in srl_output.get('verbs', []):
-                predicate = verb_data['verb']
+            for verb_data in srl_output.get("verbs", []):
+                predicate = verb_data["verb"]
 
                 # Process tagged spans to extract arguments
                 arg0 = None
@@ -263,45 +277,45 @@ class RelationExtractor:
                 tmp = None
 
                 # Extract arguments from tags
-                tagged_string = verb_data['description']
+                tagged_string = verb_data["description"]
                 current_arg = None
                 current_text = ""
 
                 for part in tagged_string.split():
-                    if part.startswith('['):
+                    if part.startswith("["):
                         # Start of new argument
                         if current_arg and current_text:
-                            if current_arg == 'ARG0':
+                            if current_arg == "ARG0":
                                 arg0 = current_text.strip()
-                            elif current_arg == 'ARG1':
+                            elif current_arg == "ARG1":
                                 arg1 = current_text.strip()
-                            elif current_arg == 'ARG2':
+                            elif current_arg == "ARG2":
                                 arg2 = current_text.strip()
-                            elif current_arg.startswith('ARGM-LOC'):
+                            elif current_arg.startswith("ARGM-LOC"):
                                 loc = current_text.strip()
-                            elif current_arg.startswith('ARGM-TMP'):
+                            elif current_arg.startswith("ARGM-TMP"):
                                 tmp = current_text.strip()
 
                         # Set new current argument
-                        if '*' in part:
-                            label_end = part.find('*')
+                        if "*" in part:
+                            label_end = part.find("*")
                             current_arg = part[1:label_end]
-                            current_text = part[label_end+1:]
-                            if part.endswith(']'):
+                            current_text = part[label_end + 1 :]
+                            if part.endswith("]"):
                                 current_text = current_text[:-1]
-                    elif part.endswith(']'):
+                    elif part.endswith("]"):
                         # End of current argument
                         current_text += " " + part[:-1]
 
-                        if current_arg == 'ARG0':
+                        if current_arg == "ARG0":
                             arg0 = current_text.strip()
-                        elif current_arg == 'ARG1':
+                        elif current_arg == "ARG1":
                             arg1 = current_text.strip()
-                        elif current_arg == 'ARG2':
+                        elif current_arg == "ARG2":
                             arg2 = current_text.strip()
-                        elif current_arg.startswith('ARGM-LOC'):
+                        elif current_arg.startswith("ARGM-LOC"):
                             loc = current_text.strip()
-                        elif current_arg.startswith('ARGM-TMP'):
+                        elif current_arg.startswith("ARGM-TMP"):
                             tmp = current_text.strip()
 
                         current_arg = None

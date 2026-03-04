@@ -8,10 +8,13 @@ import logging
 from unittest.mock import MagicMock
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Import the necessary modules
+
 
 class MockGraphStore:
     """Mock graph store for demonstration purposes."""
@@ -22,68 +25,118 @@ class MockGraphStore:
         self.paths = {
             ("Python", "Mathematics"): [
                 [
-                    {"source": "Python", "relation": "used_in", "target": "Data Science", "confidence": 0.9},
-                    {"source": "Data Science", "relation": "involves", "target": "Statistical Analysis", "confidence": 0.85},
-                    {"source": "Statistical Analysis", "relation": "is_a", "target": "Mathematics", "confidence": 0.95}
+                    {
+                        "source": "Python",
+                        "relation": "used_in",
+                        "target": "Data Science",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Data Science",
+                        "relation": "involves",
+                        "target": "Statistical Analysis",
+                        "confidence": 0.85,
+                    },
+                    {
+                        "source": "Statistical Analysis",
+                        "relation": "is_a",
+                        "target": "Mathematics",
+                        "confidence": 0.95,
+                    },
                 ]
             ],
             ("Python", "Artificial Intelligence"): [
                 [
-                    {"source": "Python", "relation": "has_library", "target": "TensorFlow", "confidence": 0.9},
-                    {"source": "TensorFlow", "relation": "used_for", "target": "Deep Learning", "confidence": 0.95},
-                    {"source": "Deep Learning", "relation": "type_of", "target": "Machine Learning", "confidence": 0.9},
-                    {"source": "Machine Learning", "relation": "subfield_of", "target": "Artificial Intelligence", "confidence": 0.95}
+                    {
+                        "source": "Python",
+                        "relation": "has_library",
+                        "target": "TensorFlow",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "TensorFlow",
+                        "relation": "used_for",
+                        "target": "Deep Learning",
+                        "confidence": 0.95,
+                    },
+                    {
+                        "source": "Deep Learning",
+                        "relation": "type_of",
+                        "target": "Machine Learning",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Machine Learning",
+                        "relation": "subfield_of",
+                        "target": "Artificial Intelligence",
+                        "confidence": 0.95,
+                    },
                 ],
                 [
-                    {"source": "Python", "relation": "used_in", "target": "Data Science", "confidence": 0.9},
-                    {"source": "Data Science", "relation": "uses", "target": "Machine Learning", "confidence": 0.9},
-                    {"source": "Machine Learning", "relation": "subfield_of", "target": "Artificial Intelligence", "confidence": 0.95}
-                ]
-            ]
+                    {
+                        "source": "Python",
+                        "relation": "used_in",
+                        "target": "Data Science",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Data Science",
+                        "relation": "uses",
+                        "target": "Machine Learning",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Machine Learning",
+                        "relation": "subfield_of",
+                        "target": "Artificial Intelligence",
+                        "confidence": 0.95,
+                    },
+                ],
+            ],
         }
 
         # Additional information about entities
         self.entities = {
             "Python": {
                 "type": "programming_language",
-                "description": "A high-level, general-purpose programming language"
+                "description": "A high-level, general-purpose programming language",
             },
             "Guido van Rossum": {
                 "type": "person",
-                "description": "The creator of Python"
+                "description": "The creator of Python",
             },
             "Data Science": {
                 "type": "field",
-                "description": "An interdisciplinary field that uses scientific methods and systems to extract knowledge from data"
+                "description": "An interdisciplinary field that uses scientific methods and systems to extract knowledge from data",
             },
             "Statistical Analysis": {
                 "type": "method",
-                "description": "The systematic application of statistical techniques to describe and analyze data"
+                "description": "The systematic application of statistical techniques to describe and analyze data",
             },
             "Mathematics": {
                 "type": "discipline",
-                "description": "The abstract science of number, quantity, and space"
+                "description": "The abstract science of number, quantity, and space",
             },
             "Machine Learning": {
                 "type": "field",
-                "description": "A field of study that gives computers the ability to learn without being explicitly programmed"
+                "description": "A field of study that gives computers the ability to learn without being explicitly programmed",
             },
             "Artificial Intelligence": {
                 "type": "field",
-                "description": "The simulation of human intelligence in machines"
+                "description": "The simulation of human intelligence in machines",
             },
             "Deep Learning": {
                 "type": "field",
-                "description": "A subset of machine learning that uses neural networks with multiple layers"
+                "description": "A subset of machine learning that uses neural networks with multiple layers",
             },
             "TensorFlow": {
                 "type": "library",
-                "description": "An open-source machine learning framework"
+                "description": "An open-source machine learning framework",
             },
             "PyTorch": {
                 "type": "library",
-                "description": "An open-source machine learning framework"
-            }
+                "description": "An open-source machine learning framework",
+            },
         }
 
     def bidirectional_search(self, start_entity, end_entity, max_hops=3):
@@ -155,19 +208,19 @@ def demonstrate_reasoning_engine(mock_graph_store):
                     {
                         "step_id": "step1",
                         "description": "Identify the relationship between Python and data science",
-                        "explanation": "Python is widely used in data science as a primary programming language due to its libraries and ease of use."
+                        "explanation": "Python is widely used in data science as a primary programming language due to its libraries and ease of use.",
                     },
                     {
                         "step_id": "step2",
                         "description": "Identify the relationship between data science and statistical analysis",
-                        "explanation": "Data science heavily involves statistical analysis for extracting insights from data."
+                        "explanation": "Data science heavily involves statistical analysis for extracting insights from data.",
                     },
                     {
                         "step_id": "step3",
                         "description": "Identify the relationship between statistical analysis and mathematics",
-                        "explanation": "Statistical analysis is a branch of mathematics that deals with data collection, organization, and interpretation."
-                    }
-                ]
+                        "explanation": "Statistical analysis is a branch of mathematics that deals with data collection, organization, and interpretation.",
+                    },
+                ],
             }
         elif "Python" in query and "Artificial Intelligence" in query:
             return {
@@ -177,25 +230,25 @@ def demonstrate_reasoning_engine(mock_graph_store):
                     {
                         "step_id": "step1",
                         "description": "Identify Python's connection to deep learning libraries",
-                        "explanation": "Python has popular libraries like TensorFlow and PyTorch that are specifically designed for deep learning applications."
+                        "explanation": "Python has popular libraries like TensorFlow and PyTorch that are specifically designed for deep learning applications.",
                     },
                     {
                         "step_id": "step2",
                         "description": "Establish the relationship between deep learning and machine learning",
-                        "explanation": "Deep learning is a specialized subset of machine learning that uses neural networks with multiple layers."
+                        "explanation": "Deep learning is a specialized subset of machine learning that uses neural networks with multiple layers.",
                     },
                     {
                         "step_id": "step3",
                         "description": "Connect machine learning to artificial intelligence",
-                        "explanation": "Machine learning is a central subfield of artificial intelligence that focuses on developing algorithms that can learn from data."
-                    }
-                ]
+                        "explanation": "Machine learning is a central subfield of artificial intelligence that focuses on developing algorithms that can learn from data.",
+                    },
+                ],
             }
         else:
             return {
                 "answer": "I don't have enough information to answer this question.",
                 "confidence": 0.5,
-                "reasoning_steps": []
+                "reasoning_steps": [],
             }
 
     mock_reasoning_engine.reason = mock_reason
@@ -221,7 +274,7 @@ def demonstrate_reasoning_engine(mock_graph_store):
     if "reasoning_steps" in result2:
         logger.info("Reasoning Steps:")
         for i, step in enumerate(result2["reasoning_steps"]):
-            logger.info(f"  Step {i+1}: {step['description']}")
+            logger.info(f"  Step {i + 1}: {step['description']}")
             if "explanation" in step:
                 logger.info(f"    {step['explanation']}")
 
@@ -229,9 +282,7 @@ def demonstrate_reasoning_engine(mock_graph_store):
     logger.info("\n----- Example 3: Path Search Demonstration -----")
 
     paths = mock_graph_store.weighted_path_query(
-        start_entity="Python",
-        end_entity="Artificial Intelligence",
-        max_hops=4
+        start_entity="Python", end_entity="Artificial Intelligence", max_hops=4
     )
 
     logger.info(f"Found {len(paths)} paths between Python and Artificial Intelligence")
@@ -241,12 +292,14 @@ def demonstrate_reasoning_engine(mock_graph_store):
         for i, path in enumerate(paths):
             # Generate explanation
             explanation = mock_graph_store.explain_path(path)
-            logger.info(f"Path {i+1} explanation: {explanation}")
+            logger.info(f"Path {i + 1} explanation: {explanation}")
 
             # Show path details
-            logger.info(f"Path {i+1} details:")
+            logger.info(f"Path {i + 1} details:")
             for j, step in enumerate(path):
-                logger.info(f"  Step {j+1}: {step['source']} {step['relation']} {step['target']} (confidence: {step['confidence']:.2f})")
+                logger.info(
+                    f"  Step {j + 1}: {step['source']} {step['relation']} {step['target']} (confidence: {step['confidence']:.2f})"
+                )
 
 
 def main():
@@ -260,6 +313,7 @@ def main():
     demonstrate_reasoning_engine(mock_graph_store)
 
     logger.info("Demonstration completed")
+
 
 if __name__ == "__main__":
     main()

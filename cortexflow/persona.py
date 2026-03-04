@@ -5,6 +5,7 @@ Defines AI persona identities with personality traits, speaking styles,
 emotional baselines, and dynamic evolution rules.  Personas adapt
 based on relationship state and conversation history.
 """
+
 from __future__ import annotations
 
 import json
@@ -131,7 +132,9 @@ class PersonaManager:
             rows = self._conn.execute(
                 "SELECT persona_json FROM personas ORDER BY created_at"
             ).fetchall()
-        return [PersonaDefinition.from_dict(json.loads(r["persona_json"])) for r in rows]
+        return [
+            PersonaDefinition.from_dict(json.loads(r["persona_json"])) for r in rows
+        ]
 
     def delete_persona(self, persona_id: str) -> bool:
         with self._lock:
@@ -175,7 +178,9 @@ class PersonaManager:
                 f"\n[Personality]\nYour personality traits: {', '.join(persona.personality_traits)}."
             )
         if persona.speaking_style:
-            style_desc = ", ".join(f"{k}: {v}" for k, v in persona.speaking_style.items())
+            style_desc = ", ".join(
+                f"{k}: {v}" for k, v in persona.speaking_style.items()
+            )
             parts.append(f"\n[Speaking Style]\n{style_desc}")
         if persona.background:
             parts.append(f"\n[Background]\n{persona.background}")
@@ -203,8 +208,12 @@ class PersonaManager:
     # Persona evolution
     # ------------------------------------------------------------------
 
-    def evolve_persona(self, persona_id: str, relationship_state=None,
-                       emotional_trend: dict[str, Any] | None = None) -> dict[str, Any]:
+    def evolve_persona(
+        self,
+        persona_id: str,
+        relationship_state=None,
+        emotional_trend: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Apply evolution rules to a persona based on relationship and emotion.
 
         Returns a dict describing which rules fired and what changed.
@@ -233,15 +242,24 @@ class PersonaManager:
             "overrides": overrides,
         }
 
-    def _check_trigger(self, trigger: dict[str, Any], relationship_state,
-                       emotional_trend: dict[str, Any] | None) -> bool:
+    def _check_trigger(
+        self,
+        trigger: dict[str, Any],
+        relationship_state,
+        emotional_trend: dict[str, Any] | None,
+    ) -> bool:
         """Check whether an evolution-rule trigger is satisfied."""
         # Relationship stage trigger
         req_stage = trigger.get("min_relationship_stage")
         if req_stage and relationship_state is not None:
             from cortexflow.relationship import RelationshipStage
+
             try:
-                current = relationship_state.stage if hasattr(relationship_state, "stage") else relationship_state
+                current = (
+                    relationship_state.stage
+                    if hasattr(relationship_state, "stage")
+                    else relationship_state
+                )
                 if isinstance(current, str):
                     current = RelationshipStage[current.upper()]
                 required = RelationshipStage[req_stage.upper()]

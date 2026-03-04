@@ -4,6 +4,7 @@ Persistent user metadata storage for CortexFlow.
 Provides a simple SQLite-backed store for per-user metadata so that
 the framework can remember user attributes across sessions.
 """
+
 from __future__ import annotations
 
 import json
@@ -46,8 +47,12 @@ class UserStore:
     # CRUD
     # ------------------------------------------------------------------
 
-    def create_user(self, user_id: str, display_name: str | None = None,
-                    metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    def create_user(
+        self,
+        user_id: str,
+        display_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Create or update a user record. Returns the stored dict."""
         now = time.time()
         meta_json = json.dumps(metadata or {})
@@ -100,16 +105,16 @@ class UserStore:
     def delete_user(self, user_id: str) -> bool:
         """Delete the user record. Returns ``True`` if it existed."""
         with self._lock:
-            cur = self._conn.execute(
-                "DELETE FROM users WHERE user_id = ?", (user_id,)
-            )
+            cur = self._conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
             self._conn.commit()
             return cur.rowcount > 0
 
     def list_users(self) -> list[dict[str, Any]]:
         """Return all user records."""
         with self._lock:
-            rows = self._conn.execute("SELECT * FROM users ORDER BY created_at").fetchall()
+            rows = self._conn.execute(
+                "SELECT * FROM users ORDER BY created_at"
+            ).fetchall()
         return [
             {
                 "user_id": r["user_id"],

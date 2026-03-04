@@ -36,18 +36,17 @@ class TestOntologySystem:
     def test_basic_initialization(self, ontology):
         """Test that ontology initializes with basic classes."""
         person_class = ontology.get_class("Person")
-        assert person_class is not None, "Person class should exist after initialization"
+        assert person_class is not None, (
+            "Person class should exist after initialization"
+        )
 
     def test_add_subclass(self, ontology):
         """Test adding a subclass with properties and metadata."""
         scientist = OntologyClass(
             name="Scientist",
             parent_classes=["Person"],
-            properties={
-                "field": "string",
-                "publications": "integer"
-            },
-            metadata={"domain": "academic"}
+            properties={"field": "string", "publications": "integer"},
+            metadata={"domain": "academic"},
         )
         result = ontology.add_class(scientist)
         assert result is True, "Adding Scientist class should succeed"
@@ -58,12 +57,13 @@ class TestOntologySystem:
             name="Scientist",
             parent_classes=["Person"],
             properties={"field": "string", "publications": "integer"},
-            metadata={"domain": "academic"}
+            metadata={"domain": "academic"},
         )
         ontology.add_class(scientist)
 
-        assert ontology.is_subclass_of("Scientist", "Person"), \
+        assert ontology.is_subclass_of("Scientist", "Person"), (
             "Scientist should be a subclass of Person"
+        )
 
     def test_relation_type_inheritance(self, ontology):
         """Test relation type inheritance."""
@@ -81,44 +81,47 @@ class TestOntologySystem:
             source_classes=["Scientist"],
             target_classes=["Scientist"],
             cardinality="many-to-many",
-            properties={"project": "string", "start_date": "date"}
+            properties={"project": "string", "start_date": "date"},
         )
         ontology.add_relation_type(works_with)
 
-        assert ontology.is_subtype_of("collaborates_with", "knows"), \
+        assert ontology.is_subtype_of("collaborates_with", "knows"), (
             "collaborates_with should be a subtype of knows"
+        )
 
     def test_multi_level_inheritance(self, ontology):
         """Test multi-level class inheritance (Person -> Scientist -> Physicist)."""
         scientist = OntologyClass(
-            name="Scientist",
-            parent_classes=["Person"],
-            properties={"field": "string"}
+            name="Scientist", parent_classes=["Person"], properties={"field": "string"}
         )
         ontology.add_class(scientist)
 
         physicist = OntologyClass(
             name="Physicist",
             parent_classes=["Scientist"],
-            properties={"specialization": "string"}
+            properties={"specialization": "string"},
         )
         ontology.add_class(physicist)
 
         all_person_subclasses = ontology.get_all_subclasses("Person")
-        assert "Scientist" in all_person_subclasses, \
+        assert "Scientist" in all_person_subclasses, (
             "Scientist should be in Person's subclasses"
-        assert "Physicist" in all_person_subclasses, \
+        )
+        assert "Physicist" in all_person_subclasses, (
             "Physicist should be in Person's subclasses"
+        )
 
     def test_is_subclass_of_self(self, ontology):
         """Test that a class is considered a subclass of itself."""
-        assert ontology.is_subclass_of("Person", "Person"), \
+        assert ontology.is_subclass_of("Person", "Person"), (
             "Person should be a subclass of itself"
+        )
 
     def test_is_subclass_of_nonexistent(self, ontology):
         """Test subclass check with a nonexistent class."""
-        assert not ontology.is_subclass_of("NonExistent", "Person"), \
+        assert not ontology.is_subclass_of("NonExistent", "Person"), (
             "NonExistent should not be a subclass of Person"
+        )
 
     def test_get_class_returns_none_for_unknown(self, ontology):
         """Test that get_class returns None for unknown class names."""
@@ -149,36 +152,41 @@ class TestMetadataStructure:
         test_metadata = {
             "source": "test",
             "confidence": 0.9,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         test_class = OntologyClass(name="TestClass", metadata=test_metadata)
 
-        assert test_class.metadata.get("source") == "test", \
+        assert test_class.metadata.get("source") == "test", (
             "Metadata 'source' should persist"
-        assert test_class.metadata.get("confidence") == 0.9, \
+        )
+        assert test_class.metadata.get("confidence") == 0.9, (
             "Metadata 'confidence' should persist"
+        )
 
     def test_ontology_class_time_tracking(self):
         """Test that OntologyClass tracks creation and modification times."""
         test_class = OntologyClass(name="TestClass")
-        assert hasattr(test_class, "creation_time"), \
+        assert hasattr(test_class, "creation_time"), (
             "OntologyClass should have creation_time"
-        assert hasattr(test_class, "last_modified_time"), \
+        )
+        assert hasattr(test_class, "last_modified_time"), (
             "OntologyClass should have last_modified_time"
+        )
         assert test_class.creation_time <= time.time()
         assert test_class.last_modified_time <= time.time()
 
     def test_relation_type_metadata_persistence(self):
         """Test metadata is correctly stored in RelationType."""
         test_relation = RelationType(
-            name="test_relation",
-            metadata={"provenance": "manual", "confidence": 0.85}
+            name="test_relation", metadata={"provenance": "manual", "confidence": 0.85}
         )
 
-        assert test_relation.metadata.get("provenance") == "manual", \
+        assert test_relation.metadata.get("provenance") == "manual", (
             "RelationType metadata 'provenance' should persist"
-        assert test_relation.metadata.get("confidence") == 0.85, \
+        )
+        assert test_relation.metadata.get("confidence") == 0.85, (
             "RelationType metadata 'confidence' should persist"
+        )
 
     def test_ontology_class_to_dict(self):
         """Test OntologyClass serialization to dict."""
@@ -186,7 +194,7 @@ class TestMetadataStructure:
             name="Foo",
             parent_classes=["Thing"],
             properties={"bar": "string"},
-            metadata={"info": "test"}
+            metadata={"info": "test"},
         )
         d = cls.to_dict()
         assert d["name"] == "Foo"
@@ -246,27 +254,31 @@ class TestConfigStructure:
         """Test that CortexFlowConfig has ontology settings via proxy."""
         config = CortexFlowConfig()
         assert hasattr(config, "use_ontology"), "Config should have use_ontology"
-        assert hasattr(config, "enable_ontology_evolution"), \
+        assert hasattr(config, "enable_ontology_evolution"), (
             "Config should have enable_ontology_evolution"
+        )
 
     def test_config_has_metadata_framework_settings(self):
         """Test that CortexFlowConfig has metadata framework settings."""
         config = CortexFlowConfig()
-        assert hasattr(config, "track_provenance"), \
+        assert hasattr(config, "track_provenance"), (
             "Config should have track_provenance"
-        assert hasattr(config, "track_confidence"), \
+        )
+        assert hasattr(config, "track_confidence"), (
             "Config should have track_confidence"
-        assert hasattr(config, "track_temporal"), \
-            "Config should have track_temporal"
+        )
+        assert hasattr(config, "track_temporal"), "Config should have track_temporal"
 
     def test_config_serialization_includes_ontology_fields(self):
         """Test that config serialization includes ontology and metadata fields."""
         config = CortexFlowConfig()
         config_dict = config.to_dict()
-        assert "use_ontology" in config_dict, \
+        assert "use_ontology" in config_dict, (
             "Serialized config should include use_ontology"
-        assert "track_provenance" in config_dict, \
+        )
+        assert "track_provenance" in config_dict, (
             "Serialized config should include track_provenance"
+        )
 
     def test_config_default_values(self):
         """Test that ontology and metadata config have expected defaults."""

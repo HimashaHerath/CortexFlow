@@ -19,6 +19,7 @@ from cortexflow.llm_client import (
 # create_llm_client factory
 # ---------------------------------------------------------------------------
 
+
 class TestCreateLLMClient:
     """Test the factory function that returns the correct client."""
 
@@ -50,20 +51,27 @@ class TestCreateLLMClient:
 # OllamaClient
 # ---------------------------------------------------------------------------
 
+
 class TestOllamaClient:
     """Test OllamaClient behavior."""
 
     def test_url_construction_for_generate(self):
-        client = OllamaClient(ollama_host="http://localhost:11434", default_model="gemma3:1b")
+        client = OllamaClient(
+            ollama_host="http://localhost:11434", default_model="gemma3:1b"
+        )
         # Verify the host is stored without trailing slash
         assert client.ollama_host == "http://localhost:11434"
 
     def test_trailing_slash_is_stripped(self):
-        client = OllamaClient(ollama_host="http://localhost:11434/", default_model="test")
+        client = OllamaClient(
+            ollama_host="http://localhost:11434/", default_model="test"
+        )
         assert client.ollama_host == "http://localhost:11434"
 
     def test_default_model_is_stored(self):
-        client = OllamaClient(ollama_host="http://localhost:11434", default_model="llama3:8b")
+        client = OllamaClient(
+            ollama_host="http://localhost:11434", default_model="llama3:8b"
+        )
         assert client.default_model == "llama3:8b"
 
     @patch("cortexflow.llm_client.requests.post")
@@ -73,7 +81,9 @@ class TestOllamaClient:
         mock_response.json.return_value = {"response": "Hello world"}
         mock_post.return_value = mock_response
 
-        client = OllamaClient(ollama_host="http://localhost:11434", default_model="gemma3:1b")
+        client = OllamaClient(
+            ollama_host="http://localhost:11434", default_model="gemma3:1b"
+        )
         result = client.generate_from_prompt("Say hello")
 
         mock_post.assert_called_once()
@@ -90,7 +100,9 @@ class TestOllamaClient:
         mock_response.json.return_value = {"message": {"content": "Hi there"}}
         mock_post.return_value = mock_response
 
-        client = OllamaClient(ollama_host="http://localhost:11434", default_model="gemma3:1b")
+        client = OllamaClient(
+            ollama_host="http://localhost:11434", default_model="gemma3:1b"
+        )
         result = client.generate([{"role": "user", "content": "Hello"}])
 
         mock_post.assert_called_once()
@@ -105,7 +117,9 @@ class TestOllamaClient:
         mock_response.text = "Internal Server Error"
         mock_post.return_value = mock_response
 
-        client = OllamaClient(ollama_host="http://localhost:11434", default_model="gemma3:1b")
+        client = OllamaClient(
+            ollama_host="http://localhost:11434", default_model="gemma3:1b"
+        )
         result = client.generate_from_prompt("test")
 
         assert "Error" in result
@@ -114,7 +128,9 @@ class TestOllamaClient:
     def test_generate_from_prompt_handles_exception(self, mock_post):
         mock_post.side_effect = ConnectionError("Connection refused")
 
-        client = OllamaClient(ollama_host="http://localhost:11434", default_model="gemma3:1b")
+        client = OllamaClient(
+            ollama_host="http://localhost:11434", default_model="gemma3:1b"
+        )
         result = client.generate_from_prompt("test")
 
         assert "Error" in result
@@ -126,7 +142,9 @@ class TestOllamaClient:
         mock_response.json.return_value = {"response": "OK"}
         mock_post.return_value = mock_response
 
-        client = OllamaClient(ollama_host="http://localhost:11434", default_model="gemma3:1b")
+        client = OllamaClient(
+            ollama_host="http://localhost:11434", default_model="gemma3:1b"
+        )
         client.generate_from_prompt("test", model="llama3:8b")
 
         sent_model = mock_post.call_args[1]["json"]["model"]
@@ -137,16 +155,21 @@ class TestOllamaClient:
 # VertexAIClient
 # ---------------------------------------------------------------------------
 
+
 class TestVertexAIClient:
     """Test VertexAIClient configuration and model remapping."""
 
     @patch("cortexflow.llm_client.VertexAIClient._build_client")
     def test_gemini_15_flash_remapped_to_20_flash(self, mock_build):
         mock_build.return_value = MagicMock()
-        config = ConfigBuilder().with_vertex_ai(
-            project_id="test",
-            default_model="gemini-1.5-flash",
-        ).build()
+        config = (
+            ConfigBuilder()
+            .with_vertex_ai(
+                project_id="test",
+                default_model="gemini-1.5-flash",
+            )
+            .build()
+        )
 
         client = VertexAIClient(config)
         assert client.default_model == "gemini-2.0-flash"
@@ -154,10 +177,14 @@ class TestVertexAIClient:
     @patch("cortexflow.llm_client.VertexAIClient._build_client")
     def test_gemini_15_pro_remapped_to_20_flash(self, mock_build):
         mock_build.return_value = MagicMock()
-        config = ConfigBuilder().with_vertex_ai(
-            project_id="test",
-            default_model="gemini-1.5-pro",
-        ).build()
+        config = (
+            ConfigBuilder()
+            .with_vertex_ai(
+                project_id="test",
+                default_model="gemini-1.5-pro",
+            )
+            .build()
+        )
 
         client = VertexAIClient(config)
         assert client.default_model == "gemini-2.0-flash"
@@ -165,10 +192,14 @@ class TestVertexAIClient:
     @patch("cortexflow.llm_client.VertexAIClient._build_client")
     def test_global_location_remapped_to_us_central1(self, mock_build):
         mock_build.return_value = MagicMock()
-        config = ConfigBuilder().with_vertex_ai(
-            project_id="test",
-            location="global",
-        ).build()
+        config = (
+            ConfigBuilder()
+            .with_vertex_ai(
+                project_id="test",
+                location="global",
+            )
+            .build()
+        )
 
         client = VertexAIClient(config)
         assert client.location == "us-central1"
@@ -176,10 +207,14 @@ class TestVertexAIClient:
     @patch("cortexflow.llm_client.VertexAIClient._build_client")
     def test_valid_location_not_remapped(self, mock_build):
         mock_build.return_value = MagicMock()
-        config = ConfigBuilder().with_vertex_ai(
-            project_id="test",
-            location="us-east1",
-        ).build()
+        config = (
+            ConfigBuilder()
+            .with_vertex_ai(
+                project_id="test",
+                location="us-east1",
+            )
+            .build()
+        )
 
         client = VertexAIClient(config)
         assert client.location == "us-east1"

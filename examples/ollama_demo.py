@@ -31,14 +31,27 @@ def test_ollama_available(host="http://localhost:11434", model="llama3"):
         print(f"Error checking Ollama: {e}")
         return False
 
+
 def test_with_ollama():
     parser = argparse.ArgumentParser(description="Test CortexFlow with Ollama")
     parser.add_argument("--model", default="llama3", help="Ollama model to use")
-    parser.add_argument("--host", default="http://localhost:11434", help="Ollama API host")
-    parser.add_argument("--skip-check", action="store_true", help="Skip checking for Ollama availability")
-    parser.add_argument("--active-tokens", type=int, default=1000, help="Active tier token limit")
-    parser.add_argument("--working-tokens", type=int, default=2000, help="Working tier token limit")
-    parser.add_argument("--archive-tokens", type=int, default=3000, help="Archive tier token limit")
+    parser.add_argument(
+        "--host", default="http://localhost:11434", help="Ollama API host"
+    )
+    parser.add_argument(
+        "--skip-check",
+        action="store_true",
+        help="Skip checking for Ollama availability",
+    )
+    parser.add_argument(
+        "--active-tokens", type=int, default=1000, help="Active tier token limit"
+    )
+    parser.add_argument(
+        "--working-tokens", type=int, default=2000, help="Working tier token limit"
+    )
+    parser.add_argument(
+        "--archive-tokens", type=int, default=3000, help="Archive tier token limit"
+    )
     args = parser.parse_args()
 
     if not args.skip_check and not test_ollama_available(args.host, args.model):
@@ -55,16 +68,19 @@ def test_with_ollama():
         knowledge_store_path=":memory:",
         ollama_host=args.host,
         default_model=args.model,
-        use_graph_rag=True  # Enable graph RAG
+        use_graph_rag=True,  # Enable graph RAG
     )
 
     # Check if required packages are installed
     try:
         import networkx  # noqa: F401
         import spacy  # noqa: F401
+
         graph_packages_available = True
     except ImportError:
-        print("Note: networkx or spacy not installed. Some graph functionality will be limited.")
+        print(
+            "Note: networkx or spacy not installed. Some graph functionality will be limited."
+        )
         graph_packages_available = False
 
     context_manager = CortexFlowManager(config)
@@ -73,7 +89,7 @@ def test_with_ollama():
         # Add system message
         context_manager.add_message(
             "system",
-            "You are a helpful AI assistant with advanced memory capabilities."
+            "You are a helpful AI assistant with advanced memory capabilities.",
         )
 
         # Test conversation with memory
@@ -84,7 +100,7 @@ def test_with_ollama():
             "Can you tell me some facts about Boston?",
             "Tell me another fact about my city.",
             "What was my dog's name again?",
-            "What's my favorite color?"
+            "What's my favorite color?",
         ]
 
         for i, message in enumerate(test_messages):
@@ -133,7 +149,9 @@ def test_with_ollama():
         print("\n[Test] Explicitly remembering fact...")
         try:
             if graph_packages_available:
-                context_manager.remember_knowledge("Alice lives in Boston and has a dog named Max")
+                context_manager.remember_knowledge(
+                    "Alice lives in Boston and has a dog named Max"
+                )
             else:
                 print("Skipping graph-based knowledge storage due to missing packages")
         except AttributeError as e:
@@ -154,6 +172,7 @@ def test_with_ollama():
         # Clean up
         context_manager.close()
         print("\nOllama integration test completed")
+
 
 if __name__ == "__main__":
     test_with_ollama()

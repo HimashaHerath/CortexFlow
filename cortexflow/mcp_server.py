@@ -13,6 +13,7 @@ Or via the console-script entry point::
 
     cortexflow-mcp
 """
+
 from __future__ import annotations
 
 import json
@@ -35,6 +36,7 @@ logger = logging.getLogger("cortexflow.mcp")
 # ---------------------------------------------------------------------------
 # Lifespan: build a CortexFlowManager from env vars
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class AppContext:
@@ -90,6 +92,7 @@ def _get_manager(ctx: Context[ServerSession, AppContext]) -> CortexFlowManager:
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def add_memory(
@@ -221,7 +224,9 @@ async def manage_persona(
             session.persona_id = persona_id
         return json.dumps({"active_persona": persona_id})
     else:
-        return json.dumps({"error": f"Unknown action '{action}'. Use 'list', 'get', or 'set'."})
+        return json.dumps(
+            {"error": f"Unknown action '{action}'. Use 'list', 'get', or 'set'."}
+        )
 
 
 @mcp.tool()
@@ -243,6 +248,7 @@ async def create_session(
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     """Console-script entry point for ``cortexflow-mcp``."""

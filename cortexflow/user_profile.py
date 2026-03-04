@@ -5,6 +5,7 @@ Consolidates extracted personal facts into a structured user profile,
 including preferences, communication style, boundaries, and relationship
 context for companion AI applications.
 """
+
 from __future__ import annotations
 
 import json
@@ -106,7 +107,9 @@ class UserProfileManager:
                 return self._profiles[user_id]
             return self._load_or_create(user_id)
 
-    def update_from_facts(self, user_id: str, facts: list[dict[str, Any]]) -> UserProfile:
+    def update_from_facts(
+        self, user_id: str, facts: list[dict[str, Any]]
+    ) -> UserProfile:
         """Merge a list of extracted facts into the user's profile.
 
         Each fact dict should have at least ``fact_type`` and ``value``.
@@ -118,8 +121,9 @@ class UserProfileManager:
         self._save(profile)
         return profile
 
-    def update_from_message(self, user_id: str, content: str,
-                            fact_detector=None) -> UserProfile:
+    def update_from_message(
+        self, user_id: str, content: str, fact_detector=None
+    ) -> UserProfile:
         """Extract facts from *content* via *fact_detector* and merge them."""
         if fact_detector is None:
             return self.get_profile(user_id)
@@ -131,8 +135,9 @@ class UserProfileManager:
             logger.debug("Profile update from message failed: %s", exc)
         return self.get_profile(user_id)
 
-    def record_boundary(self, user_id: str, boundary: str,
-                        category: str = "general") -> None:
+    def record_boundary(
+        self, user_id: str, boundary: str, category: str = "general"
+    ) -> None:
         """Record a user-stated boundary (critical for safety)."""
         profile = self.get_profile(user_id)
         entry = {

@@ -17,12 +17,14 @@ import pytest
 
 try:
     import networkx as nx
+
     HAS_NETWORKX = True
 except ImportError:
     HAS_NETWORKX = False
 
 try:
     import community as community_louvain  # noqa: F401
+
     HAS_COMMUNITY = True
 except ImportError:
     HAS_COMMUNITY = False
@@ -36,6 +38,7 @@ from cortexflow.performance_optimizer import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_config(**overrides) -> CortexFlowConfig:
     """Create a CortexFlowConfig with sensible defaults for testing."""
@@ -94,6 +97,7 @@ def _mock_graph_store(graph=None):
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def config():
     """Basic config with optimizations disabled."""
@@ -123,6 +127,7 @@ def optimizer_with_graph(config, small_graph):
 # ReasoningPattern
 # ===================================================================
 
+
 class TestReasoningPattern:
     """Tests for the ReasoningPattern data class."""
 
@@ -138,9 +143,10 @@ class TestReasoningPattern:
 
     def test_init_with_values(self):
         pattern = ReasoningPattern(
-            "key2", hop_count=3,
+            "key2",
+            hop_count=3,
             entities=["Person", "Place"],
-            path=["A", "rel1", "B", "rel2", "C"]
+            path=["A", "rel1", "B", "rel2", "C"],
         )
         assert pattern.hop_count == 3
         assert pattern.entities == ["Person", "Place"]
@@ -164,9 +170,7 @@ class TestReasoningPattern:
 
     def test_to_dict_and_from_dict_roundtrip(self):
         original = ReasoningPattern(
-            "roundtrip", hop_count=2,
-            entities=["X", "Y"],
-            path=["X", "edge", "Y"]
+            "roundtrip", hop_count=2, entities=["X", "Y"], path=["X", "edge", "Y"]
         )
         original.update_stats()  # hit_count = 1
         d = original.to_dict()
@@ -183,8 +187,13 @@ class TestReasoningPattern:
     def test_to_dict_contains_expected_keys(self):
         d = ReasoningPattern("k").to_dict()
         expected_keys = {
-            "pattern_key", "hop_count", "entities", "path",
-            "hit_count", "last_accessed", "created_at"
+            "pattern_key",
+            "hop_count",
+            "entities",
+            "path",
+            "hit_count",
+            "last_accessed",
+            "created_at",
         }
         assert set(d.keys()) == expected_keys
 
@@ -192,6 +201,7 @@ class TestReasoningPattern:
 # ===================================================================
 # PerformanceOptimizer — Initialization
 # ===================================================================
+
 
 class TestOptimizerInit:
     """Tests for PerformanceOptimizer construction."""
@@ -230,6 +240,7 @@ class TestOptimizerInit:
 # ===================================================================
 # Graph Partitioning
 # ===================================================================
+
 
 @pytest.mark.skipif(not HAS_NETWORKX, reason="networkx not installed")
 class TestGraphPartitioning:
@@ -279,6 +290,7 @@ class TestGraphPartitioning:
 # Hop Indexes
 # ===================================================================
 
+
 @pytest.mark.skipif(not HAS_NETWORKX, reason="networkx not installed")
 class TestHopIndexes:
     """Tests for create_hop_indexes and helpers."""
@@ -294,7 +306,9 @@ class TestHopIndexes:
         assert result["status"] == "failed"
         assert "Empty graph" in result["reason"]
 
-    def test_create_hop_indexes_populates_node_and_relation_types(self, config, small_graph):
+    def test_create_hop_indexes_populates_node_and_relation_types(
+        self, config, small_graph
+    ):
         store = _mock_graph_store(small_graph)
         # Provide all index-creation methods as no-ops
         store.create_index = MagicMock()
@@ -330,6 +344,7 @@ class TestHopIndexes:
 # ===================================================================
 # Query Plan Generation
 # ===================================================================
+
 
 class TestQueryPlanGeneration:
     """Tests for generate_query_plan."""
@@ -427,6 +442,7 @@ class TestQueryPlanGeneration:
 # Reasoning Pattern Caching
 # ===================================================================
 
+
 class TestReasoningCaching:
     """Tests for cache_reasoning_pattern and get_cached_reasoning."""
 
@@ -472,6 +488,7 @@ class TestReasoningCaching:
 # ===================================================================
 # Cache Pruning
 # ===================================================================
+
 
 class TestCachePruning:
     """Tests for _prune_reasoning_cache."""
@@ -521,6 +538,7 @@ class TestCachePruning:
 # Pattern Key & Extraction
 # ===================================================================
 
+
 class TestPatternKeyAndExtraction:
     """Tests for generate_pattern_key and extract_pattern_from_query."""
 
@@ -566,6 +584,7 @@ class TestPatternKeyAndExtraction:
 # Optimize Query Execution
 # ===================================================================
 
+
 class TestOptimizeQueryExecution:
     """Tests for optimize_query_execution."""
 
@@ -574,7 +593,10 @@ class TestOptimizeQueryExecution:
         result = optimizer.optimize_query_execution(query)
         assert "execution_plan" in result
         assert result["execution_plan"]["strategy"] in (
-            "bidirectional", "hop_index", "partition_based", "fallback"
+            "bidirectional",
+            "hop_index",
+            "partition_based",
+            "fallback",
         )
 
     def test_optimize_caches_result(self, optimizer):
@@ -588,6 +610,7 @@ class TestOptimizeQueryExecution:
 # ===================================================================
 # Cache Clearing
 # ===================================================================
+
 
 class TestCacheClearing:
     """Tests for clear_caches."""
@@ -608,6 +631,7 @@ class TestCacheClearing:
 # ===================================================================
 # Statistics
 # ===================================================================
+
 
 class TestGetStats:
     """Tests for get_stats."""
@@ -636,6 +660,7 @@ class TestGetStats:
 # ===================================================================
 # Partition Pruning
 # ===================================================================
+
 
 @pytest.mark.skipif(not HAS_NETWORKX, reason="networkx not installed")
 class TestPartitionPruning:
@@ -693,6 +718,7 @@ class TestPartitionPruning:
 # Close / Cleanup
 # ===================================================================
 
+
 class TestClose:
     """Tests for close and __del__."""
 
@@ -725,6 +751,7 @@ class TestClose:
 # Persistence of Reasoning Patterns
 # ===================================================================
 
+
 class TestPatternPersistence:
     """Tests for _load_cached_patterns and _save_cached_patterns."""
 
@@ -743,8 +770,7 @@ class TestPatternPersistence:
             opt = PerformanceOptimizer(cfg, graph_store=None)
             # Cache a pattern
             opt.reasoning_patterns["test_key"] = ReasoningPattern(
-                "test_key", hop_count=2,
-                entities=["E1"], path=["E1", "rel", "E2"]
+                "test_key", hop_count=2, entities=["E1"], path=["E1", "rel", "E2"]
             )
             opt._save_cached_patterns()
 
@@ -785,6 +811,7 @@ class TestPatternPersistence:
 # _generate_cache_key
 # ===================================================================
 
+
 class TestGenerateCacheKey:
     """Tests for _generate_cache_key."""
 
@@ -806,6 +833,7 @@ class TestGenerateCacheKey:
 # ===================================================================
 # _calculate_hit_rate
 # ===================================================================
+
 
 class TestCalculateHitRate:
     """Tests for _calculate_hit_rate helper."""

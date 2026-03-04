@@ -3,6 +3,7 @@ CortexFlow Inference Engine module.
 
 This module provides logical reasoning capabilities over the knowledge graph.
 """
+
 from __future__ import annotations
 
 import copy
@@ -16,12 +17,12 @@ from cortexflow.dependency_utils import import_optional_dependency
 
 # Import graph libraries
 nx_deps = import_optional_dependency(
-    'networkx',
-    warning_message="networkx not found. Inference engine capabilities will be limited."
+    "networkx",
+    warning_message="networkx not found. Inference engine capabilities will be limited.",
 )
-NETWORKX_ENABLED = nx_deps['NETWORKX_ENABLED']
+NETWORKX_ENABLED = nx_deps["NETWORKX_ENABLED"]
 if NETWORKX_ENABLED:
-    nx = nx_deps['module']
+    nx = nx_deps["module"]
 
 from cortexflow.config import CortexFlowConfig  # noqa: E402
 from cortexflow.interfaces import KnowledgeStoreInterface  # noqa: E402
@@ -30,12 +31,14 @@ from cortexflow.interfaces import KnowledgeStoreInterface  # noqa: E402
 class LogicalRule:
     """Represents a logical rule for inference."""
 
-    def __init__(self,
-                 name: str,
-                 premise: list[dict[str, Any]],
-                 conclusion: dict[str, Any],
-                 confidence: float = 0.8,
-                 metadata: dict[str, Any] = None):
+    def __init__(
+        self,
+        name: str,
+        premise: list[dict[str, Any]],
+        conclusion: dict[str, Any],
+        confidence: float = 0.8,
+        metadata: dict[str, Any] = None,
+    ):
         """
         Initialize a logical rule.
 
@@ -60,7 +63,9 @@ class LogicalRule:
 class InferenceEngine:
     """Provides logical reasoning capabilities over the knowledge graph."""
 
-    def __init__(self, knowledge_store: KnowledgeStoreInterface, config: CortexFlowConfig = None):
+    def __init__(
+        self, knowledge_store: KnowledgeStoreInterface, config: CortexFlowConfig = None
+    ):
         """
         Initialize the inference engine.
 
@@ -72,9 +77,11 @@ class InferenceEngine:
         self.config = config or CortexFlowConfig()
 
         # Get reference to graph store
-        self.graph_store = getattr(knowledge_store, 'graph_store', None)
+        self.graph_store = getattr(knowledge_store, "graph_store", None)
         if not self.graph_store:
-            logging.warning("Graph store not available. Inference engine capabilities will be limited.")
+            logging.warning(
+                "Graph store not available. Inference engine capabilities will be limited."
+            )
 
         # Knowledge base of rules
         self.rules: list[LogicalRule] = []
@@ -92,11 +99,11 @@ class InferenceEngine:
             name="transitivity_is_a",
             premise=[
                 {"source": "?X", "relation": "is_a", "target": "?Y"},
-                {"source": "?Y", "relation": "is_a", "target": "?Z"}
+                {"source": "?Y", "relation": "is_a", "target": "?Z"},
             ],
             conclusion={"source": "?X", "relation": "is_a", "target": "?Z"},
             confidence=0.9,
-            metadata={"category": "transitivity"}
+            metadata={"category": "transitivity"},
         )
 
         # Transitivity rule for "part_of" relations
@@ -104,11 +111,11 @@ class InferenceEngine:
             name="transitivity_part_of",
             premise=[
                 {"source": "?X", "relation": "part_of", "target": "?Y"},
-                {"source": "?Y", "relation": "part_of", "target": "?Z"}
+                {"source": "?Y", "relation": "part_of", "target": "?Z"},
             ],
             conclusion={"source": "?X", "relation": "part_of", "target": "?Z"},
             confidence=0.85,
-            metadata={"category": "transitivity"}
+            metadata={"category": "transitivity"},
         )
 
         # Rule for inheritance of properties
@@ -116,16 +123,21 @@ class InferenceEngine:
             name="property_inheritance",
             premise=[
                 {"source": "?X", "relation": "is_a", "target": "?Y"},
-                {"source": "?Y", "relation": "has_property", "target": "?P"}
+                {"source": "?Y", "relation": "has_property", "target": "?P"},
             ],
             conclusion={"source": "?X", "relation": "has_property", "target": "?P"},
             confidence=0.8,
-            metadata={"category": "inheritance"}
+            metadata={"category": "inheritance"},
         )
 
-    def add_rule(self, name: str, premise: list[dict[str, Any]],
-                 conclusion: dict[str, Any], confidence: float = 0.8,
-                 metadata: dict[str, Any] = None) -> None:
+    def add_rule(
+        self,
+        name: str,
+        premise: list[dict[str, Any]],
+        conclusion: dict[str, Any],
+        confidence: float = 0.8,
+        metadata: dict[str, Any] = None,
+    ) -> None:
         """
         Add a new logical rule to the rule base.
 
@@ -159,7 +171,9 @@ class InferenceEngine:
             List of newly inferred facts
         """
         if not self.graph_store:
-            logging.warning("Graph store not available. Forward chaining cannot be performed.")
+            logging.warning(
+                "Graph store not available. Forward chaining cannot be performed."
+            )
             return []
 
         inferred_facts = []
@@ -192,11 +206,15 @@ class InferenceEngine:
                 break
 
             iteration += 1
-            logging.info(f"Forward chaining iteration {iteration}: {len(new_facts_in_iteration)} new facts")
+            logging.info(
+                f"Forward chaining iteration {iteration}: {len(new_facts_in_iteration)} new facts"
+            )
 
         return inferred_facts
 
-    def backward_chain(self, query: dict[str, Any], depth: int = 3) -> tuple[bool, list[dict[str, Any]]]:
+    def backward_chain(
+        self, query: dict[str, Any], depth: int = 3
+    ) -> tuple[bool, list[dict[str, Any]]]:
         """
         Apply backward chaining to answer a query.
 
@@ -208,12 +226,16 @@ class InferenceEngine:
             Tuple of (success, explanation trail)
         """
         if not self.graph_store:
-            logging.warning("Graph store not available. Backward chaining cannot be performed.")
+            logging.warning(
+                "Graph store not available. Backward chaining cannot be performed."
+            )
             return False, []
 
         # Check if the query is directly provable from the knowledge base
         if self._is_fact_in_kb(query):
-            return True, [{"fact": query, "source": "knowledge_base", "confidence": 1.0}]
+            return True, [
+                {"fact": query, "source": "knowledge_base", "confidence": 1.0}
+            ]
 
         # If we've reached the maximum depth, stop recursion
         if depth <= 0:
@@ -241,7 +263,9 @@ class InferenceEngine:
                 bound_premise = self._apply_bindings(premise, initial_bindings)
 
                 # Recursively prove the premise
-                premise_satisfied, premise_explanation = self.backward_chain(bound_premise, depth - 1)
+                premise_satisfied, premise_explanation = self.backward_chain(
+                    bound_premise, depth - 1
+                )
 
                 if not premise_satisfied:
                     premises_satisfied = False
@@ -252,18 +276,22 @@ class InferenceEngine:
             # If all premises are satisfied, we've proven the query
             if premises_satisfied:
                 # Add the rule application to the explanation
-                explanation = premise_explanations + [{
-                    "rule_applied": rule.name,
-                    "result": query,
-                    "confidence": rule.confidence
-                }]
+                explanation = premise_explanations + [
+                    {
+                        "rule_applied": rule.name,
+                        "result": query,
+                        "confidence": rule.confidence,
+                    }
+                ]
 
                 return True, explanation
 
         # If we get here, no rules could prove the query
         return False, explanation
 
-    def abductive_reasoning(self, observation: dict[str, Any], max_hypotheses: int = 3) -> list[dict[str, Any]]:
+    def abductive_reasoning(
+        self, observation: dict[str, Any], max_hypotheses: int = 3
+    ) -> list[dict[str, Any]]:
         """
         Perform abductive reasoning to generate hypotheses explaining an observation.
 
@@ -275,7 +303,9 @@ class InferenceEngine:
             List of hypotheses that could explain the observation
         """
         if not self.graph_store:
-            logging.warning("Graph store not available. Abductive reasoning cannot be performed.")
+            logging.warning(
+                "Graph store not available. Abductive reasoning cannot be performed."
+            )
             return []
 
         hypotheses = []
@@ -300,12 +330,14 @@ class InferenceEngine:
                 is_known = self._is_fact_in_kb(hypothesis)
 
                 # Add to hypotheses with appropriate confidence
-                hypotheses.append({
-                    "hypothesis": hypothesis,
-                    "confidence": rule.confidence * (0.9 if is_known else 0.5),
-                    "rule": rule.name,
-                    "is_known": is_known
-                })
+                hypotheses.append(
+                    {
+                        "hypothesis": hypothesis,
+                        "confidence": rule.confidence * (0.9 if is_known else 0.5),
+                        "rule": rule.name,
+                        "is_known": is_known,
+                    }
+                )
 
                 # Limit the number of hypotheses
                 if len(hypotheses) >= max_hypotheses:
@@ -334,7 +366,9 @@ class InferenceEngine:
         fact_pattern = self._extract_fact_from_question(query)
 
         if not fact_pattern:
-            return [{"error": "Could not extract a clear fact pattern from the question"}]
+            return [
+                {"error": "Could not extract a clear fact pattern from the question"}
+            ]
 
         # Apply backward chaining
         is_proven, explanation = self.backward_chain(fact_pattern)
@@ -346,16 +380,20 @@ class InferenceEngine:
             hypotheses = self.abductive_reasoning(fact_pattern)
 
             if hypotheses:
-                return [{
-                    "type": "hypothesis",
-                    "message": "The fact could not be proven directly, but these hypotheses might explain it:",
-                    "hypotheses": hypotheses
-                }]
+                return [
+                    {
+                        "type": "hypothesis",
+                        "message": "The fact could not be proven directly, but these hypotheses might explain it:",
+                        "hypotheses": hypotheses,
+                    }
+                ]
             else:
-                return [{
-                    "type": "negative",
-                    "message": "The system could not find evidence to prove or explain this fact."
-                }]
+                return [
+                    {
+                        "type": "negative",
+                        "message": "The system could not find evidence to prove or explain this fact.",
+                    }
+                ]
 
     def _extract_fact_from_question(self, question: str) -> dict[str, Any] | None:
         """
@@ -379,18 +417,10 @@ class InferenceEngine:
 
         if is_pattern:
             source, target = is_pattern.groups()
-            return {
-                "source": source,
-                "relation": "is_a",
-                "target": target
-            }
+            return {"source": source, "relation": "is_a", "target": target}
         elif has_pattern:
             source, target = has_pattern.groups()
-            return {
-                "source": source,
-                "relation": "has_property",
-                "target": target
-            }
+            return {"source": source, "relation": "has_property", "target": target}
         else:
             # Try to extract entities and a relation from the graph store
             if self.graph_store:
@@ -400,24 +430,18 @@ class InferenceEngine:
                     if relations:
                         # Use the first relation found
                         s, p, o = relations[0]
-                        return {
-                            "source": s,
-                            "relation": p,
-                            "target": o
-                        }
+                        return {"source": s, "relation": p, "target": o}
 
             # Fallback: Try to split the sentence into parts
             parts = clean_question.split()
             if len(parts) >= 3:
-                return {
-                    "source": parts[0],
-                    "relation": parts[1],
-                    "target": parts[2]
-                }
+                return {"source": parts[0], "relation": parts[1], "target": parts[2]}
 
         return None
 
-    def _format_explanation(self, explanation: list[dict[str, Any]], original_query: dict[str, Any]) -> list[dict[str, Any]]:
+    def _format_explanation(
+        self, explanation: list[dict[str, Any]], original_query: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """
         Format the explanation trail in a user-friendly way.
 
@@ -428,10 +452,12 @@ class InferenceEngine:
         Returns:
             Formatted explanation
         """
-        formatted = [{
-            "type": "query",
-            "message": f"Finding explanation for: {self._fact_to_str(original_query)}"
-        }]
+        formatted = [
+            {
+                "type": "query",
+                "message": f"Finding explanation for: {self._fact_to_str(original_query)}",
+            }
+        ]
 
         # Track the confidence level
         min_confidence = 1.0
@@ -439,26 +465,32 @@ class InferenceEngine:
         for step in explanation:
             if "fact" in step:
                 fact_str = self._fact_to_str(step["fact"])
-                formatted.append({
-                    "type": "fact",
-                    "message": f"Known fact: {fact_str}",
-                    "confidence": step.get("confidence", 1.0)
-                })
+                formatted.append(
+                    {
+                        "type": "fact",
+                        "message": f"Known fact: {fact_str}",
+                        "confidence": step.get("confidence", 1.0),
+                    }
+                )
                 min_confidence = min(min_confidence, step.get("confidence", 1.0))
             elif "rule_applied" in step:
-                formatted.append({
-                    "type": "inference",
-                    "message": f"Applied rule '{step['rule_applied']}' to derive: {self._fact_to_str(step['result'])}",
-                    "confidence": step.get("confidence", 0.8)
-                })
+                formatted.append(
+                    {
+                        "type": "inference",
+                        "message": f"Applied rule '{step['rule_applied']}' to derive: {self._fact_to_str(step['result'])}",
+                        "confidence": step.get("confidence", 0.8),
+                    }
+                )
                 min_confidence = min(min_confidence, step.get("confidence", 0.8))
 
         # Add final conclusion
-        formatted.append({
-            "type": "conclusion",
-            "message": f"Therefore, {self._fact_to_str(original_query)} is established.",
-            "confidence": min_confidence
-        })
+        formatted.append(
+            {
+                "type": "conclusion",
+                "message": f"Therefore, {self._fact_to_str(original_query)} is established.",
+                "confidence": min_confidence,
+            }
+        )
 
         return formatted
 
@@ -516,7 +548,9 @@ class InferenceEngine:
 
         return bindings_list
 
-    def _find_bindings_for_pattern(self, pattern: dict[str, Any]) -> list[dict[str, str]]:
+    def _find_bindings_for_pattern(
+        self, pattern: dict[str, Any]
+    ) -> list[dict[str, str]]:
         """
         Find variable bindings that satisfy a single pattern.
 
@@ -570,7 +604,9 @@ class InferenceEngine:
 
         return bindings_list
 
-    def _apply_bindings(self, pattern: dict[str, Any], bindings: dict[str, str]) -> dict[str, Any]:
+    def _apply_bindings(
+        self, pattern: dict[str, Any], bindings: dict[str, str]
+    ) -> dict[str, Any]:
         """
         Apply variable bindings to a pattern.
 
@@ -591,7 +627,9 @@ class InferenceEngine:
 
         return result
 
-    def _merge_bindings(self, bindings1: dict[str, str], bindings2: dict[str, str]) -> dict[str, str] | None:
+    def _merge_bindings(
+        self, bindings1: dict[str, str], bindings2: dict[str, str]
+    ) -> dict[str, str] | None:
         """
         Merge two sets of variable bindings if they are consistent.
 
@@ -630,7 +668,9 @@ class InferenceEngine:
 
         return matching_rules
 
-    def _match_conclusion(self, conclusion: dict[str, Any], query: dict[str, Any]) -> dict[str, str] | None:
+    def _match_conclusion(
+        self, conclusion: dict[str, Any], query: dict[str, Any]
+    ) -> dict[str, str] | None:
         """
         Match a rule conclusion against a query, extracting variable bindings.
 
@@ -660,7 +700,9 @@ class InferenceEngine:
 
         return bindings
 
-    def _patterns_match(self, pattern1: dict[str, Any], pattern2: dict[str, Any]) -> bool:
+    def _patterns_match(
+        self, pattern1: dict[str, Any], pattern2: dict[str, Any]
+    ) -> bool:
         """
         Check if two patterns are compatible (can be unified).
 
@@ -708,15 +750,14 @@ class InferenceEngine:
         target = fact.get("target", "")
 
         # Skip if any component is a variable
-        if any(isinstance(v, str) and v.startswith("?") for v in [source, relation, target]):
+        if any(
+            isinstance(v, str) and v.startswith("?") for v in [source, relation, target]
+        ):
             return False
 
         # Check for the fact in the graph store
         relations = self.graph_store.query_relations(
-            source_entity=source,
-            relation_type=relation,
-            target_entity=target,
-            limit=1
+            source_entity=source, relation_type=relation, target_entity=target, limit=1
         )
 
         return len(relations) > 0
@@ -736,7 +777,9 @@ class InferenceEngine:
         relation = fact.get("relation", "")
         target = fact.get("target", "")
 
-        if any(isinstance(v, str) and v.startswith("?") for v in [source, relation, target]):
+        if any(
+            isinstance(v, str) and v.startswith("?") for v in [source, relation, target]
+        ):
             return False
 
         # Create a fact key for cache lookup
@@ -773,7 +816,9 @@ class InferenceEngine:
         target = fact.get("target", "")
 
         # Skip if any component is a variable
-        if any(isinstance(v, str) and v.startswith("?") for v in [source, relation, target]):
+        if any(
+            isinstance(v, str) and v.startswith("?") for v in [source, relation, target]
+        ):
             return None
 
         # Add to cache
@@ -790,9 +835,9 @@ class InferenceEngine:
                 metadata={
                     "inferred": True,
                     "rule": rule.name,
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
                 },
-                provenance="inference_engine"
+                provenance="inference_engine",
             )
 
             # Get the relation ID
@@ -801,7 +846,7 @@ class InferenceEngine:
                     source_entity=source,
                     relation_type=relation,
                     target_entity=target,
-                    limit=1
+                    limit=1,
                 )
 
                 if relations:
@@ -812,8 +857,13 @@ class InferenceEngine:
             logging.error(f"Error adding inferred fact to graph: {e}")
             return None
 
-    def _query_graph_facts(self, source_entity: str = None, relation_type: str = None,
-                         target_entity: str = None, limit: int = 100) -> list[dict[str, Any]]:
+    def _query_graph_facts(
+        self,
+        source_entity: str = None,
+        relation_type: str = None,
+        target_entity: str = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
         """
         Query facts from the graph store.
 
@@ -834,18 +884,20 @@ class InferenceEngine:
                 source_entity=source_entity,
                 relation_type=relation_type,
                 target_entity=target_entity,
-                limit=limit
+                limit=limit,
             )
 
             facts = []
             for relation in relations:
-                facts.append({
-                    "source": relation.get("source_entity", ""),
-                    "relation": relation.get("relation_type", ""),
-                    "target": relation.get("target_entity", ""),
-                    "confidence": relation.get("confidence", 0.5),
-                    "id": relation.get("id", 0)
-                })
+                facts.append(
+                    {
+                        "source": relation.get("source_entity", ""),
+                        "relation": relation.get("relation_type", ""),
+                        "target": relation.get("target_entity", ""),
+                        "confidence": relation.get("confidence", 0.5),
+                        "id": relation.get("id", 0),
+                    }
+                )
 
             return facts
         except Exception as e:

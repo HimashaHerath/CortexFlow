@@ -7,6 +7,7 @@ This module provides capabilities to:
 3. Resolve conflicts based on source reliability and recency
 4. Reason with incomplete information
 """
+
 from __future__ import annotations
 
 import json
@@ -19,6 +20,7 @@ from .config import CortexFlowConfig
 
 logger = logging.getLogger(__name__)
 
+
 class UncertaintyHandler:
     """
     Handles uncertainty and contradictions in the knowledge graph.
@@ -30,11 +32,7 @@ class UncertaintyHandler:
     4. Provide reasoning capabilities with incomplete information
     """
 
-    def __init__(
-        self,
-        config: CortexFlowConfig,
-        graph_store=None
-    ):
+    def __init__(self, config: CortexFlowConfig, graph_store=None):
         """
         Initialize the uncertainty handler.
 
@@ -48,7 +46,7 @@ class UncertaintyHandler:
 
         # For in-memory databases, we need to maintain a persistent connection
         self.conn = None
-        if self.db_path == ':memory:':
+        if self.db_path == ":memory:":
             self.conn = sqlite3.connect("")
 
         # Initialize uncertainty database tables
@@ -74,7 +72,7 @@ class UncertaintyHandler:
             cursor = conn.cursor()
 
         # Create contradictions table
-        cursor.execute('''
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS contradictions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entity_id INTEGER,
@@ -88,10 +86,10 @@ class UncertaintyHandler:
             FOREIGN KEY (entity_id) REFERENCES graph_entities (id),
             FOREIGN KEY (relation_id) REFERENCES graph_relationships (id)
         )
-        ''')
+        """)
 
         # Create belief revision history table
-        cursor.execute('''
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS belief_revisions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entity_id INTEGER,
@@ -105,10 +103,10 @@ class UncertaintyHandler:
             FOREIGN KEY (entity_id) REFERENCES graph_entities (id),
             FOREIGN KEY (relation_id) REFERENCES graph_relationships (id)
         )
-        ''')
+        """)
 
         # Create probability distributions table
-        cursor.execute('''
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS probability_distributions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entity_id INTEGER,
@@ -119,10 +117,10 @@ class UncertaintyHandler:
             FOREIGN KEY (entity_id) REFERENCES graph_entities (id),
             FOREIGN KEY (relation_id) REFERENCES graph_relationships (id)
         )
-        ''')
+        """)
 
         # Create source reliability table
-        cursor.execute('''
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS source_reliability (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_name TEXT NOT NULL UNIQUE,
@@ -131,15 +129,27 @@ class UncertaintyHandler:
             last_updated REAL,
             metadata TEXT
         )
-        ''')
+        """)
 
         # Create indices for faster lookups
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_contradict_entity ON contradictions(entity_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_contradict_relation ON contradictions(relation_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_revision_entity ON belief_revisions(entity_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_revision_relation ON belief_revisions(relation_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_prob_entity ON probability_distributions(entity_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_source_name ON source_reliability(source_name)')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contradict_entity ON contradictions(entity_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contradict_relation ON contradictions(relation_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_revision_entity ON belief_revisions(entity_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_revision_relation ON belief_revisions(relation_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_prob_entity ON probability_distributions(entity_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_source_name ON source_reliability(source_name)"
+        )
 
         if self.conn is not None:
             self.conn.commit()
@@ -158,11 +168,15 @@ class UncertaintyHandler:
         cursor = conn.cursor()
 
         try:
-            cursor.execute('SELECT source_name, reliability_score FROM source_reliability')
+            cursor.execute(
+                "SELECT source_name, reliability_score FROM source_reliability"
+            )
             sources = cursor.fetchall()
 
             for source in sources:
-                self.source_reliability[source['source_name']] = source['reliability_score']
+                self.source_reliability[source["source_name"]] = source[
+                    "reliability_score"
+                ]
 
         except Exception as e:
             logger.error(f"Error loading source reliability scores: {e}")
@@ -171,7 +185,9 @@ class UncertaintyHandler:
             if self.conn is None:
                 conn.close()
 
-    def detect_contradictions(self, entity_id=None, relation_type=None, max_results=100) -> list[dict[str, Any]]:
+    def detect_contradictions(
+        self, entity_id=None, relation_type=None, max_results=100
+    ) -> list[dict[str, Any]]:
         """
         Detect contradictions in the knowledge graph.
 
@@ -199,7 +215,7 @@ class UncertaintyHandler:
 
         try:
             # Query to find potentially contradictory relationships
-            query = '''
+            query = """
             SELECT r1.id as id1, r1.source_id, r1.target_id, r1.relation_type,
                    r1.confidence as conf1, r1.provenance as source1, r1.timestamp as time1,
                    r2.id as id2, r2.confidence as conf2, r2.provenance as source2, r2.timestamp as time2
@@ -208,7 +224,7 @@ class UncertaintyHandler:
                                       AND r1.relation_type = r2.relation_type
                                       AND r1.id < r2.id
             WHERE r1.target_id != r2.target_id
-            '''
+            """
 
             params = []
 
@@ -229,43 +245,53 @@ class UncertaintyHandler:
             # Process each potential contradiction
             for row in potential_contradictions:
                 # Get entity and target information
-                cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row['source_id'],))
+                cursor.execute(
+                    "SELECT entity FROM graph_entities WHERE id = ?",
+                    (row["source_id"],),
+                )
                 entity_row = cursor.fetchone()
-                entity_text = entity_row['entity'] if entity_row else "Unknown"
+                entity_text = entity_row["entity"] if entity_row else "Unknown"
 
-                cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row['target_id'],))
+                cursor.execute(
+                    "SELECT entity FROM graph_entities WHERE id = ?",
+                    (row["target_id"],),
+                )
                 target1_row = cursor.fetchone()
-                target1_text = target1_row['entity'] if target1_row else "Unknown"
+                target1_text = target1_row["entity"] if target1_row else "Unknown"
 
                 # Get second target
                 cursor.execute(
-                    'SELECT target_id FROM graph_relationships WHERE id = ?',
-                    (row['id2'],)
+                    "SELECT target_id FROM graph_relationships WHERE id = ?",
+                    (row["id2"],),
                 )
                 target2_id_row = cursor.fetchone()
-                target2_id = target2_id_row['target_id'] if target2_id_row else None
+                target2_id = target2_id_row["target_id"] if target2_id_row else None
 
                 if target2_id:
-                    cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (target2_id,))
+                    cursor.execute(
+                        "SELECT entity FROM graph_entities WHERE id = ?", (target2_id,)
+                    )
                     target2_row = cursor.fetchone()
-                    target2_text = target2_row['entity'] if target2_row else "Unknown"
+                    target2_text = target2_row["entity"] if target2_row else "Unknown"
 
                     # Add to contradictions list
-                    contradictions.append({
-                        "entity": entity_text,
-                        "entity_id": row['source_id'],
-                        "relation": row['relation_type'],
-                        "target1": target1_text,
-                        "target2": target2_text,
-                        "relation1_id": row['id1'],
-                        "relation2_id": row['id2'],
-                        "confidence1": row['conf1'],
-                        "confidence2": row['conf2'],
-                        "source1": row['source1'],
-                        "source2": row['source2'],
-                        "timestamp1": row['time1'],
-                        "timestamp2": row['time2']
-                    })
+                    contradictions.append(
+                        {
+                            "entity": entity_text,
+                            "entity_id": row["source_id"],
+                            "relation": row["relation_type"],
+                            "target1": target1_text,
+                            "target2": target2_text,
+                            "relation1_id": row["id1"],
+                            "relation2_id": row["id2"],
+                            "confidence1": row["conf1"],
+                            "confidence2": row["conf2"],
+                            "source1": row["source1"],
+                            "source2": row["source2"],
+                            "timestamp1": row["time1"],
+                            "timestamp2": row["time2"],
+                        }
+                    )
 
         except Exception as e:
             logger.error(f"Error detecting contradictions: {e}")
@@ -276,8 +302,9 @@ class UncertaintyHandler:
 
         return contradictions
 
-    def resolve_contradiction(self, contradiction: dict[str, Any],
-                           strategy: str = "auto") -> dict[str, Any]:
+    def resolve_contradiction(
+        self, contradiction: dict[str, Any], strategy: str = "auto"
+    ) -> dict[str, Any]:
         """
         Resolve a contradiction using the specified strategy.
 
@@ -294,7 +321,10 @@ class UncertaintyHandler:
                 strategy = "reliability"
             elif contradiction.get("timestamp1") and contradiction.get("timestamp2"):
                 strategy = "recency"
-            elif contradiction.get("confidence1") is not None and contradiction.get("confidence2") is not None:
+            elif (
+                contradiction.get("confidence1") is not None
+                and contradiction.get("confidence2") is not None
+            ):
                 strategy = "confidence"
             else:
                 strategy = "keep_both"
@@ -306,7 +336,7 @@ class UncertaintyHandler:
             "strategy_used": strategy,
             "resolved_value": None,
             "confidence": None,
-            "kept_both": False
+            "kept_both": False,
         }
 
         # Apply the selected strategy
@@ -314,23 +344,41 @@ class UncertaintyHandler:
             # Prefer more recent information
             if contradiction.get("timestamp1", 0) > contradiction.get("timestamp2", 0):
                 resolution_result["resolved_value"] = contradiction.get("target1")
-                resolution_result["confidence"] = contradiction.get("confidence1", self.default_confidence)
-                resolution_result["relation_to_keep"] = contradiction.get("relation1_id")
+                resolution_result["confidence"] = contradiction.get(
+                    "confidence1", self.default_confidence
+                )
+                resolution_result["relation_to_keep"] = contradiction.get(
+                    "relation1_id"
+                )
             else:
                 resolution_result["resolved_value"] = contradiction.get("target2")
-                resolution_result["confidence"] = contradiction.get("confidence2", self.default_confidence)
-                resolution_result["relation_to_keep"] = contradiction.get("relation2_id")
+                resolution_result["confidence"] = contradiction.get(
+                    "confidence2", self.default_confidence
+                )
+                resolution_result["relation_to_keep"] = contradiction.get(
+                    "relation2_id"
+                )
 
         elif strategy == "confidence":
             # Prefer information with higher confidence
-            if contradiction.get("confidence1", 0) > contradiction.get("confidence2", 0):
+            if contradiction.get("confidence1", 0) > contradiction.get(
+                "confidence2", 0
+            ):
                 resolution_result["resolved_value"] = contradiction.get("target1")
-                resolution_result["confidence"] = contradiction.get("confidence1", self.default_confidence)
-                resolution_result["relation_to_keep"] = contradiction.get("relation1_id")
+                resolution_result["confidence"] = contradiction.get(
+                    "confidence1", self.default_confidence
+                )
+                resolution_result["relation_to_keep"] = contradiction.get(
+                    "relation1_id"
+                )
             else:
                 resolution_result["resolved_value"] = contradiction.get("target2")
-                resolution_result["confidence"] = contradiction.get("confidence2", self.default_confidence)
-                resolution_result["relation_to_keep"] = contradiction.get("relation2_id")
+                resolution_result["confidence"] = contradiction.get(
+                    "confidence2", self.default_confidence
+                )
+                resolution_result["relation_to_keep"] = contradiction.get(
+                    "relation2_id"
+                )
 
         elif strategy == "reliability":
             # Prefer information from more reliable sources
@@ -342,12 +390,20 @@ class UncertaintyHandler:
 
             if reliability1 > reliability2:
                 resolution_result["resolved_value"] = contradiction.get("target1")
-                resolution_result["confidence"] = contradiction.get("confidence1", self.default_confidence)
-                resolution_result["relation_to_keep"] = contradiction.get("relation1_id")
+                resolution_result["confidence"] = contradiction.get(
+                    "confidence1", self.default_confidence
+                )
+                resolution_result["relation_to_keep"] = contradiction.get(
+                    "relation1_id"
+                )
             else:
                 resolution_result["resolved_value"] = contradiction.get("target2")
-                resolution_result["confidence"] = contradiction.get("confidence2", self.default_confidence)
-                resolution_result["relation_to_keep"] = contradiction.get("relation2_id")
+                resolution_result["confidence"] = contradiction.get(
+                    "confidence2", self.default_confidence
+                )
+                resolution_result["relation_to_keep"] = contradiction.get(
+                    "relation2_id"
+                )
 
         elif strategy == "weighted":
             # Use a weighted approach considering recency and reliability
@@ -365,30 +421,54 @@ class UncertaintyHandler:
             max_timestamp = max(timestamp1, timestamp2)
             min_timestamp = min(timestamp1, timestamp2)
 
-            recency1 = 1.0 if max_timestamp == min_timestamp else (timestamp1 - min_timestamp) / (max_timestamp - min_timestamp)
-            recency2 = 1.0 if max_timestamp == min_timestamp else (timestamp2 - min_timestamp) / (max_timestamp - min_timestamp)
+            recency1 = (
+                1.0
+                if max_timestamp == min_timestamp
+                else (timestamp1 - min_timestamp) / (max_timestamp - min_timestamp)
+            )
+            recency2 = (
+                1.0
+                if max_timestamp == min_timestamp
+                else (timestamp2 - min_timestamp) / (max_timestamp - min_timestamp)
+            )
 
             # Calculate weighted scores
-            score1 = (recency1 * self.recency_weight) + (reliability1 * self.reliability_weight)
-            score2 = (recency2 * self.recency_weight) + (reliability2 * self.reliability_weight)
+            score1 = (recency1 * self.recency_weight) + (
+                reliability1 * self.reliability_weight
+            )
+            score2 = (recency2 * self.recency_weight) + (
+                reliability2 * self.reliability_weight
+            )
 
             if score1 > score2:
                 resolution_result["resolved_value"] = contradiction.get("target1")
-                resolution_result["confidence"] = contradiction.get("confidence1", self.default_confidence)
-                resolution_result["relation_to_keep"] = contradiction.get("relation1_id")
+                resolution_result["confidence"] = contradiction.get(
+                    "confidence1", self.default_confidence
+                )
+                resolution_result["relation_to_keep"] = contradiction.get(
+                    "relation1_id"
+                )
             else:
                 resolution_result["resolved_value"] = contradiction.get("target2")
-                resolution_result["confidence"] = contradiction.get("confidence2", self.default_confidence)
-                resolution_result["relation_to_keep"] = contradiction.get("relation2_id")
+                resolution_result["confidence"] = contradiction.get(
+                    "confidence2", self.default_confidence
+                )
+                resolution_result["relation_to_keep"] = contradiction.get(
+                    "relation2_id"
+                )
 
         else:  # keep_both
             # Keep both values with uncertainty representation
-            resolution_result["resolved_value"] = f"{contradiction.get('target1')} OR {contradiction.get('target2')}"
+            resolution_result["resolved_value"] = (
+                f"{contradiction.get('target1')} OR {contradiction.get('target2')}"
+            )
 
             # Average the confidences and reduce slightly to reflect uncertainty
             conf1 = contradiction.get("confidence1", self.default_confidence)
             conf2 = contradiction.get("confidence2", self.default_confidence)
-            resolution_result["confidence"] = (conf1 + conf2) / 2 * 0.9  # Reduce confidence to reflect uncertainty
+            resolution_result["confidence"] = (
+                (conf1 + conf2) / 2 * 0.9
+            )  # Reduce confidence to reflect uncertainty
             resolution_result["kept_both"] = True
 
         # Record the resolution in the database
@@ -400,8 +480,9 @@ class UncertaintyHandler:
 
         return resolution_result
 
-    def _record_contradiction_resolution(self, contradiction: dict[str, Any],
-                                      resolution: dict[str, Any]):
+    def _record_contradiction_resolution(
+        self, contradiction: dict[str, Any], resolution: dict[str, Any]
+    ):
         """Record a contradiction resolution in the database."""
         if self.conn is not None:
             conn = self.conn
@@ -412,46 +493,54 @@ class UncertaintyHandler:
 
         try:
             # Serialize the contradiction and resolution data
-            conflicting_items = json.dumps({
-                "entity": contradiction.get("entity"),
-                "relation": contradiction.get("relation"),
-                "target1": contradiction.get("target1"),
-                "target2": contradiction.get("target2")
-            })
+            conflicting_items = json.dumps(
+                {
+                    "entity": contradiction.get("entity"),
+                    "relation": contradiction.get("relation"),
+                    "target1": contradiction.get("target1"),
+                    "target2": contradiction.get("target2"),
+                }
+            )
 
             # Insert into contradictions table
-            cursor.execute('''
+            cursor.execute(
+                """
             INSERT INTO contradictions
             (entity_id, relation_id, contradiction_type, conflicting_items,
              resolution_strategy, resolved_value, confidence, timestamp)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                contradiction.get("entity_id"),
-                contradiction.get("relation1_id"),
-                "value_conflict",
-                conflicting_items,
-                resolution.get("strategy_used"),
-                resolution.get("resolved_value"),
-                resolution.get("confidence"),
-                datetime.now().timestamp()
-            ))
+            """,
+                (
+                    contradiction.get("entity_id"),
+                    contradiction.get("relation1_id"),
+                    "value_conflict",
+                    conflicting_items,
+                    resolution.get("strategy_used"),
+                    resolution.get("resolved_value"),
+                    resolution.get("confidence"),
+                    datetime.now().timestamp(),
+                ),
+            )
 
             # Record the belief revision
-            cursor.execute('''
+            cursor.execute(
+                """
             INSERT INTO belief_revisions
             (entity_id, relation_id, previous_value, new_value,
              revision_reason, confidence_before, confidence_after, timestamp)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                contradiction.get("entity_id"),
-                contradiction.get("relation1_id"),
-                f"{contradiction.get('target1')} OR {contradiction.get('target2')}",
-                resolution.get("resolved_value"),
-                f"Contradiction resolved using {resolution.get('strategy_used')} strategy",
-                contradiction.get("confidence1", self.default_confidence),
-                resolution.get("confidence"),
-                datetime.now().timestamp()
-            ))
+            """,
+                (
+                    contradiction.get("entity_id"),
+                    contradiction.get("relation1_id"),
+                    f"{contradiction.get('target1')} OR {contradiction.get('target2')}",
+                    resolution.get("resolved_value"),
+                    f"Contradiction resolved using {resolution.get('strategy_used')} strategy",
+                    contradiction.get("confidence1", self.default_confidence),
+                    resolution.get("confidence"),
+                    datetime.now().timestamp(),
+                ),
+            )
 
             conn.commit()
 
@@ -478,45 +567,62 @@ class UncertaintyHandler:
 
         try:
             # Get relation details for the one to keep
-            cursor.execute('''
+            cursor.execute(
+                """
             SELECT source_id, target_id, relation_type
             FROM graph_relationships
             WHERE id = ?
-            ''', (resolution.get("relation_to_keep"),))
+            """,
+                (resolution.get("relation_to_keep"),),
+            )
 
             relation = cursor.fetchone()
             if not relation:
-                logger.error(f"Could not find relation with ID {resolution.get('relation_to_keep')}")
+                logger.error(
+                    f"Could not find relation with ID {resolution.get('relation_to_keep')}"
+                )
                 return
 
             # Get the relation to remove
-            relation_to_remove = resolution.get("relation1_id") if resolution.get("relation_to_keep") == resolution.get("relation2_id") else resolution.get("relation2_id")
+            relation_to_remove = (
+                resolution.get("relation1_id")
+                if resolution.get("relation_to_keep") == resolution.get("relation2_id")
+                else resolution.get("relation2_id")
+            )
 
             # Update the confidence of the kept relation
-            cursor.execute('''
+            cursor.execute(
+                """
             UPDATE graph_relationships
             SET confidence = ?
             WHERE id = ?
-            ''', (resolution.get("confidence"), resolution.get("relation_to_keep")))
+            """,
+                (resolution.get("confidence"), resolution.get("relation_to_keep")),
+            )
 
             # Remove the other relation if not keeping both
             if not resolution.get("kept_both"):
-                cursor.execute('''
+                cursor.execute(
+                    """
                 DELETE FROM graph_relationships
                 WHERE id = ?
-                ''', (relation_to_remove,))
+                """,
+                    (relation_to_remove,),
+                )
 
             conn.commit()
 
             # Update the NetworkX graph if available
-            if hasattr(self.graph_store, 'graph') and self.graph_store.graph:
+            if hasattr(self.graph_store, "graph") and self.graph_store.graph:
                 source_id = relation[0]
                 target_id = relation[1]
                 relation[2]
 
                 # Update the edge in the graph
                 if self.graph_store.graph.has_edge(source_id, target_id):
-                    self.graph_store.graph[source_id][target_id]['confidence'] = resolution.get("confidence")
+                    self.graph_store.graph[source_id][target_id]["confidence"] = (
+                        resolution.get("confidence")
+                    )
 
         except Exception as e:
             logger.error(f"Error applying contradiction resolution: {e}")
@@ -526,8 +632,13 @@ class UncertaintyHandler:
             if self.conn is None:
                 conn.close()
 
-    def add_probability_distribution(self, entity_id: int, relation_id: int,
-                                  distribution_type: str, distribution_data: dict[str, Any]):
+    def add_probability_distribution(
+        self,
+        entity_id: int,
+        relation_id: int,
+        distribution_type: str,
+        distribution_data: dict[str, Any],
+    ):
         """
         Add a probability distribution to represent uncertainty about a fact.
 
@@ -549,17 +660,20 @@ class UncertaintyHandler:
             data_json = json.dumps(distribution_data)
 
             # Insert or replace the probability distribution
-            cursor.execute('''
+            cursor.execute(
+                """
             INSERT OR REPLACE INTO probability_distributions
             (entity_id, relation_id, distribution_type, distribution_data, timestamp)
             VALUES (?, ?, ?, ?, ?)
-            ''', (
-                entity_id,
-                relation_id,
-                distribution_type,
-                data_json,
-                datetime.now().timestamp()
-            ))
+            """,
+                (
+                    entity_id,
+                    relation_id,
+                    distribution_type,
+                    data_json,
+                    datetime.now().timestamp(),
+                ),
+            )
 
             conn.commit()
 
@@ -571,7 +685,9 @@ class UncertaintyHandler:
             if self.conn is None:
                 conn.close()
 
-    def get_probability_distribution(self, entity_id: int, relation_id: int) -> dict[str, Any] | None:
+    def get_probability_distribution(
+        self, entity_id: int, relation_id: int
+    ) -> dict[str, Any] | None:
         """
         Get the probability distribution for a fact.
 
@@ -591,19 +707,22 @@ class UncertaintyHandler:
         cursor = conn.cursor()
 
         try:
-            cursor.execute('''
+            cursor.execute(
+                """
             SELECT distribution_type, distribution_data, timestamp
             FROM probability_distributions
             WHERE entity_id = ? AND relation_id = ?
-            ''', (entity_id, relation_id))
+            """,
+                (entity_id, relation_id),
+            )
 
             row = cursor.fetchone()
 
             if row:
                 return {
-                    "type": row['distribution_type'],
-                    "data": json.loads(row['distribution_data']),
-                    "timestamp": row['timestamp']
+                    "type": row["distribution_type"],
+                    "data": json.loads(row["distribution_data"]),
+                    "timestamp": row["timestamp"],
                 }
 
             return None
@@ -616,8 +735,12 @@ class UncertaintyHandler:
             if self.conn is None:
                 conn.close()
 
-    def update_source_reliability(self, source_name: str, reliability_score: float,
-                              metadata: dict[str, Any] = None):
+    def update_source_reliability(
+        self,
+        source_name: str,
+        reliability_score: float,
+        metadata: dict[str, Any] = None,
+    ):
         """
         Update the reliability score for a source.
 
@@ -627,7 +750,9 @@ class UncertaintyHandler:
             metadata: Optional metadata about the source
         """
         if reliability_score < 0 or reliability_score > 1:
-            logger.error(f"Reliability score must be between 0 and 1, got {reliability_score}")
+            logger.error(
+                f"Reliability score must be between 0 and 1, got {reliability_score}"
+            )
             return
 
         if self.conn is not None:
@@ -645,16 +770,19 @@ class UncertaintyHandler:
             metadata_json = json.dumps(metadata) if metadata else None
 
             # Insert or replace the source reliability
-            cursor.execute('''
+            cursor.execute(
+                """
             INSERT OR REPLACE INTO source_reliability
             (source_name, reliability_score, last_updated, metadata)
             VALUES (?, ?, ?, ?)
-            ''', (
-                source_name,
-                reliability_score,
-                datetime.now().timestamp(),
-                metadata_json
-            ))
+            """,
+                (
+                    source_name,
+                    reliability_score,
+                    datetime.now().timestamp(),
+                    metadata_json,
+                ),
+            )
 
             conn.commit()
 
@@ -683,8 +811,14 @@ class UncertaintyHandler:
         # Default value if not found
         return 0.5
 
-    def revise_belief(self, entity_id: int, relation_id: int, new_value: str,
-                    confidence: float, revision_reason: str):
+    def revise_belief(
+        self,
+        entity_id: int,
+        relation_id: int,
+        new_value: str,
+        confidence: float,
+        revision_reason: str,
+    ):
         """
         Revise a belief with new information.
 
@@ -705,12 +839,15 @@ class UncertaintyHandler:
 
         try:
             # Get current relation details
-            cursor.execute('''
+            cursor.execute(
+                """
             SELECT r.target_id, r.confidence, e.entity
             FROM graph_relationships r
             JOIN graph_entities e ON r.target_id = e.id
             WHERE r.id = ?
-            ''', (relation_id,))
+            """,
+                (relation_id,),
+            )
 
             current = cursor.fetchone()
 
@@ -718,70 +855,86 @@ class UncertaintyHandler:
                 logger.error(f"Could not find relation with ID {relation_id}")
                 return
 
-            current_value = current['entity']
-            current_confidence = current['confidence']
+            current_value = current["entity"]
+            current_confidence = current["confidence"]
 
             # Record the belief revision
-            cursor.execute('''
+            cursor.execute(
+                """
             INSERT INTO belief_revisions
             (entity_id, relation_id, previous_value, new_value,
              revision_reason, confidence_before, confidence_after, timestamp)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                entity_id,
-                relation_id,
-                current_value,
-                new_value,
-                revision_reason,
-                current_confidence,
-                confidence,
-                datetime.now().timestamp()
-            ))
+            """,
+                (
+                    entity_id,
+                    relation_id,
+                    current_value,
+                    new_value,
+                    revision_reason,
+                    current_confidence,
+                    confidence,
+                    datetime.now().timestamp(),
+                ),
+            )
 
             # Update the relation with the new value
             # This requires finding or creating the target entity and updating the relation
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (new_value,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (new_value,)
+            )
             target_row = cursor.fetchone()
 
             if target_row:
-                new_target_id = target_row['id']
+                new_target_id = target_row["id"]
             else:
                 # Create a new entity
-                cursor.execute('''
+                cursor.execute(
+                    """
                 INSERT INTO graph_entities (entity, confidence, timestamp)
                 VALUES (?, ?, ?)
-                ''', (new_value, confidence, datetime.now().timestamp()))
+                """,
+                    (new_value, confidence, datetime.now().timestamp()),
+                )
                 new_target_id = cursor.lastrowid
 
             # Update the relation
-            cursor.execute('''
+            cursor.execute(
+                """
             UPDATE graph_relationships
             SET target_id = ?, confidence = ?
             WHERE id = ?
-            ''', (new_target_id, confidence, relation_id))
+            """,
+                (new_target_id, confidence, relation_id),
+            )
 
             conn.commit()
 
             # Update the NetworkX graph if available
-            if hasattr(self.graph_store, 'graph') and self.graph_store.graph:
+            if hasattr(self.graph_store, "graph") and self.graph_store.graph:
                 # Get the source entity ID
-                cursor.execute('SELECT source_id, relation_type FROM graph_relationships WHERE id = ?', (relation_id,))
+                cursor.execute(
+                    "SELECT source_id, relation_type FROM graph_relationships WHERE id = ?",
+                    (relation_id,),
+                )
                 rel_row = cursor.fetchone()
 
                 if rel_row:
-                    source_id = rel_row['source_id']
-                    relation_type = rel_row['relation_type']
+                    source_id = rel_row["source_id"]
+                    relation_type = rel_row["relation_type"]
 
                     # Remove the old edge
-                    if self.graph_store.graph.has_edge(source_id, current['target_id']):
-                        self.graph_store.graph.remove_edge(source_id, current['target_id'])
+                    if self.graph_store.graph.has_edge(source_id, current["target_id"]):
+                        self.graph_store.graph.remove_edge(
+                            source_id, current["target_id"]
+                        )
 
                     # Add the new edge
                     self.graph_store.graph.add_edge(
                         source_id,
                         new_target_id,
                         relation=relation_type,
-                        confidence=confidence
+                        confidence=confidence,
                     )
 
         except Exception as e:
@@ -792,8 +945,9 @@ class UncertaintyHandler:
             if self.conn is None:
                 conn.close()
 
-    def get_belief_revision_history(self, entity_id: int = None, relation_id: int = None,
-                                 limit: int = 10) -> list[dict[str, Any]]:
+    def get_belief_revision_history(
+        self, entity_id: int = None, relation_id: int = None, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """
         Get the revision history for a belief.
 
@@ -816,14 +970,14 @@ class UncertaintyHandler:
         revisions = []
 
         try:
-            query = '''
+            query = """
             SELECT br.id, br.entity_id, br.relation_id, br.previous_value, br.new_value,
                    br.revision_reason, br.confidence_before, br.confidence_after, br.timestamp,
                    e.entity as entity_name
             FROM belief_revisions br
             JOIN graph_entities e ON br.entity_id = e.id
             WHERE 1=1
-            '''
+            """
 
             params = []
 
@@ -842,18 +996,20 @@ class UncertaintyHandler:
             rows = cursor.fetchall()
 
             for row in rows:
-                revisions.append({
-                    "id": row['id'],
-                    "entity_id": row['entity_id'],
-                    "entity": row['entity_name'],
-                    "relation_id": row['relation_id'],
-                    "previous_value": row['previous_value'],
-                    "new_value": row['new_value'],
-                    "revision_reason": row['revision_reason'],
-                    "confidence_before": row['confidence_before'],
-                    "confidence_after": row['confidence_after'],
-                    "timestamp": row['timestamp']
-                })
+                revisions.append(
+                    {
+                        "id": row["id"],
+                        "entity_id": row["entity_id"],
+                        "entity": row["entity_name"],
+                        "relation_id": row["relation_id"],
+                        "previous_value": row["previous_value"],
+                        "new_value": row["new_value"],
+                        "revision_reason": row["revision_reason"],
+                        "confidence_before": row["confidence_before"],
+                        "confidence_after": row["confidence_after"],
+                        "timestamp": row["timestamp"],
+                    }
+                )
 
         except Exception as e:
             logger.error(f"Error getting belief revision history: {e}")
@@ -864,8 +1020,9 @@ class UncertaintyHandler:
 
         return revisions
 
-    def reason_with_incomplete_information(self, query: dict[str, Any],
-                                       available_knowledge: list[dict[str, Any]]) -> dict[str, Any]:
+    def reason_with_incomplete_information(
+        self, query: dict[str, Any], available_knowledge: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Reason with incomplete information to provide best possible answers.
 
@@ -881,7 +1038,7 @@ class UncertaintyHandler:
             "answer": None,
             "confidence": 0,
             "explanation": [],
-            "missing_information": []
+            "missing_information": [],
         }
 
         # Identify what information is missing
@@ -895,37 +1052,54 @@ class UncertaintyHandler:
 
             if partial_matches:
                 # Sort by confidence
-                partial_matches.sort(key=lambda x: x.get("match_confidence", 0), reverse=True)
+                partial_matches.sort(
+                    key=lambda x: x.get("match_confidence", 0), reverse=True
+                )
                 best_match = partial_matches[0]
 
                 result["answer"] = best_match.get("answer")
-                result["confidence"] = best_match.get("match_confidence", 0) * 0.8  # Reduce confidence for incomplete info
-                result["explanation"].append(f"Used best partial match with {best_match.get('match_confidence', 0):.2f} confidence")
-                result["explanation"].append(f"Missing information: {', '.join(missing_info)}")
+                result["confidence"] = (
+                    best_match.get("match_confidence", 0) * 0.8
+                )  # Reduce confidence for incomplete info
+                result["explanation"].append(
+                    f"Used best partial match with {best_match.get('match_confidence', 0):.2f} confidence"
+                )
+                result["explanation"].append(
+                    f"Missing information: {', '.join(missing_info)}"
+                )
 
                 # Add all partial matches for reference
                 result["partial_matches"] = partial_matches[:3]  # Top 3 matches
             else:
                 result["answer"] = "Unknown"
                 result["confidence"] = 0.1
-                result["explanation"].append("No partial matches found with the available information")
+                result["explanation"].append(
+                    "No partial matches found with the available information"
+                )
         else:
             # All information is available, use the most confident knowledge
-            best_knowledge = max(available_knowledge, key=lambda x: x.get("confidence", 0), default=None)
+            best_knowledge = max(
+                available_knowledge, key=lambda x: x.get("confidence", 0), default=None
+            )
 
             if best_knowledge:
                 result["answer"] = best_knowledge.get("answer")
                 result["confidence"] = best_knowledge.get("confidence", 0.5)
-                result["explanation"].append(f"Used complete information with {best_knowledge.get('confidence', 0.5):.2f} confidence")
+                result["explanation"].append(
+                    f"Used complete information with {best_knowledge.get('confidence', 0.5):.2f} confidence"
+                )
             else:
                 result["answer"] = "Unknown"
                 result["confidence"] = 0
-                result["explanation"].append("No knowledge available to answer the query")
+                result["explanation"].append(
+                    "No knowledge available to answer the query"
+                )
 
         return result
 
-    def _identify_missing_information(self, query: dict[str, Any],
-                                   available_knowledge: list[dict[str, Any]]) -> list[str]:
+    def _identify_missing_information(
+        self, query: dict[str, Any], available_knowledge: list[dict[str, Any]]
+    ) -> list[str]:
         """Identify what information is missing to answer a query."""
         missing = []
 
@@ -946,8 +1120,9 @@ class UncertaintyHandler:
 
         return missing
 
-    def _find_partial_matches(self, query: dict[str, Any],
-                           available_knowledge: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _find_partial_matches(
+        self, query: dict[str, Any], available_knowledge: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Find partial matches for a query with incomplete information."""
         matches = []
 
@@ -975,14 +1150,16 @@ class UncertaintyHandler:
 
                 # Only include if it's a meaningful partial match
                 if match_confidence > 0.3:
-                    matches.append({
-                        "answer": item.get("answer"),
-                        "matched_fields": matched_fields,
-                        "total_fields": total_fields,
-                        "match_confidence": scaled_confidence,
-                        "original_confidence": item_confidence,
-                        "source": item.get("source", "unknown")
-                    })
+                    matches.append(
+                        {
+                            "answer": item.get("answer"),
+                            "matched_fields": matched_fields,
+                            "total_fields": total_fields,
+                            "match_confidence": scaled_confidence,
+                            "original_confidence": item_confidence,
+                            "source": item.get("source", "unknown"),
+                        }
+                    )
 
         return matches
 

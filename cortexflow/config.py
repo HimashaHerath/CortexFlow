@@ -3,6 +3,7 @@ CortexFlow Configuration module.
 
 This module provides the configuration class for the CortexFlow system.
 """
+
 from __future__ import annotations
 
 import os
@@ -13,22 +14,23 @@ from typing import Any
 @dataclass
 class MemoryConfig:
     """Memory configuration settings."""
+
     active_token_limit: int = 4096
     working_token_limit: int = 8192
     archive_token_limit: int = 16384
     use_dynamic_weighting: bool = False
     dynamic_weighting_learning_rate: float = 0.1
     dynamic_weighting_min_tier_size: int = 1000
-    dynamic_weighting_default_ratios: dict[str, float] = field(default_factory=lambda: {
-        "active": 0.25,
-        "working": 0.35,
-        "archive": 0.40
-    })
+    dynamic_weighting_default_ratios: dict[str, float] = field(
+        default_factory=lambda: {"active": 0.25, "working": 0.35, "archive": 0.40}
+    )
     use_fact_extraction: bool = False
+
 
 @dataclass
 class KnowledgeStoreConfig:
     """Knowledge store configuration settings."""
+
     knowledge_store_path: str = "cortexflow.db"
     retrieval_type: str = "hybrid"
     trust_marker: str = "📚"
@@ -36,9 +38,11 @@ class KnowledgeStoreConfig:
     rerank_top_k: int = 15
     vector_model: str = "all-MiniLM-L6-v2"
 
+
 @dataclass
 class GraphRagConfig:
     """Graph RAG configuration settings."""
+
     use_graph_rag: bool = False
     enable_multi_hop_queries: bool = False
     max_graph_hops: int = 3
@@ -49,37 +53,47 @@ class GraphRagConfig:
     use_multihop_indexing: bool = False
     max_indexed_hops: int = 2
 
+
 @dataclass
 class OntologyConfig:
     """Ontology configuration settings."""
+
     use_ontology: bool = False
     enable_ontology_evolution: bool = True
     ontology_confidence_threshold: float = 0.7
 
+
 @dataclass
 class MetadataConfig:
     """Metadata framework configuration settings."""
+
     track_provenance: bool = True
     track_confidence: bool = True
     track_temporal: bool = True
 
+
 @dataclass
 class AgentConfig:
     """Chain of Agents configuration settings."""
+
     use_chain_of_agents: bool = False
     chain_complexity_threshold: int = 5
     chain_agent_count: int = 3
 
+
 @dataclass
 class ReflectionConfig:
     """Self-Reflection configuration settings."""
+
     use_self_reflection: bool = False
     reflection_relevance_threshold: float = 0.6
     reflection_confidence_threshold: float = 0.7
 
+
 @dataclass
 class UncertaintyConfig:
     """Uncertainty Handling configuration settings."""
+
     use_uncertainty_handling: bool = False
     auto_detect_contradictions: bool = True
     default_contradiction_strategy: str = "weighted"
@@ -89,23 +103,27 @@ class UncertaintyConfig:
     uncertainty_representation: str = "confidence"
     reason_with_incomplete_info: bool = True
 
+
 @dataclass
 class PerformanceConfig:
     """Performance Optimization configuration settings."""
+
     use_performance_optimization: bool = False
     reasoning_cache_max_size: int = 1000
     query_cache_max_size: int = 500
     cache_ttl: int = 3600
 
+
 @dataclass
 class LLMConfig:
     """LLM Integration configuration settings."""
+
     default_model: str = "gemma3:1b"
     ollama_host: str = "http://localhost:11434"
     conversation_style: str = "casual"
     system_persona: str = "helpful assistant"
     # Backend selection
-    backend: str = "ollama"           # "ollama" or "vertex_ai"
+    backend: str = "ollama"  # "ollama" or "vertex_ai"
     # Vertex AI fields (None = read from env vars at runtime)
     vertex_project_id: str | None = None
     vertex_location: str | None = None
@@ -113,16 +131,20 @@ class LLMConfig:
     vertex_credentials_path: str | None = None
     vertex_model: str = "gemini-1.5-flash"
 
+
 @dataclass
 class ClassifierConfig:
     """ML Classifier configuration settings."""
+
     use_ml_classifier: bool = False
     classifier_model: str = "all-MiniLM-L6-v2"
     classifier_threshold: float = 0.7
 
+
 @dataclass
 class InferenceConfig:
     """Inference Engine configuration settings."""
+
     use_inference_engine: bool = False
     max_inference_depth: int = 5
     inference_confidence_threshold: float = 0.6
@@ -133,53 +155,67 @@ class InferenceConfig:
 
 # ---- Companion AI config sections (Phase 1-3) ----
 
+
 @dataclass
 class SessionConfig:
     """Session management configuration."""
+
     enable_sessions: bool = False
     default_user_id: str = "default"
     session_ttl: int = 86400  # seconds
     max_sessions_per_user: int = 10
     session_db_path: str = ":memory:"
 
+
 @dataclass
 class EmotionConfig:
     """Emotion tracking configuration."""
+
     use_emotion_tracking: bool = False
     emotion_detector: str = "rule"  # "rule" or "llm"
     emotion_window_size: int = 20
     emotion_influence_on_response: float = 0.5
 
+
 @dataclass
 class PersonaConfig:
     """Persona management configuration."""
+
     use_personas: bool = False
     default_persona_id: str | None = None
     persona_db_path: str = ":memory:"
 
+
 @dataclass
 class RelationshipConfig:
     """Relationship tracking configuration."""
+
     use_relationship_tracking: bool = False
     relationship_db_path: str = ":memory:"
+
 
 @dataclass
 class EventConfig:
     """Event system configuration."""
+
     use_events: bool = False
 
 
 # ---- Phase 4: Temporal & Episodic config sections ----
 
+
 @dataclass
 class TemporalConfig:
     """Temporal fact management configuration."""
+
     use_temporal_facts: bool = False
     temporal_db_path: str = ":memory:"
+
 
 @dataclass
 class EpisodicConfig:
     """Episodic memory configuration."""
+
     use_episodic_memory: bool = False
     episodic_db_path: str = ":memory:"
     auto_summarize_on_session_close: bool = True
@@ -188,6 +224,7 @@ class EpisodicConfig:
 @dataclass
 class SafetyConfig:
     """Safety pipeline configuration."""
+
     use_safety_pipeline: bool = False
     enable_pii_detection: bool = True
     enable_boundary_enforcement: bool = True
@@ -198,6 +235,7 @@ class SafetyConfig:
 @dataclass
 class VectorStoreConfig:
     """Vector store backend configuration."""
+
     backend: str = "sqlite"  # "sqlite", "chromadb", "qdrant"
     collection_name: str = "cortexflow"
     # ChromaDB settings
@@ -275,11 +313,27 @@ class CortexFlowConfig:
             return cls._FIELD_MAP
         mapping: dict[str, str] = {}
         for section_name in (
-            'memory', 'knowledge_store', 'graph_rag', 'ontology', 'metadata',
-            'agents', 'reflection', 'uncertainty', 'performance', 'llm',
-            'classifier', 'inference',
-            'session', 'emotion', 'persona', 'relationship',
-            'events', 'temporal', 'episodic', 'safety', 'vector_store',
+            "memory",
+            "knowledge_store",
+            "graph_rag",
+            "ontology",
+            "metadata",
+            "agents",
+            "reflection",
+            "uncertainty",
+            "performance",
+            "llm",
+            "classifier",
+            "inference",
+            "session",
+            "emotion",
+            "persona",
+            "relationship",
+            "events",
+            "temporal",
+            "episodic",
+            "safety",
+            "vector_store",
         ):
             section_cls = {f.name: f for f in fields(cls)}[section_name].default_factory  # type: ignore[union-attr]
             for f in fields(section_cls):
@@ -300,7 +354,9 @@ class CortexFlowConfig:
         if section_name is not None:
             sub = object.__getattribute__(self, section_name)
             return getattr(sub, name)
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
 
     @staticmethod
     def _extract_section(config_dict: dict[str, Any], config_class) -> dict[str, Any]:
@@ -348,7 +404,7 @@ class CortexFlowConfig:
         top_config_dict = {
             "verbose_logging": config_dict.get("verbose_logging", False),
             "debug_mode": config_dict.get("debug_mode", False),
-            "custom_config": config_dict.get("custom_config", {})
+            "custom_config": config_dict.get("custom_config", {}),
         }
 
         # Create section objects if any matching fields were provided
@@ -360,11 +416,13 @@ class CortexFlowConfig:
         return cls(**top_config_dict)
 
     # Fields that must never appear in logs or serialized output
-    _SENSITIVE_FIELDS = frozenset({
-        "vertex_api_key",
-        "vertex_credentials_path",
-        "qdrant_api_key",
-    })
+    _SENSITIVE_FIELDS = frozenset(
+        {
+            "vertex_api_key",
+            "vertex_credentials_path",
+            "qdrant_api_key",
+        }
+    )
 
     def to_dict(self, *, redact: bool = False) -> dict[str, Any]:
         """
@@ -381,7 +439,7 @@ class CortexFlowConfig:
         # Flatten all nested dataclass sections into a single dict
         for section_field in fields(self):
             value = getattr(self, section_field.name)
-            if hasattr(value, '__dataclass_fields__'):
+            if hasattr(value, "__dataclass_fields__"):
                 # It's a nested dataclass section -- flatten its fields
                 for f in fields(value):
                     val = getattr(value, f.name)
@@ -397,10 +455,12 @@ class CortexFlowConfig:
     def log_config(self):
         """Log the current configuration (sensitive fields are redacted)."""
         import logging as _logging
+
         _logger = _logging.getLogger("cortexflow")
         _logger.info("CortexFlow Configuration:")
         for key, value in self.to_dict(redact=True).items():
             _logger.info("  %s: %s", key, value)
+
 
 class ConfigBuilder:
     """Builder class for CortexFlowConfig to allow fluent configuration."""
@@ -440,46 +500,52 @@ class ConfigBuilder:
 
     def with_memory(self, **kwargs) -> ConfigBuilder:
         """Configure memory settings."""
-        return self._set_section('_memory', **kwargs)
+        return self._set_section("_memory", **kwargs)
 
     def with_knowledge_store(self, **kwargs) -> ConfigBuilder:
         """Configure knowledge store settings."""
-        return self._set_section('_knowledge_store', **kwargs)
+        return self._set_section("_knowledge_store", **kwargs)
 
     def with_graph_rag(self, **kwargs) -> ConfigBuilder:
         """Configure graph RAG settings."""
-        return self._set_section('_graph_rag', **kwargs)
+        return self._set_section("_graph_rag", **kwargs)
 
     def with_ontology(self, **kwargs) -> ConfigBuilder:
         """Configure ontology settings."""
-        return self._set_section('_ontology', **kwargs)
+        return self._set_section("_ontology", **kwargs)
 
     def with_metadata(self, **kwargs) -> ConfigBuilder:
         """Configure metadata framework settings."""
-        return self._set_section('_metadata', **kwargs)
+        return self._set_section("_metadata", **kwargs)
 
     def with_agents(self, **kwargs) -> ConfigBuilder:
         """Configure chain of agents settings."""
-        return self._set_section('_agents', **kwargs)
+        return self._set_section("_agents", **kwargs)
 
     def with_reflection(self, **kwargs) -> ConfigBuilder:
         """Configure self-reflection settings."""
-        return self._set_section('_reflection', **kwargs)
+        return self._set_section("_reflection", **kwargs)
 
     def with_uncertainty(self, **kwargs) -> ConfigBuilder:
         """Configure uncertainty handling settings."""
-        return self._set_section('_uncertainty', **kwargs)
+        return self._set_section("_uncertainty", **kwargs)
 
     def with_performance(self, **kwargs) -> ConfigBuilder:
         """Configure performance optimization settings."""
-        return self._set_section('_performance', **kwargs)
+        return self._set_section("_performance", **kwargs)
 
     def with_llm(self, **kwargs) -> ConfigBuilder:
         """Configure LLM integration settings."""
-        return self._set_section('_llm', **kwargs)
+        return self._set_section("_llm", **kwargs)
 
-    def with_vertex_ai(self, project_id=None, location=None, default_model="gemini-1.5-flash",
-                       api_key=None, credentials_path=None) -> ConfigBuilder:
+    def with_vertex_ai(
+        self,
+        project_id=None,
+        location=None,
+        default_model="gemini-1.5-flash",
+        api_key=None,
+        credentials_path=None,
+    ) -> ConfigBuilder:
         """Configure Vertex AI as the LLM backend."""
         self._llm.backend = "vertex_ai"
         self._llm.default_model = default_model
@@ -496,62 +562,64 @@ class ConfigBuilder:
 
     def with_classifier(self, **kwargs) -> ConfigBuilder:
         """Configure classifier settings."""
-        return self._set_section('_classifier', **kwargs)
+        return self._set_section("_classifier", **kwargs)
 
     def with_inference(self, **kwargs) -> ConfigBuilder:
         """Configure inference engine settings."""
-        return self._set_section('_inference', **kwargs)
+        return self._set_section("_inference", **kwargs)
 
     def with_sessions(self, **kwargs) -> ConfigBuilder:
         """Enable and configure session management."""
         self._session.enable_sessions = True
-        return self._set_section('_session', **kwargs)
+        return self._set_section("_session", **kwargs)
 
     def with_emotions(self, **kwargs) -> ConfigBuilder:
         """Enable and configure emotion tracking."""
         self._emotion.use_emotion_tracking = True
-        return self._set_section('_emotion', **kwargs)
+        return self._set_section("_emotion", **kwargs)
 
     def with_persona(self, **kwargs) -> ConfigBuilder:
         """Enable and configure persona management."""
         self._persona.use_personas = True
-        return self._set_section('_persona', **kwargs)
+        return self._set_section("_persona", **kwargs)
 
     def with_relationship(self, **kwargs) -> ConfigBuilder:
         """Enable and configure relationship tracking."""
         self._relationship.use_relationship_tracking = True
-        return self._set_section('_relationship', **kwargs)
+        return self._set_section("_relationship", **kwargs)
 
     def with_events(self, **kwargs) -> ConfigBuilder:
         """Enable and configure event system."""
         self._events.use_events = True
-        return self._set_section('_events', **kwargs)
+        return self._set_section("_events", **kwargs)
 
     def with_temporal(self, **kwargs) -> ConfigBuilder:
         """Enable and configure temporal fact management."""
         self._temporal.use_temporal_facts = True
-        return self._set_section('_temporal', **kwargs)
+        return self._set_section("_temporal", **kwargs)
 
     def with_episodic(self, **kwargs) -> ConfigBuilder:
         """Enable and configure episodic memory."""
         self._episodic.use_episodic_memory = True
-        return self._set_section('_episodic', **kwargs)
+        return self._set_section("_episodic", **kwargs)
 
     def with_safety(self, **kwargs) -> ConfigBuilder:
         """Enable and configure the safety pipeline."""
         self._safety.use_safety_pipeline = True
-        return self._set_section('_safety', **kwargs)
+        return self._set_section("_safety", **kwargs)
 
     def with_vector_store(self, **kwargs) -> ConfigBuilder:
         """Configure vector store backend."""
-        return self._set_section('_vector_store', **kwargs)
+        return self._set_section("_vector_store", **kwargs)
 
     def with_fact_extraction(self, enabled: bool = True) -> ConfigBuilder:
         """Enable or disable personal fact extraction for deep memory recall."""
         self._memory.use_fact_extraction = enabled
         return self
 
-    def with_debug(self, verbose_logging: bool = None, debug_mode: bool = None) -> ConfigBuilder:
+    def with_debug(
+        self, verbose_logging: bool = None, debug_mode: bool = None
+    ) -> ConfigBuilder:
         """Configure debug and logging settings."""
         if verbose_logging is not None:
             self._verbose_logging = verbose_logging
@@ -593,5 +661,5 @@ class ConfigBuilder:
             vector_store=self._vector_store,
             verbose_logging=self._verbose_logging,
             debug_mode=self._debug_mode,
-            custom_config=self._custom_config
+            custom_config=self._custom_config,
         )

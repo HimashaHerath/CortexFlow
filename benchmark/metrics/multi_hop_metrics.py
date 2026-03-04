@@ -29,6 +29,7 @@ def normalize_path(path: str) -> list[str]:
     components = [c.strip() for c in normalized.split("→")]
     return [c for c in components if c]  # Filter out empty strings
 
+
 def path_overlap_score(expected_path: list[str], actual_path: list[str]) -> float:
     """
     Calculate the overlap between expected and actual paths.
@@ -53,6 +54,7 @@ def path_overlap_score(expected_path: list[str], actual_path: list[str]) -> floa
 
     return intersection / union if union > 0 else 0.0
 
+
 def path_order_accuracy(expected_path: list[str], actual_path: list[str]) -> float:
     """
     Evaluate how well the ordering of elements in the path matches the expected ordering.
@@ -69,24 +71,25 @@ def path_order_accuracy(expected_path: list[str], actual_path: list[str]) -> flo
 
     # Find the longest common subsequence (LCS)
     m, n = len(expected_path), len(actual_path)
-    dp = [[0 for _ in range(n+1)] for _ in range(m+1)]
+    dp = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
 
-    for i in range(1, m+1):
-        for j in range(1, n+1):
-            if expected_path[i-1] == actual_path[j-1]:
-                dp[i][j] = dp[i-1][j-1] + 1
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if expected_path[i - 1] == actual_path[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
             else:
-                dp[i][j] = max(dp[i-1][j], dp[i][j-1])
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
 
     lcs_length = dp[m][n]
     return lcs_length / max(m, n)
+
 
 def multi_hop_reasoning_score(
     expected_path: list[str],
     actual_path: list[str],
     expected_entities: list[str],
     actual_entities: list[str],
-    weights: dict[str, float] = None
+    weights: dict[str, float] = None,
 ) -> dict[str, float]:
     """
     Calculate a comprehensive multi-hop reasoning score.
@@ -106,7 +109,7 @@ def multi_hop_reasoning_score(
             "path_overlap": 0.3,
             "path_order": 0.3,
             "entity_coverage": 0.2,
-            "hop_count": 0.2
+            "hop_count": 0.2,
         }
 
     # Calculate path overlap
@@ -120,7 +123,9 @@ def multi_hop_reasoning_score(
     actual_entity_set = set(actual_entities)
     entity_coverage = 0.0
     if expected_entity_set:
-        entity_coverage = len(expected_entity_set.intersection(actual_entity_set)) / len(expected_entity_set)
+        entity_coverage = len(
+            expected_entity_set.intersection(actual_entity_set)
+        ) / len(expected_entity_set)
 
     # Calculate hop count accuracy
     expected_hops = max(0, len(expected_path) - 1)
@@ -133,10 +138,10 @@ def multi_hop_reasoning_score(
 
     # Calculate composite score
     composite_score = (
-        weights["path_overlap"] * overlap +
-        weights["path_order"] * order +
-        weights["entity_coverage"] * entity_coverage +
-        weights["hop_count"] * hop_accuracy
+        weights["path_overlap"] * overlap
+        + weights["path_order"] * order
+        + weights["entity_coverage"] * entity_coverage
+        + weights["hop_count"] * hop_accuracy
     )
 
     return {
@@ -144,12 +149,12 @@ def multi_hop_reasoning_score(
         "path_order": order,
         "entity_coverage": entity_coverage,
         "hop_accuracy": hop_accuracy,
-        "composite_score": composite_score
+        "composite_score": composite_score,
     }
 
+
 def evaluate_reasoning_chain(
-    expected_chain: list[dict[str, Any]],
-    actual_chain: list[dict[str, Any]]
+    expected_chain: list[dict[str, Any]], actual_chain: list[dict[str, Any]]
 ) -> dict[str, float]:
     """
     Evaluate a reasoning chain with multiple steps.
@@ -181,10 +186,7 @@ def evaluate_reasoning_chain(
 
         # Evaluate step
         step_score = multi_hop_reasoning_score(
-            expected_path,
-            actual_path,
-            expected_entities,
-            actual_entities
+            expected_path, actual_path, expected_entities, actual_entities
         )
 
         step_scores.append(step_score)
@@ -195,18 +197,19 @@ def evaluate_reasoning_chain(
     # Calculate chain accuracy as weighted average of step scores
     chain_accuracy = 0.0
     if step_scores:
-        chain_accuracy = sum(score["composite_score"] for score in step_scores) / len(step_scores)
+        chain_accuracy = sum(score["composite_score"] for score in step_scores) / len(
+            step_scores
+        )
 
     return {
         "step_scores": step_scores,
         "step_coverage": step_coverage,
-        "chain_accuracy": chain_accuracy * step_coverage  # Penalize for missing steps
+        "chain_accuracy": chain_accuracy * step_coverage,  # Penalize for missing steps
     }
 
+
 def benchmark_multi_hop_reasoning(
-    benchmark_queries: dict[str, list[dict[str, Any]]],
-    reasoning_function,
-    logger=None
+    benchmark_queries: dict[str, list[dict[str, Any]]], reasoning_function, logger=None
 ) -> dict[str, Any]:
     """
     Run benchmarks for multi-hop reasoning.
@@ -223,7 +226,7 @@ def benchmark_multi_hop_reasoning(
         "single_hop": [],
         "multi_hop": [],
         "counterfactual": [],
-        "aggregated": {}
+        "aggregated": {},
     }
 
     # Run benchmarks for each query type
@@ -251,10 +254,7 @@ def benchmark_multi_hop_reasoning(
 
             # Calculate scores
             scores = multi_hop_reasoning_score(
-                expected_path,
-                actual_path,
-                expected_entities,
-                actual_entities
+                expected_path, actual_path, expected_entities, actual_entities
             )
 
             # Add execution time
@@ -263,15 +263,9 @@ def benchmark_multi_hop_reasoning(
             # Add to results
             result_entry = {
                 "query": query,
-                "expected": {
-                    "path": expected_path,
-                    "entities": expected_entities
-                },
-                "actual": {
-                    "path": actual_path,
-                    "entities": actual_entities
-                },
-                "scores": scores
+                "expected": {"path": expected_path, "entities": expected_entities},
+                "actual": {"path": actual_path, "entities": actual_entities},
+                "scores": scores,
             }
 
             if query_type in results:
@@ -289,25 +283,35 @@ def benchmark_multi_hop_reasoning(
 
         # Calculate average scores
         avg_scores = {
-            "path_overlap": np.mean([r["scores"]["path_overlap"] for r in query_results]),
+            "path_overlap": np.mean(
+                [r["scores"]["path_overlap"] for r in query_results]
+            ),
             "path_order": np.mean([r["scores"]["path_order"] for r in query_results]),
-            "entity_coverage": np.mean([r["scores"]["entity_coverage"] for r in query_results]),
-            "hop_accuracy": np.mean([r["scores"]["hop_accuracy"] for r in query_results]),
-            "composite_score": np.mean([r["scores"]["composite_score"] for r in query_results]),
-            "execution_time": np.mean([r["scores"]["execution_time"] for r in query_results])
+            "entity_coverage": np.mean(
+                [r["scores"]["entity_coverage"] for r in query_results]
+            ),
+            "hop_accuracy": np.mean(
+                [r["scores"]["hop_accuracy"] for r in query_results]
+            ),
+            "composite_score": np.mean(
+                [r["scores"]["composite_score"] for r in query_results]
+            ),
+            "execution_time": np.mean(
+                [r["scores"]["execution_time"] for r in query_results]
+            ),
         }
 
         results["aggregated"][query_type] = avg_scores
 
     # Calculate overall score
     if results["aggregated"]:
-        overall_score = np.mean([
-            scores["composite_score"]
-            for query_type, scores in results["aggregated"].items()
-        ])
+        overall_score = np.mean(
+            [
+                scores["composite_score"]
+                for query_type, scores in results["aggregated"].items()
+            ]
+        )
 
-        results["aggregated"]["overall"] = {
-            "composite_score": overall_score
-        }
+        results["aggregated"]["overall"] = {"composite_score": overall_score}
 
     return results

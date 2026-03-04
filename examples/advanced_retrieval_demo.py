@@ -15,7 +15,8 @@ from cortexflow import (
 
 
 def print_divider():
-    print("\n" + "="*70 + "\n")
+    print("\n" + "=" * 70 + "\n")
+
 
 def compare_search_methods(manager, query):
     """Compare different search methods for the same query."""
@@ -52,8 +53,9 @@ def compare_search_methods(manager, query):
         "vector": vector_results,
         "bm25": bm25_results,
         "hybrid": hybrid_results,
-        "reranked": reranked_results
+        "reranked": reranked_results,
     }
+
 
 def print_results(results, method_name):
     """Print search results with method name."""
@@ -61,16 +63,17 @@ def print_results(results, method_name):
     if results:
         for i, result in enumerate(results, 1):
             print(f"{i}. {result['content']}")
-            if 'similarity' in result:
+            if "similarity" in result:
                 print(f"   Vector Score: {result['similarity']:.4f}")
-            if 'bm25_score' in result:
+            if "bm25_score" in result:
                 print(f"   BM25 Score: {result['bm25_score']:.4f}")
-            if 'combined_score' in result:
+            if "combined_score" in result:
                 print(f"   Combined Score: {result['combined_score']:.4f}")
-            if 'rerank_score' in result:
+            if "rerank_score" in result:
                 print(f"   Rerank Score: {result['rerank_score']:.4f}")
     else:
         print("No results found")
+
 
 def main():
     print("Testing CortexFlow Advanced Retrieval Techniques")
@@ -84,8 +87,8 @@ def main():
             archive_token_limit=3000,
         ),
         knowledge_store=KnowledgeStoreConfig(
-            vector_model='all-MiniLM-L6-v2',
-            retrieval_type='hybrid',
+            vector_model="all-MiniLM-L6-v2",
+            retrieval_type="hybrid",
             use_reranking=True,
             rerank_top_k=20,
         ),
@@ -95,16 +98,48 @@ def main():
 
     # Store some test facts using the knowledge store's add_knowledge method
     print("Storing sample facts...")
-    manager.knowledge_store.add_knowledge("Alice lives in Boston, Massachusetts.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("Boston is the capital of Massachusetts.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("Boston is known for its prestigious universities.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("Harvard University is located in Cambridge near Boston.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("MIT is a world-renowned technical institute in Cambridge.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("The Boston Red Sox play at Fenway Park.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("Bob works at a technology company in Silicon Valley.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("Python is a popular programming language used in data science.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("Machine learning models require training data.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("The Eiffel Tower is a famous landmark in Paris, France.", source="demo", confidence=0.95)
+    manager.knowledge_store.add_knowledge(
+        "Alice lives in Boston, Massachusetts.", source="demo", confidence=0.95
+    )
+    manager.knowledge_store.add_knowledge(
+        "Boston is the capital of Massachusetts.", source="demo", confidence=0.95
+    )
+    manager.knowledge_store.add_knowledge(
+        "Boston is known for its prestigious universities.",
+        source="demo",
+        confidence=0.95,
+    )
+    manager.knowledge_store.add_knowledge(
+        "Harvard University is located in Cambridge near Boston.",
+        source="demo",
+        confidence=0.95,
+    )
+    manager.knowledge_store.add_knowledge(
+        "MIT is a world-renowned technical institute in Cambridge.",
+        source="demo",
+        confidence=0.95,
+    )
+    manager.knowledge_store.add_knowledge(
+        "The Boston Red Sox play at Fenway Park.", source="demo", confidence=0.95
+    )
+    manager.knowledge_store.add_knowledge(
+        "Bob works at a technology company in Silicon Valley.",
+        source="demo",
+        confidence=0.95,
+    )
+    manager.knowledge_store.add_knowledge(
+        "Python is a popular programming language used in data science.",
+        source="demo",
+        confidence=0.95,
+    )
+    manager.knowledge_store.add_knowledge(
+        "Machine learning models require training data.", source="demo", confidence=0.95
+    )
+    manager.knowledge_store.add_knowledge(
+        "The Eiffel Tower is a famous landmark in Paris, France.",
+        source="demo",
+        confidence=0.95,
+    )
 
     # Wait for storage to complete
     time.sleep(1)
@@ -117,7 +152,7 @@ def main():
         "Tell me about universities near Boston",
         "What is Boston known for?",
         "machine learning and AI",
-        "famous landmarks in Europe"
+        "famous landmarks in Europe",
     ]
 
     for query in test_queries:
@@ -137,6 +172,7 @@ def main():
     # Clean up
     manager.close()
     print("Test completed successfully.")
+
 
 if __name__ == "__main__":
     main()

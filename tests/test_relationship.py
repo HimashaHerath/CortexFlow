@@ -29,7 +29,8 @@ class TestRelationshipState:
 
     def test_roundtrip(self):
         state = RelationshipState(
-            user_id="u1", persona_id="p1",
+            user_id="u1",
+            persona_id="p1",
             stage=RelationshipStage.DEVELOPING,
             trust_level=0.45,
             interaction_count=20,
@@ -72,10 +73,14 @@ class TestRelationshipTracker:
 
         # Vulnerable message with negative emotion
         sad_state = EmotionalState(
-            primary_emotion="sadness", intensity=0.8, valence=-0.6, arousal=-0.2,
+            primary_emotion="sadness",
+            intensity=0.8,
+            valence=-0.6,
+            arousal=-0.2,
         )
-        self.tracker.update("u1", "p1", "I'm really struggling today", "user",
-                          emotional_state=sad_state)
+        self.tracker.update(
+            "u1", "p1", "I'm really struggling today", "user", emotional_state=sad_state
+        )
         new_trust = self.tracker.get_state("u1", "p1").trust_level
         # Trust should have grown more than baseline
         assert new_trust > base_trust
@@ -90,7 +95,9 @@ class TestRelationshipTracker:
         assert state.interaction_count >= 6
 
     def test_topic_tracking(self):
-        self.tracker.update("u1", "p1", "I love astronomy and space exploration", "user")
+        self.tracker.update(
+            "u1", "p1", "I love astronomy and space exploration", "user"
+        )
         state = self.tracker.get_state("u1", "p1")
         assert len(state.topics_discussed) > 0
         assert any("astronomy" in t for t in state.topics_discussed)
@@ -147,12 +154,15 @@ class TestRelationshipTracker:
         self.tracker.update("u1", "p1", "Hi", "user")
         short_trust = self.tracker.get_state("u1", "p1").trust_level
 
-        self.tracker.update("u1", "p1",
+        self.tracker.update(
+            "u1",
+            "p1",
             "I really want to tell you about my day because it was quite eventful. "
             "I went to the park, met some old friends, and we had a wonderful conversation "
             "about our shared memories from college. It made me realize how much I value "
             "those relationships and the experiences we shared together.",
-            "user")
+            "user",
+        )
         long_trust = self.tracker.get_state("u1", "p1").trust_level
         assert long_trust > short_trust
 

@@ -5,6 +5,7 @@ Lightweight regex-based detector for personal facts in conversation messages.
 No external dependencies required (uses stdlib re). Optional spaCy NER boost
 when available.
 """
+
 from __future__ import annotations
 
 import re
@@ -30,7 +31,9 @@ class PersonalFactDetector:
             re.compile(r"\bcall me\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
         ],
         "occupation": [
-            re.compile(r"\bi work (?:at|for)\s+(.+?)(?:\s+as\b|\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(
+                r"\bi work (?:at|for)\s+(.+?)(?:\s+as\b|\.|,|!|\?|$)", re.IGNORECASE
+            ),
             re.compile(r"\bi(?:'m| am) an?\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
             re.compile(r"\bmy job is\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
             re.compile(r"\bi work as an?\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
@@ -42,13 +45,25 @@ class PersonalFactDetector:
             re.compile(r"\bi grew up in\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
         ],
         "preference": [
-            re.compile(r"\bmy favo(?:u?)rite\s+(\w+)\s+is\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
-            re.compile(r"\bi (?:really )?(?:love|like|prefer|enjoy)\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(
+                r"\bmy favo(?:u?)rite\s+(\w+)\s+is\s+(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\bi (?:really )?(?:love|like|prefer|enjoy)\s+(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
         ],
         "possession": [
-            re.compile(r"\bmy\s+(\w+(?:'s)?)\s+name is\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
-            re.compile(r"\bi have an?\s+(.+?)\s+named\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
-            re.compile(r"\bi have an?\s+(.+?)\s+called\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(
+                r"\bmy\s+(\w+(?:'s)?)\s+name is\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE
+            ),
+            re.compile(
+                r"\bi have an?\s+(.+?)\s+named\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE
+            ),
+            re.compile(
+                r"\bi have an?\s+(.+?)\s+called\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE
+            ),
         ],
         "age": [
             re.compile(r"\bi(?:'m| am)\s+(\d+)\s+years?\s+old", re.IGNORECASE),
@@ -56,26 +71,61 @@ class PersonalFactDetector:
         ],
         # Companion-specific patterns (Phase 2B)
         "relationship_status": [
-            re.compile(r"\bi(?:'m| am)\s+(single|married|divorced|engaged|in a relationship|dating|widowed)", re.IGNORECASE),
-            re.compile(r"\bi have a\s+(boyfriend|girlfriend|partner|wife|husband|spouse)", re.IGNORECASE),
+            re.compile(
+                r"\bi(?:'m| am)\s+(single|married|divorced|engaged|in a relationship|dating|widowed)",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\bi have a\s+(boyfriend|girlfriend|partner|wife|husband|spouse)",
+                re.IGNORECASE,
+            ),
         ],
         "emotional_state": [
-            re.compile(r"\bi(?:'m| am) (?:feeling |)(happy|sad|anxious|depressed|lonely|stressed|excited|scared|angry|grateful|hopeful|overwhelmed)\b", re.IGNORECASE),
-            re.compile(r"\bi(?:'ve| have) been (?:feeling |)(happy|sad|anxious|depressed|lonely|stressed|excited|scared|angry|grateful|hopeful|overwhelmed)\b", re.IGNORECASE),
+            re.compile(
+                r"\bi(?:'m| am) (?:feeling |)(happy|sad|anxious|depressed|lonely|stressed|excited|scared|angry|grateful|hopeful|overwhelmed)\b",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\bi(?:'ve| have) been (?:feeling |)(happy|sad|anxious|depressed|lonely|stressed|excited|scared|angry|grateful|hopeful|overwhelmed)\b",
+                re.IGNORECASE,
+            ),
         ],
         "routine": [
-            re.compile(r"\bevery (?:day|morning|evening|night|week)\s+i\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
-            re.compile(r"\bi (?:usually|always|typically)\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(
+                r"\bevery (?:day|morning|evening|night|week)\s+i\s+(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\bi (?:usually|always|typically)\s+(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
         ],
         "boundary": [
-            re.compile(r"\bi(?:'m| am) not comfortable (?:with |talking about |discussing )(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
-            re.compile(r"\bplease (?:don't|do not) (?:talk about |mention |bring up )(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
-            re.compile(r"\bi(?:'d| would) (?:rather|prefer) not (?:talk about |discuss )(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(
+                r"\bi(?:'m| am) not comfortable (?:with |talking about |discussing )(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\bplease (?:don't|do not) (?:talk about |mention |bring up )(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\bi(?:'d| would) (?:rather|prefer) not (?:talk about |discuss )(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
         ],
         "interest": [
-            re.compile(r"\bi(?:'m| am) (?:really )?interested in\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
-            re.compile(r"\bi(?:'m| am) (?:really )?into\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
-            re.compile(r"\bmy hobbi(?:es|y)\s+(?:is|are|include)\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(
+                r"\bi(?:'m| am) (?:really )?interested in\s+(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\bi(?:'m| am) (?:really )?into\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE
+            ),
+            re.compile(
+                r"\bmy hobbi(?:es|y)\s+(?:is|are|include)\s+(.+?)(?:\.|,|!|\?|$)",
+                re.IGNORECASE,
+            ),
         ],
     }
 
@@ -104,9 +154,11 @@ class PersonalFactDetector:
         if use_spacy:
             try:
                 import spacy
+
                 self._nlp = spacy.load("en_core_web_sm")
             except Exception:
                 import logging
+
                 logging.getLogger("cortexflow").debug(
                     "spaCy not available for fact detection, using regex only"
                 )
@@ -163,14 +215,19 @@ class PersonalFactDetector:
                     # Boost confidence if spaCy NER confirms an entity
                     if self._nlp and fact_type in ("name", "location", "occupation"):
                         doc = self._nlp(value)
-                        if any(ent.label_ in ("PERSON", "GPE", "ORG", "LOC") for ent in doc.ents):
+                        if any(
+                            ent.label_ in ("PERSON", "GPE", "ORG", "LOC")
+                            for ent in doc.ents
+                        ):
                             confidence = 0.95
 
-                    facts.append({
-                        "fact_text": fact_text,
-                        "fact_type": fact_type,
-                        "confidence": confidence,
-                        "value": value,
-                    })
+                    facts.append(
+                        {
+                            "fact_text": fact_text,
+                            "fact_type": fact_type,
+                            "confidence": confidence,
+                            "value": value,
+                        }
+                    )
 
         return facts

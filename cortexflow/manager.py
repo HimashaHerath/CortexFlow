@@ -12,6 +12,7 @@ CortexFlowManager acts as a thin **facade** that preserves backward
 compatibility -- every public method signature and return type is
 unchanged.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,49 +36,64 @@ from cortexflow.response_orchestrator import ResponseOrchestrator
 # Add import for Chain of Agents
 try:
     from cortexflow.agent_chain import AgentChainManager
+
     AGENT_CHAIN_ENABLED = True
 except ImportError:
     AGENT_CHAIN_ENABLED = False
-    logger = logging.getLogger('cortexflow')
-    logger.warning("agent_chain module not found. Chain of Agents functionality will be disabled.")
+    logger = logging.getLogger("cortexflow")
+    logger.warning(
+        "agent_chain module not found. Chain of Agents functionality will be disabled."
+    )
 
 # Add import for Self-Reflection
 try:
     from cortexflow.reflection import ReflectionEngine
+
     REFLECTION_ENABLED = True
 except ImportError:
     REFLECTION_ENABLED = False
-    logger = logging.getLogger('cortexflow')
-    logger.warning("reflection module not found. Self-Reflection functionality will be disabled.")
+    logger = logging.getLogger("cortexflow")
+    logger.warning(
+        "reflection module not found. Self-Reflection functionality will be disabled."
+    )
 
 # Add import for Dynamic Weighting
 try:
     from cortexflow.dynamic_weighting import DynamicWeightingEngine
+
     DYNAMIC_WEIGHTING_ENABLED = True
 except ImportError:
     DYNAMIC_WEIGHTING_ENABLED = False
-    logger = logging.getLogger('cortexflow')
-    logger.warning("dynamic_weighting module not found. Dynamic Weighting functionality will be disabled.")
+    logger = logging.getLogger("cortexflow")
+    logger.warning(
+        "dynamic_weighting module not found. Dynamic Weighting functionality will be disabled."
+    )
 
 # Add import for Uncertainty Handling
 try:
     from cortexflow.uncertainty_handler import UncertaintyHandler
+
     UNCERTAINTY_HANDLING_ENABLED = True
 except ImportError:
     UNCERTAINTY_HANDLING_ENABLED = False
-    logger = logging.getLogger('cortexflow')
-    logger.warning("uncertainty_handler module not found. Uncertainty handling functionality will be disabled.")
+    logger = logging.getLogger("cortexflow")
+    logger.warning(
+        "uncertainty_handler module not found. Uncertainty handling functionality will be disabled."
+    )
 
 # Add import for Performance Optimization
 try:
     from cortexflow.performance_optimizer import PerformanceOptimizer
+
     PERFORMANCE_OPTIMIZATION_ENABLED = True
 except ImportError:
     PERFORMANCE_OPTIMIZATION_ENABLED = False
-    logger = logging.getLogger('cortexflow')
-    logger.warning("performance_optimizer module not found. Performance optimization functionality will be disabled.")
+    logger = logging.getLogger("cortexflow")
+    logger.warning(
+        "performance_optimizer module not found. Performance optimization functionality will be disabled."
+    )
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
 
 
 def configure_logging(verbose: bool = False):
@@ -96,6 +112,7 @@ def configure_logging(verbose: bool = False):
     cortex_logger.setLevel(level)
     if not cortex_logger.handlers:
         cortex_logger.addHandler(handler)
+
 
 class CortexFlowManager(ContextProvider):
     """
@@ -117,12 +134,18 @@ class CortexFlowManager(ContextProvider):
         self.config = config if config is not None else CortexFlowConfig()
 
         # Set up logging
-        verbose = self.config.verbose_logging if hasattr(self.config, "verbose_logging") else False
+        verbose = (
+            self.config.verbose_logging
+            if hasattr(self.config, "verbose_logging")
+            else False
+        )
         configure_logging(verbose)
 
         # Log initialization
-        logger.info(f"Initializing CortexFlowManager with {self.config.active_token_limit} active tokens, "
-                   f"{self.config.working_token_limit} working tokens, {self.config.archive_token_limit} archive tokens")
+        logger.info(
+            f"Initializing CortexFlowManager with {self.config.active_token_limit} active tokens, "
+            f"{self.config.working_token_limit} working tokens, {self.config.archive_token_limit} archive tokens"
+        )
 
         try:
             # Initialize LLM client
@@ -133,32 +156,51 @@ class CortexFlowManager(ContextProvider):
             self.memory = ConversationMemory(self.config)
 
             # Initialize content classifier if enabled
-            if hasattr(self.config, "use_ml_classifier") and self.config.use_ml_classifier:
+            if (
+                hasattr(self.config, "use_ml_classifier")
+                and self.config.use_ml_classifier
+            ):
                 self.classifier = ContentClassifier(self.config)
             else:
                 self.classifier = None
 
             # Initialize Agent Chain Manager if enabled
             self.agent_chain_manager = None
-            if hasattr(self.config, "use_chain_of_agents") and self.config.use_chain_of_agents and AGENT_CHAIN_ENABLED:
+            if (
+                hasattr(self.config, "use_chain_of_agents")
+                and self.config.use_chain_of_agents
+                and AGENT_CHAIN_ENABLED
+            ):
                 try:
-                    self.agent_chain_manager = AgentChainManager(self.config, self.knowledge_store)
+                    self.agent_chain_manager = AgentChainManager(
+                        self.config, self.knowledge_store
+                    )
                     logger.info("Chain of Agents initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize Chain of Agents: {e}")
 
             # Initialize Reflection Engine if enabled
             self.reflection_engine = None
-            if hasattr(self.config, "use_self_reflection") and self.config.use_self_reflection and REFLECTION_ENABLED:
+            if (
+                hasattr(self.config, "use_self_reflection")
+                and self.config.use_self_reflection
+                and REFLECTION_ENABLED
+            ):
                 try:
-                    self.reflection_engine = ReflectionEngine(self.config, self.knowledge_store)
+                    self.reflection_engine = ReflectionEngine(
+                        self.config, self.knowledge_store
+                    )
                     logger.info("Self-Reflection Engine initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize Self-Reflection Engine: {e}")
 
             # Initialize Dynamic Weighting Engine if enabled
             self.weighting_engine = None
-            if hasattr(self.config, "use_dynamic_weighting") and self.config.use_dynamic_weighting and DYNAMIC_WEIGHTING_ENABLED:
+            if (
+                hasattr(self.config, "use_dynamic_weighting")
+                and self.config.use_dynamic_weighting
+                and DYNAMIC_WEIGHTING_ENABLED
+            ):
                 try:
                     self.weighting_engine = DynamicWeightingEngine(self.config)
                     logger.info("Dynamic Weighting Engine initialized successfully")
@@ -173,31 +215,55 @@ class CortexFlowManager(ContextProvider):
 
             # Initialize Uncertainty Handler if enabled
             self.uncertainty_handler = None
-            if hasattr(self.config, "use_uncertainty_handling") and self.config.use_uncertainty_handling and UNCERTAINTY_HANDLING_ENABLED:
+            if (
+                hasattr(self.config, "use_uncertainty_handling")
+                and self.config.use_uncertainty_handling
+                and UNCERTAINTY_HANDLING_ENABLED
+            ):
                 try:
                     # Pass the graph store to the uncertainty handler
-                    graph_store = self.knowledge_store.graph_store if hasattr(self.knowledge_store, 'graph_store') else None
-                    self.uncertainty_handler = UncertaintyHandler(self.config, graph_store)
+                    graph_store = (
+                        self.knowledge_store.graph_store
+                        if hasattr(self.knowledge_store, "graph_store")
+                        else None
+                    )
+                    self.uncertainty_handler = UncertaintyHandler(
+                        self.config, graph_store
+                    )
                     logger.info("Uncertainty Handler initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize Uncertainty Handler: {e}")
 
             # Initialize Performance Optimizer if enabled
             self.performance_optimizer = None
-            if hasattr(self.config, "use_performance_optimization") and self.config.use_performance_optimization and PERFORMANCE_OPTIMIZATION_ENABLED:
+            if (
+                hasattr(self.config, "use_performance_optimization")
+                and self.config.use_performance_optimization
+                and PERFORMANCE_OPTIMIZATION_ENABLED
+            ):
                 try:
                     # Pass the graph store to the performance optimizer
-                    graph_store = self.knowledge_store.graph_store if hasattr(self.knowledge_store, 'graph_store') else None
-                    self.performance_optimizer = PerformanceOptimizer(self.config, graph_store)
+                    graph_store = (
+                        self.knowledge_store.graph_store
+                        if hasattr(self.knowledge_store, "graph_store")
+                        else None
+                    )
+                    self.performance_optimizer = PerformanceOptimizer(
+                        self.config, graph_store
+                    )
                     logger.info("Performance Optimizer initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize Performance Optimizer: {e}")
 
             # Initialize Personal Fact Detector if enabled
             self.fact_detector = None
-            if hasattr(self.config, "use_fact_extraction") and self.config.use_fact_extraction:
+            if (
+                hasattr(self.config, "use_fact_extraction")
+                and self.config.use_fact_extraction
+            ):
                 try:
                     from cortexflow.fact_detector import PersonalFactDetector
+
                     self.fact_detector = PersonalFactDetector(use_spacy=False)
                     logger.info("Personal Fact Detector initialized successfully")
                 except Exception as e:
@@ -211,6 +277,7 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "enable_sessions", False):
                 try:
                     from cortexflow.session import SessionManager
+
                     self._session_manager = SessionManager(
                         db_path=self.config.session.session_db_path,
                         session_ttl=self.config.session.session_ttl,
@@ -229,15 +296,19 @@ class CortexFlowManager(ContextProvider):
                         LLMEmotionDetector,
                         RuleBasedEmotionDetector,
                     )
+
                     detector_type = self.config.emotion.emotion_detector
                     if detector_type == "llm":
                         detector = LLMEmotionDetector(self.llm_client)
                     else:
                         detector = RuleBasedEmotionDetector()
                     self._emotion_tracker = EmotionTracker(
-                        detector, window_size=self.config.emotion.emotion_window_size,
+                        detector,
+                        window_size=self.config.emotion.emotion_window_size,
                     )
-                    logger.info("Emotion Tracker initialized (detector=%s)", detector_type)
+                    logger.info(
+                        "Emotion Tracker initialized (detector=%s)", detector_type
+                    )
                 except Exception as e:
                     logger.error(f"Failed to initialize Emotion Tracker: {e}")
 
@@ -246,6 +317,7 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "enable_sessions", False):
                 try:
                     from cortexflow.user_profile import UserProfileManager
+
                     self._user_profile_manager = UserProfileManager(
                         db_path=self.config.session.session_db_path,
                     )
@@ -258,6 +330,7 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "use_personas", False):
                 try:
                     from cortexflow.persona import PersonaManager
+
                     self._persona_manager = PersonaManager(
                         db_path=self.config.persona.persona_db_path,
                     )
@@ -270,6 +343,7 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "use_relationship_tracking", False):
                 try:
                     from cortexflow.relationship import RelationshipTracker
+
                     self._relationship_tracker = RelationshipTracker(
                         db_path=self.config.relationship.relationship_db_path,
                     )
@@ -282,6 +356,7 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "use_events", False):
                 try:
                     from cortexflow.events import EventBus, EventType
+
                     self._event_bus = EventBus()
                     logger.info("Event Bus initialized")
                 except Exception as e:
@@ -292,6 +367,7 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "use_safety_pipeline", False):
                 try:
                     from cortexflow.safety import SafetyPipeline
+
                     self._safety_pipeline = SafetyPipeline(
                         enable_pii_detection=self.config.safety.enable_pii_detection,
                         enable_boundary_enforcement=self.config.safety.enable_boundary_enforcement,
@@ -306,6 +382,7 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "use_temporal_facts", False):
                 try:
                     from cortexflow.temporal import TemporalManager
+
                     self._temporal_manager = TemporalManager(
                         db_path=self.config.temporal.temporal_db_path,
                     )
@@ -317,6 +394,7 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "use_episodic_memory", False):
                 try:
                     from cortexflow.episodic_memory import EpisodicMemoryStore
+
                     self._episodic_store = EpisodicMemoryStore(
                         db_path=self.config.episodic.episodic_db_path,
                     )
@@ -340,9 +418,15 @@ class CortexFlowManager(ContextProvider):
             # Wire companion AI references into the orchestrator
             self._response_orchestrator._emotion_tracker = self._emotion_tracker
             self._response_orchestrator._persona_manager = self._persona_manager
-            self._response_orchestrator._user_profile_manager = self._user_profile_manager
-            self._response_orchestrator._relationship_tracker = self._relationship_tracker
-            self._response_orchestrator._get_current_session_fn = self.get_current_session
+            self._response_orchestrator._user_profile_manager = (
+                self._user_profile_manager
+            )
+            self._response_orchestrator._relationship_tracker = (
+                self._relationship_tracker
+            )
+            self._response_orchestrator._get_current_session_fn = (
+                self.get_current_session
+            )
 
             self._knowledge_coordinator = KnowledgeCoordinator(
                 config=self.config,
@@ -359,7 +443,10 @@ class CortexFlowManager(ContextProvider):
 
             if self._event_bus:
                 from cortexflow.events import EventType
-                self._event_bus.emit_typed(EventType.MANAGER_INITIALIZED, source="manager")
+
+                self._event_bus.emit_typed(
+                    EventType.MANAGER_INITIALIZED, source="manager"
+                )
 
         except Exception as e:
             logger.error(f"Error initializing CortexFlowManager: {e}")
@@ -398,8 +485,12 @@ class CortexFlowManager(ContextProvider):
         try:
             self.memory.update_tier_limits(
                 active_limit=new_limits.get("active", self.config.active_token_limit),
-                working_limit=new_limits.get("working", self.config.working_token_limit),
-                archive_limit=new_limits.get("archive", self.config.archive_token_limit)
+                working_limit=new_limits.get(
+                    "working", self.config.working_token_limit
+                ),
+                archive_limit=new_limits.get(
+                    "archive", self.config.archive_token_limit
+                ),
             )
             logger.info(f"Updated memory tier limits: {new_limits}")
         except Exception as e:
@@ -409,7 +500,9 @@ class CortexFlowManager(ContextProvider):
     # Memory-layer methods (stay on the facade)
     # ------------------------------------------------------------------
 
-    def add_message(self, role: str, content: str, metadata: dict[str, Any] = None) -> dict[str, Any]:
+    def add_message(
+        self, role: str, content: str, metadata: dict[str, Any] = None
+    ) -> dict[str, Any]:
         """
         Add a message to the conversation.
 
@@ -424,9 +517,15 @@ class CortexFlowManager(ContextProvider):
         # Safety check (runs before any other processing)
         if self._safety_pipeline and role == "user":
             from cortexflow.safety import SafetyLevel
+
             safety_result = self._safety_pipeline.check(content)
-            if safety_result.level == SafetyLevel.BLOCKED and self.config.safety.block_on_safety_violation:
-                logger.warning(f"Message blocked by safety pipeline: {safety_result.reason}")
+            if (
+                safety_result.level == SafetyLevel.BLOCKED
+                and self.config.safety.block_on_safety_violation
+            ):
+                logger.warning(
+                    f"Message blocked by safety pipeline: {safety_result.reason}"
+                )
                 return {
                     "role": role,
                     "content": "[Message blocked by safety filter]",
@@ -453,7 +552,9 @@ class CortexFlowManager(ContextProvider):
                 importance_score = confidence * 7.0 + (3.0 if is_question else 1.0)
                 importance_score = min(10.0, max(0.0, importance_score))
                 metadata["importance"] = importance_score
-                logger.debug(f"Message classified as: {result}, importance: {importance_score:.1f}")
+                logger.debug(
+                    f"Message classified as: {result}, importance: {importance_score:.1f}"
+                )
             except Exception as e:
                 logger.error(f"Error classifying message: {e}")
         elif role == "assistant":
@@ -485,10 +586,15 @@ class CortexFlowManager(ContextProvider):
         # User profile update
         if role == "user" and self._user_profile_manager is not None:
             try:
-                user_id = (self._current_session.user_id
-                           if self._current_session else self.config.session.default_user_id)
+                user_id = (
+                    self._current_session.user_id
+                    if self._current_session
+                    else self.config.session.default_user_id
+                )
                 self._user_profile_manager.update_from_message(
-                    user_id, content, self.fact_detector,
+                    user_id,
+                    content,
+                    self.fact_detector,
                 )
             except Exception as e:
                 logger.debug(f"User profile update failed: {e}")
@@ -515,6 +621,7 @@ class CortexFlowManager(ContextProvider):
                     from datetime import datetime
 
                     from cortexflow.temporal import TemporalFact
+
                     tf = TemporalFact(
                         subject=fact_dict.get("subject", "user"),
                         predicate=fact_dict.get("fact_type", "states"),
@@ -526,9 +633,14 @@ class CortexFlowManager(ContextProvider):
                     self._temporal_manager.add_temporal_fact(tf)
                     if self._event_bus:
                         from cortexflow.events import EventType
+
                         self._event_bus.emit_typed(
                             EventType.TEMPORAL_FACT_ADDED,
-                            data={"subject": tf.subject, "predicate": tf.predicate, "object": tf.object},
+                            data={
+                                "subject": tf.subject,
+                                "predicate": tf.predicate,
+                                "object": tf.object,
+                            },
                             source="manager",
                         )
             except Exception as e:
@@ -549,14 +661,22 @@ class CortexFlowManager(ContextProvider):
                 logger.error(f"Error extracting personal facts: {e}")
 
         # Apply dynamic weighting for user queries
-        if role == "user" and self.weighting_engine and self.config.use_dynamic_weighting:
+        if (
+            role == "user"
+            and self.weighting_engine
+            and self.config.use_dynamic_weighting
+        ):
             try:
                 # Get recent context for document type analysis
                 context_messages = self.memory.get_context_messages()
-                context_content = "\n".join([m.get("content", "") for m in context_messages[-5:]])
+                context_content = "\n".join(
+                    [m.get("content", "") for m in context_messages[-5:]]
+                )
 
                 # Process query and update memory tier allocation
-                new_limits = self.weighting_engine.process_query(content, context_content)
+                new_limits = self.weighting_engine.process_query(
+                    content, context_content
+                )
 
                 # Update memory tier limits
                 self._update_memory_tier_limits(new_limits)
@@ -565,7 +685,12 @@ class CortexFlowManager(ContextProvider):
 
         if self._event_bus:
             from cortexflow.events import EventType
-            self._event_bus.emit_typed(EventType.MESSAGE_ADDED, data={"role": role, "content": content}, source="manager")
+
+            self._event_bus.emit_typed(
+                EventType.MESSAGE_ADDED,
+                data={"role": role, "content": content},
+                source="manager",
+            )
 
         return message
 
@@ -579,10 +704,7 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Context with messages and knowledge
         """
-        context = {
-            "messages": self.memory.get_context_messages(),
-            "knowledge": []
-        }
+        context = {"messages": self.memory.get_context_messages(), "knowledge": []}
 
         # Get the most recent user message for knowledge retrieval
         user_messages = self.memory.get_messages_by_role("user")
@@ -590,16 +712,23 @@ class CortexFlowManager(ContextProvider):
             last_user_message = user_messages[-1]["content"]
 
             # Retrieve relevant knowledge for the user's message
-            knowledge_items = self.knowledge_store.get_relevant_knowledge(last_user_message)
+            knowledge_items = self.knowledge_store.get_relevant_knowledge(
+                last_user_message
+            )
 
             # Apply self-reflection to verify knowledge relevance if enabled
-            if self.reflection_engine and hasattr(self.config, "use_self_reflection") and self.config.use_self_reflection:
+            if (
+                self.reflection_engine
+                and hasattr(self.config, "use_self_reflection")
+                and self.config.use_self_reflection
+            ):
                 try:
                     knowledge_items = self.reflection_engine.verify_knowledge_relevance(
-                        last_user_message,
-                        knowledge_items
+                        last_user_message, knowledge_items
                     )
-                    logger.info(f"Knowledge relevance verification applied: {len(knowledge_items)} items retained")
+                    logger.info(
+                        f"Knowledge relevance verification applied: {len(knowledge_items)} items retained"
+                    )
                 except Exception as e:
                     logger.error(f"Error in knowledge relevance verification: {e}")
 
@@ -607,7 +736,12 @@ class CortexFlowManager(ContextProvider):
 
             if self._event_bus:
                 from cortexflow.events import EventType
-                self._event_bus.emit_typed(EventType.KNOWLEDGE_RETRIEVED, data={"query": last_user_message}, source="manager")
+
+                self._event_bus.emit_typed(
+                    EventType.KNOWLEDGE_RETRIEVED,
+                    data={"query": last_user_message},
+                    source="manager",
+                )
 
         return context
 
@@ -621,17 +755,24 @@ class CortexFlowManager(ContextProvider):
 
         if self._event_bus:
             from cortexflow.events import EventType
+
             self._event_bus.emit_typed(EventType.MEMORY_CLEARED, source="manager")
 
     # ------------------------------------------------------------------
     # Session management (Phase 1A)
     # ------------------------------------------------------------------
 
-    def create_session(self, user_id: str, persona_id: str | None = None,
-                       metadata: dict[str, Any] | None = None):
+    def create_session(
+        self,
+        user_id: str,
+        persona_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ):
         """Create a new session and make it active."""
         if self._session_manager is None:
-            raise RuntimeError("Sessions are not enabled. Use ConfigBuilder.with_sessions() to enable.")
+            raise RuntimeError(
+                "Sessions are not enabled. Use ConfigBuilder.with_sessions() to enable."
+            )
         session = self._session_manager.create_session(user_id, persona_id, metadata)
         self._current_session = session
         return session
@@ -654,7 +795,9 @@ class CortexFlowManager(ContextProvider):
         """Close a session (defaults to current)."""
         if self._session_manager is None:
             return False
-        sid = session_id or (self._current_session.session_id if self._current_session else None)
+        sid = session_id or (
+            self._current_session.session_id if self._current_session else None
+        )
         if sid is None:
             return False
 
@@ -666,11 +809,12 @@ class CortexFlowManager(ContextProvider):
                 from datetime import datetime
 
                 from cortexflow.episodic_memory import Episode
+
                 # Gather recent messages from memory
                 messages = []
-                if hasattr(self.memory, 'get_messages'):
+                if hasattr(self.memory, "get_messages"):
                     messages = self.memory.get_messages()
-                elif hasattr(self.memory, 'messages'):
+                elif hasattr(self.memory, "messages"):
                     messages = self.memory.messages
 
                 emotions = []
@@ -680,11 +824,19 @@ class CortexFlowManager(ContextProvider):
                         emotions = [state.primary_emotion]
 
                 episode = Episode(
-                    session_id=session.session_id if hasattr(session, 'session_id') else str(session),
-                    user_id=getattr(session, 'user_id', None),
+                    session_id=session.session_id
+                    if hasattr(session, "session_id")
+                    else str(session),
+                    user_id=getattr(session, "user_id", None),
                     title="Session conversation",
                     summary=f"Conversation with {len(messages)} messages",
-                    messages=[{"role": m.get("role", ""), "content": m.get("content", "")[:200]} for m in messages[-20:]],  # last 20
+                    messages=[
+                        {
+                            "role": m.get("role", ""),
+                            "content": m.get("content", "")[:200],
+                        }
+                        for m in messages[-20:]
+                    ],  # last 20
                     emotions=emotions,
                     end_time=datetime.utcnow().isoformat(),
                 )
@@ -741,6 +893,7 @@ class CortexFlowManager(ContextProvider):
         if not self._temporal_manager:
             return []
         from datetime import datetime
+
         return self._temporal_manager.get_facts_at_time(
             datetime.utcnow().isoformat(), subject=subject
         )
@@ -805,15 +958,27 @@ class CortexFlowManager(ContextProvider):
         """
         stats = {
             "memory": {
-                "messages": self.memory.get_message_count() if hasattr(self.memory, "get_message_count") else None,
-                "total_tokens": self.memory.get_total_tokens() if hasattr(self.memory, "get_total_tokens") else None,
-                "tiers": self.memory.get_tier_stats() if hasattr(self.memory, "get_tier_stats") else None
+                "messages": self.memory.get_message_count()
+                if hasattr(self.memory, "get_message_count")
+                else None,
+                "total_tokens": self.memory.get_total_tokens()
+                if hasattr(self.memory, "get_total_tokens")
+                else None,
+                "tiers": self.memory.get_tier_stats()
+                if hasattr(self.memory, "get_tier_stats")
+                else None,
             },
             "knowledge": {
-                "facts": self.knowledge_store.get_fact_count() if hasattr(self.knowledge_store, "get_fact_count") else None,
-                "embeddings": self.knowledge_store.get_embedding_count() if hasattr(self.knowledge_store, "get_embedding_count") else None,
-                "sources": self.knowledge_store.get_source_count() if hasattr(self.knowledge_store, "get_source_count") else None
-            }
+                "facts": self.knowledge_store.get_fact_count()
+                if hasattr(self.knowledge_store, "get_fact_count")
+                else None,
+                "embeddings": self.knowledge_store.get_embedding_count()
+                if hasattr(self.knowledge_store, "get_embedding_count")
+                else None,
+                "sources": self.knowledge_store.get_source_count()
+                if hasattr(self.knowledge_store, "get_source_count")
+                else None,
+            },
         }
 
         # Add dynamic weighting stats if available
@@ -858,11 +1023,18 @@ class CortexFlowManager(ContextProvider):
 
         if self._event_bus:
             from cortexflow.events import EventType
-            self._event_bus.emit_typed(EventType.RESPONSE_GENERATED, data={"response": response[:200]}, source="manager")
+
+            self._event_bus.emit_typed(
+                EventType.RESPONSE_GENERATED,
+                data={"response": response[:200]},
+                source="manager",
+            )
 
         return response
 
-    def generate_response_stream(self, prompt: str = None, model: str = None) -> Iterator[str]:
+    def generate_response_stream(
+        self, prompt: str = None, model: str = None
+    ) -> Iterator[str]:
         """
         Generate a streaming response using the conversation context.
 
@@ -883,7 +1055,9 @@ class CortexFlowManager(ContextProvider):
     # Knowledge operations (delegated to KnowledgeCoordinator)
     # ------------------------------------------------------------------
 
-    def remember_knowledge(self, text: str, source: str = None, confidence: float = None) -> list[int]:
+    def remember_knowledge(
+        self, text: str, source: str = None, confidence: float = None
+    ) -> list[int]:
         """
         Store important knowledge in the knowledge store.
 
@@ -899,7 +1073,9 @@ class CortexFlowManager(ContextProvider):
         """
         return self._knowledge_coordinator.remember_knowledge(text, source, confidence)
 
-    def add_knowledge(self, text: str, source: str = None, confidence: float = None) -> list[int]:
+    def add_knowledge(
+        self, text: str, source: str = None, confidence: float = None
+    ) -> list[int]:
         """
         Store important knowledge in the knowledge store.
 
@@ -915,12 +1091,18 @@ class CortexFlowManager(ContextProvider):
 
         if self._event_bus:
             from cortexflow.events import EventType
-            self._event_bus.emit_typed(EventType.KNOWLEDGE_ADDED, data={"text": text, "source": source}, source="manager")
+
+            self._event_bus.emit_typed(
+                EventType.KNOWLEDGE_ADDED,
+                data={"text": text, "source": source},
+                source="manager",
+            )
 
         return result
 
-    def detect_contradictions(self, entity_id=None, relation_type=None,
-                          max_results=100) -> list[dict[str, Any]]:
+    def detect_contradictions(
+        self, entity_id=None, relation_type=None, max_results=100
+    ) -> list[dict[str, Any]]:
         """
         Detect contradictions in the knowledge graph.
 
@@ -932,10 +1114,13 @@ class CortexFlowManager(ContextProvider):
         Returns:
             List of detected contradictions
         """
-        return self._knowledge_coordinator.detect_contradictions(entity_id, relation_type, max_results)
+        return self._knowledge_coordinator.detect_contradictions(
+            entity_id, relation_type, max_results
+        )
 
-    def resolve_contradiction(self, contradiction: dict[str, Any],
-                           strategy: str = None) -> dict[str, Any]:
+    def resolve_contradiction(
+        self, contradiction: dict[str, Any], strategy: str = None
+    ) -> dict[str, Any]:
         """
         Resolve a contradiction using the specified strategy.
 
@@ -946,10 +1131,16 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Resolution result
         """
-        return self._knowledge_coordinator.resolve_contradiction(contradiction, strategy)
+        return self._knowledge_coordinator.resolve_contradiction(
+            contradiction, strategy
+        )
 
-    def update_source_reliability(self, source_name: str, reliability_score: float,
-                              metadata: dict[str, Any] = None) -> None:
+    def update_source_reliability(
+        self,
+        source_name: str,
+        reliability_score: float,
+        metadata: dict[str, Any] = None,
+    ) -> None:
         """
         Update the reliability score for a knowledge source.
 
@@ -958,7 +1149,9 @@ class CortexFlowManager(ContextProvider):
             reliability_score: Reliability score (0.0-1.0)
             metadata: Optional metadata about the source
         """
-        return self._knowledge_coordinator.update_source_reliability(source_name, reliability_score, metadata)
+        return self._knowledge_coordinator.update_source_reliability(
+            source_name, reliability_score, metadata
+        )
 
     def get_source_reliability(self, source_name: str) -> float:
         """
@@ -972,8 +1165,13 @@ class CortexFlowManager(ContextProvider):
         """
         return self._knowledge_coordinator.get_source_reliability(source_name)
 
-    def add_probability_distribution(self, entity_id: int, relation_id: int,
-                                  distribution_type: str, distribution_data: dict[str, Any]) -> None:
+    def add_probability_distribution(
+        self,
+        entity_id: int,
+        relation_id: int,
+        distribution_type: str,
+        distribution_data: dict[str, Any],
+    ) -> None:
         """
         Add a probability distribution to represent uncertainty about a fact.
 
@@ -987,7 +1185,9 @@ class CortexFlowManager(ContextProvider):
             entity_id, relation_id, distribution_type, distribution_data
         )
 
-    def get_probability_distribution(self, entity_id: int, relation_id: int) -> dict[str, Any] | None:
+    def get_probability_distribution(
+        self, entity_id: int, relation_id: int
+    ) -> dict[str, Any] | None:
         """
         Get the probability distribution for a fact.
 
@@ -998,10 +1198,13 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Probability distribution data or None if not found
         """
-        return self._knowledge_coordinator.get_probability_distribution(entity_id, relation_id)
+        return self._knowledge_coordinator.get_probability_distribution(
+            entity_id, relation_id
+        )
 
-    def reason_with_incomplete_information(self, query: dict[str, Any],
-                                       available_knowledge: list[dict[str, Any]]) -> dict[str, Any]:
+    def reason_with_incomplete_information(
+        self, query: dict[str, Any], available_knowledge: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Reason with incomplete information to provide best possible answers.
 
@@ -1012,11 +1215,13 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Reasoning result with confidence and explanation
         """
-        return self._knowledge_coordinator.reason_with_incomplete_information(query, available_knowledge)
+        return self._knowledge_coordinator.reason_with_incomplete_information(
+            query, available_knowledge
+        )
 
-    def get_belief_revision_history(self, entity_id: int = None,
-                                 relation_id: int = None,
-                                 limit: int = 10) -> list[dict[str, Any]]:
+    def get_belief_revision_history(
+        self, entity_id: int = None, relation_id: int = None, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """
         Get the revision history for beliefs about an entity or relation.
 
@@ -1028,7 +1233,9 @@ class CortexFlowManager(ContextProvider):
         Returns:
             List of belief revisions
         """
-        return self._knowledge_coordinator.get_belief_revision_history(entity_id, relation_id, limit)
+        return self._knowledge_coordinator.get_belief_revision_history(
+            entity_id, relation_id, limit
+        )
 
     def get_knowledge(self, query: str) -> list[dict[str, Any]]:
         """
@@ -1054,7 +1261,9 @@ class CortexFlowManager(ContextProvider):
         """
         return self._knowledge_coordinator.answer_why_question(query)
 
-    def generate_novel_implications(self, iterations: int = None) -> list[dict[str, Any]]:
+    def generate_novel_implications(
+        self, iterations: int = None
+    ) -> list[dict[str, Any]]:
         """
         Generate novel implications using forward chaining.
 
@@ -1066,7 +1275,9 @@ class CortexFlowManager(ContextProvider):
         """
         return self._knowledge_coordinator.generate_novel_implications(iterations)
 
-    def generate_hypotheses(self, observation: str, max_hypotheses: int = None) -> list[dict[str, Any]]:
+    def generate_hypotheses(
+        self, observation: str, max_hypotheses: int = None
+    ) -> list[dict[str, Any]]:
         """
         Generate hypotheses to explain an observation using abductive reasoning.
 
@@ -1077,10 +1288,17 @@ class CortexFlowManager(ContextProvider):
         Returns:
             List of hypotheses that could explain the observation
         """
-        return self._knowledge_coordinator.generate_hypotheses(observation, max_hypotheses)
+        return self._knowledge_coordinator.generate_hypotheses(
+            observation, max_hypotheses
+        )
 
-    def add_logical_rule(self, name: str, premise_patterns: list[dict[str, Any]],
-                       conclusion_pattern: dict[str, Any], confidence: float = 0.8) -> bool:
+    def add_logical_rule(
+        self,
+        name: str,
+        premise_patterns: list[dict[str, Any]],
+        conclusion_pattern: dict[str, Any],
+        confidence: float = 0.8,
+    ) -> bool:
         """
         Add a logical rule to the inference engine.
 
@@ -1093,7 +1311,9 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Success status
         """
-        return self._knowledge_coordinator.add_logical_rule(name, premise_patterns, conclusion_pattern, confidence)
+        return self._knowledge_coordinator.add_logical_rule(
+            name, premise_patterns, conclusion_pattern, confidence
+        )
 
     def multi_hop_query(self, query: str) -> dict[str, Any]:
         """
@@ -1135,7 +1355,9 @@ class CortexFlowManager(ContextProvider):
         """
         return self._reasoning_facade.optimize_query(query)
 
-    def partition_graph(self, method: str = None, partition_count: int = None) -> dict[str, Any]:
+    def partition_graph(
+        self, method: str = None, partition_count: int = None
+    ) -> dict[str, Any]:
         """
         Partition the knowledge graph for improved performance.
 
@@ -1160,9 +1382,13 @@ class CortexFlowManager(ContextProvider):
         """
         return self._reasoning_facade.create_hop_indexes(max_hops)
 
-    def optimize_path_query(self, start_entity: str, end_entity: str,
-                       max_hops: int = 3,
-                       relation_constraints: list[str] = None) -> dict[str, Any]:
+    def optimize_path_query(
+        self,
+        start_entity: str,
+        end_entity: str,
+        max_hops: int = 3,
+        relation_constraints: list[str] = None,
+    ) -> dict[str, Any]:
         """
         Optimize a path query between entities using the query planning system.
 
@@ -1175,7 +1401,9 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Optimized query plan
         """
-        return self._reasoning_facade.optimize_path_query(start_entity, end_entity, max_hops, relation_constraints)
+        return self._reasoning_facade.optimize_path_query(
+            start_entity, end_entity, max_hops, relation_constraints
+        )
 
     def get_performance_stats(self) -> dict[str, Any]:
         """
@@ -1206,7 +1434,9 @@ class CortexFlowManager(ContextProvider):
         Returns:
             True if successful, False otherwise
         """
-        return self._reasoning_facade.cache_reasoning_pattern(pattern_key, pattern_result)
+        return self._reasoning_facade.cache_reasoning_pattern(
+            pattern_key, pattern_result
+        )
 
     def get_cache_stats(self) -> dict[str, Any]:
         """
@@ -1225,20 +1455,34 @@ class CortexFlowManager(ContextProvider):
         """Close and clean up resources."""
         if self._event_bus:
             from cortexflow.events import EventType
+
             self._event_bus.emit_typed(EventType.MANAGER_CLOSING, source="manager")
 
-        for component_name in ('memory', 'knowledge_store', 'uncertainty_handler',
-                               'performance_optimizer', 'ontology', 'graph_store',
-                               '_session_manager', '_user_profile_manager',
-                               '_persona_manager', '_relationship_tracker',
-                               '_temporal_manager', '_episodic_store'):
+        for component_name in (
+            "memory",
+            "knowledge_store",
+            "uncertainty_handler",
+            "performance_optimizer",
+            "ontology",
+            "graph_store",
+            "_session_manager",
+            "_user_profile_manager",
+            "_persona_manager",
+            "_relationship_tracker",
+            "_temporal_manager",
+            "_episodic_store",
+        ):
             component = getattr(self, component_name, None)
-            if component and hasattr(component, 'close'):
+            if component and hasattr(component, "close"):
                 try:
                     # Avoid double-closing graph_store if it's owned by knowledge_store
-                    if component_name == 'graph_store':
-                        ks = getattr(self, 'knowledge_store', None)
-                        if ks and hasattr(ks, 'graph_store') and component is ks.graph_store:
+                    if component_name == "graph_store":
+                        ks = getattr(self, "knowledge_store", None)
+                        if (
+                            ks
+                            and hasattr(ks, "graph_store")
+                            and component is ks.graph_store
+                        ):
                             continue
                     component.close()
                 except Exception as e:

@@ -1,4 +1,5 @@
 """Tests for cortexflow.session and cortexflow.user_store."""
+
 import time
 
 from cortexflow.session import SessionContext, SessionManager
@@ -7,6 +8,7 @@ from cortexflow.user_store import UserStore
 # ──────────────────────────────────────────────────────────────
 # SessionContext dataclass
 # ──────────────────────────────────────────────────────────────
+
 
 class TestSessionContext:
     def test_create_default(self):
@@ -25,8 +27,9 @@ class TestSessionContext:
         assert ctx.last_active_at > old_ts
 
     def test_roundtrip_dict(self):
-        ctx = SessionContext(session_id="s1", user_id="u1", persona_id="p1",
-                            metadata={"key": "val"})
+        ctx = SessionContext(
+            session_id="s1", user_id="u1", persona_id="p1", metadata={"key": "val"}
+        )
         d = ctx.to_dict()
         ctx2 = SessionContext.from_dict(d)
         assert ctx2.session_id == "s1"
@@ -38,10 +41,12 @@ class TestSessionContext:
 # SessionManager
 # ──────────────────────────────────────────────────────────────
 
+
 class TestSessionManager:
     def setup_method(self):
-        self.mgr = SessionManager(db_path=":memory:", session_ttl=3600,
-                                  max_sessions_per_user=3)
+        self.mgr = SessionManager(
+            db_path=":memory:", session_ttl=3600, max_sessions_per_user=3
+        )
 
     def teardown_method(self):
         self.mgr.close()
@@ -120,6 +125,7 @@ class TestSessionManager:
 # UserStore
 # ──────────────────────────────────────────────────────────────
 
+
 class TestUserStore:
     def setup_method(self):
         self.store = UserStore(db_path=":memory:")
@@ -128,8 +134,9 @@ class TestUserStore:
         self.store.close()
 
     def test_create_and_get(self):
-        user = self.store.create_user("u1", display_name="Alice",
-                                       metadata={"tier": "premium"})
+        user = self.store.create_user(
+            "u1", display_name="Alice", metadata={"tier": "premium"}
+        )
         assert user["user_id"] == "u1"
         assert user["display_name"] == "Alice"
         assert user["metadata"]["tier"] == "premium"

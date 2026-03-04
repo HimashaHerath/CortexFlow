@@ -7,6 +7,7 @@ Requires the ``qdrant-client`` package::
 If the package is not installed, importing this module will succeed but
 instantiating :class:`QdrantBackend` will raise :exc:`ImportError`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -76,9 +77,7 @@ class QdrantBackend(VectorStoreBackend):
         if self._collection_name not in collections:
             self._client.create_collection(
                 collection_name=self._collection_name,
-                vectors_config=VectorParams(
-                    size=dimension, distance=Distance.COSINE
-                ),
+                vectors_config=VectorParams(size=dimension, distance=Distance.COSINE),
             )
 
     # ------------------------------------------------------------------

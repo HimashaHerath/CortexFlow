@@ -2,6 +2,7 @@
 
 Demonstrates time-aware fact management and session-based episode storage.
 """
+
 from cortexflow.episodic_memory import Episode, EpisodicMemoryStore
 from cortexflow.temporal import TemporalFact, TemporalManager
 
@@ -9,16 +10,27 @@ from cortexflow.temporal import TemporalFact, TemporalManager
 tm = TemporalManager()
 
 # Alice lives in NYC from 2020
-fact1_id = tm.add_temporal_fact(TemporalFact(
-    subject="Alice", predicate="lives_in", object="New York",
-    valid_from="2020-01-01", confidence=0.9,
-))
+fact1_id = tm.add_temporal_fact(
+    TemporalFact(
+        subject="Alice",
+        predicate="lives_in",
+        object="New York",
+        valid_from="2020-01-01",
+        confidence=0.9,
+    )
+)
 
 # Alice moves to SF in 2024 — supersedes the NYC fact
-fact2_id = tm.supersede_fact(fact1_id, TemporalFact(
-    subject="Alice", predicate="lives_in", object="San Francisco",
-    valid_from="2024-06-01", confidence=0.95,
-))
+fact2_id = tm.supersede_fact(
+    fact1_id,
+    TemporalFact(
+        subject="Alice",
+        predicate="lives_in",
+        object="San Francisco",
+        valid_from="2024-06-01",
+        confidence=0.95,
+    ),
+)
 
 # Query at different times
 facts_2022 = tm.get_facts_at_time("2022-06-01", subject="Alice")
@@ -37,18 +49,26 @@ tm.close()
 # --- Episodic Memory (standalone) ---
 em = EpisodicMemoryStore()
 
-em.save_episode(Episode(
-    session_id="s1", user_id="alice", title="Travel planning",
-    summary="Discussed hiking trails in Yosemite and camping gear.",
-    topics=["hiking", "yosemite", "camping"],
-    emotions=["excited"],
-))
+em.save_episode(
+    Episode(
+        session_id="s1",
+        user_id="alice",
+        title="Travel planning",
+        summary="Discussed hiking trails in Yosemite and camping gear.",
+        topics=["hiking", "yosemite", "camping"],
+        emotions=["excited"],
+    )
+)
 
-em.save_episode(Episode(
-    session_id="s1", user_id="alice", title="Gear review",
-    summary="Reviewed waterproof jackets and trail shoes.",
-    topics=["gear", "shoes", "jackets"],
-))
+em.save_episode(
+    Episode(
+        session_id="s1",
+        user_id="alice",
+        title="Gear review",
+        summary="Reviewed waterproof jackets and trail shoes.",
+        topics=["gear", "shoes", "jackets"],
+    )
+)
 
 # Search by text
 results = em.recall_episodes("hiking")

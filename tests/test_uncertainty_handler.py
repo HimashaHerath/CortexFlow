@@ -17,6 +17,7 @@ from cortexflow.uncertainty_handler import UncertaintyHandler
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def config():
     """Create a CortexFlowConfig with in-memory DB for fast tests.
@@ -66,6 +67,7 @@ def handler_with_graph(config):
 # Initialization
 # ---------------------------------------------------------------------------
 
+
 class TestInitialization:
     """Test UncertaintyHandler initialization."""
 
@@ -94,6 +96,7 @@ class TestInitialization:
 # ---------------------------------------------------------------------------
 # Source Reliability
 # ---------------------------------------------------------------------------
+
 
 class TestSourceReliability:
     """Test source reliability management."""
@@ -139,6 +142,7 @@ class TestSourceReliability:
 # Detect Contradictions
 # ---------------------------------------------------------------------------
 
+
 class TestDetectContradictions:
     """Test contradiction detection."""
 
@@ -154,6 +158,7 @@ class TestDetectContradictions:
 # ---------------------------------------------------------------------------
 # Resolve Contradiction -- Recency Strategy
 # ---------------------------------------------------------------------------
+
 
 class TestResolveContradictionRecency:
     """Test contradiction resolution using the recency strategy."""
@@ -202,6 +207,7 @@ class TestResolveContradictionRecency:
 # Resolve Contradiction -- Confidence Strategy
 # ---------------------------------------------------------------------------
 
+
 class TestResolveContradictionConfidence:
     """Test contradiction resolution using the confidence strategy."""
 
@@ -241,6 +247,7 @@ class TestResolveContradictionConfidence:
 # ---------------------------------------------------------------------------
 # Resolve Contradiction -- Reliability Strategy
 # ---------------------------------------------------------------------------
+
 
 class TestResolveContradictionReliability:
     """Test contradiction resolution using the reliability strategy."""
@@ -286,6 +293,7 @@ class TestResolveContradictionReliability:
 # ---------------------------------------------------------------------------
 # Resolve Contradiction -- Weighted Strategy
 # ---------------------------------------------------------------------------
+
 
 class TestResolveContradictionWeighted:
     """Test contradiction resolution using the weighted strategy."""
@@ -343,6 +351,7 @@ class TestResolveContradictionWeighted:
 # Resolve Contradiction -- Keep Both Strategy
 # ---------------------------------------------------------------------------
 
+
 class TestResolveContradictionKeepBoth:
     """Test contradiction resolution using the keep_both strategy."""
 
@@ -384,6 +393,7 @@ class TestResolveContradictionKeepBoth:
 # ---------------------------------------------------------------------------
 # Resolve Contradiction -- Auto Strategy Selection
 # ---------------------------------------------------------------------------
+
 
 class TestResolveContradictionAuto:
     """Test automatic strategy selection in resolve_contradiction."""
@@ -462,6 +472,7 @@ class TestResolveContradictionAuto:
 # Resolve Contradiction -- Graph Store Integration
 # ---------------------------------------------------------------------------
 
+
 class TestResolutionAppliesGraph:
     """Test that non-keep_both resolution calls _apply_resolution with graph store."""
 
@@ -504,13 +515,15 @@ class TestResolutionAppliesGraph:
 # Probability Distributions
 # ---------------------------------------------------------------------------
 
+
 class TestProbabilityDistributions:
     """Test probability distribution storage and retrieval."""
 
     def test_add_and_retrieve_discrete_distribution(self, handler):
         dist_data = {"outcomes": {"yes": 0.7, "no": 0.2, "maybe": 0.1}}
         handler.add_probability_distribution(
-            entity_id=1, relation_id=10,
+            entity_id=1,
+            relation_id=10,
             distribution_type="discrete",
             distribution_data=dist_data,
         )
@@ -523,7 +536,8 @@ class TestProbabilityDistributions:
     def test_add_and_retrieve_gaussian_distribution(self, handler):
         dist_data = {"mean": 42.0, "std_dev": 3.5}
         handler.add_probability_distribution(
-            entity_id=2, relation_id=20,
+            entity_id=2,
+            relation_id=20,
             distribution_type="gaussian",
             distribution_data=dist_data,
         )
@@ -538,12 +552,14 @@ class TestProbabilityDistributions:
 
     def test_overwrite_distribution(self, handler):
         handler.add_probability_distribution(
-            entity_id=1, relation_id=10,
+            entity_id=1,
+            relation_id=10,
             distribution_type="discrete",
             distribution_data={"a": 0.5, "b": 0.5},
         )
         handler.add_probability_distribution(
-            entity_id=1, relation_id=10,
+            entity_id=1,
+            relation_id=10,
             distribution_type="gaussian",
             distribution_data={"mean": 10.0, "std_dev": 1.0},
         )
@@ -557,6 +573,7 @@ class TestProbabilityDistributions:
 # ---------------------------------------------------------------------------
 # Reason with Incomplete Information
 # ---------------------------------------------------------------------------
+
 
 class TestReasonWithIncompleteInformation:
     """Test reasoning with incomplete information."""
@@ -632,13 +649,12 @@ class TestReasonWithIncompleteInformation:
 # Internal: _identify_missing_information
 # ---------------------------------------------------------------------------
 
+
 class TestIdentifyMissingInformation:
     """Test the private _identify_missing_information helper."""
 
     def test_no_required_fields(self, handler):
-        missing = handler._identify_missing_information(
-            {"required_fields": []}, []
-        )
+        missing = handler._identify_missing_information({"required_fields": []}, [])
         assert missing == []
 
     def test_all_fields_present(self, handler):
@@ -659,6 +675,7 @@ class TestIdentifyMissingInformation:
 # ---------------------------------------------------------------------------
 # Internal: _find_partial_matches
 # ---------------------------------------------------------------------------
+
 
 class TestFindPartialMatches:
     """Test the private _find_partial_matches helper."""
@@ -699,6 +716,7 @@ class TestFindPartialMatches:
 # ---------------------------------------------------------------------------
 # Record Contradiction Resolution (DB verification)
 # ---------------------------------------------------------------------------
+
 
 class TestRecordContradictionResolution:
     """Verify that resolution is persisted in the database."""
@@ -741,6 +759,8 @@ class TestRecordContradictionResolution:
         handler.resolve_contradiction(contradiction, strategy="keep_both")
 
         cursor = handler.conn.cursor()
-        cursor.execute("SELECT resolution_strategy FROM contradictions WHERE entity_id = 2")
+        cursor.execute(
+            "SELECT resolution_strategy FROM contradictions WHERE entity_id = 2"
+        )
         row = cursor.fetchone()
         assert row[0] == "keep_both"

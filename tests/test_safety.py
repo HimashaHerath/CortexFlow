@@ -77,7 +77,9 @@ class TestBoundaryEnforcement:
 
 class TestCustomRules:
     def test_custom_rule_with_check_fn(self):
-        pipeline = SafetyPipeline(enable_pii_detection=False, enable_boundary_enforcement=False)
+        pipeline = SafetyPipeline(
+            enable_pii_detection=False, enable_boundary_enforcement=False
+        )
         rule = SafetyRule(
             name="all_caps",
             description="All caps message",
@@ -94,7 +96,9 @@ class TestCustomRules:
         assert result_lower.level == SafetyLevel.SAFE
 
     def test_custom_rule_with_pattern(self):
-        pipeline = SafetyPipeline(enable_pii_detection=False, enable_boundary_enforcement=False)
+        pipeline = SafetyPipeline(
+            enable_pii_detection=False, enable_boundary_enforcement=False
+        )
         rule = SafetyRule(
             name="bad_word",
             description="Blocked word detected",

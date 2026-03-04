@@ -12,10 +12,12 @@ def get_langchain_integration():
         CortexFlowMemory,
         CortexFlowRetriever,
     )
+
     return CortexFlowChatMessageHistory, CortexFlowRetriever, CortexFlowMemory
 
 
 def get_crewai_integration():
     """Return CrewAI integration classes."""
     from cortexflow.integrations.crewai import CortexFlowCrewStorage
+
     return (CortexFlowCrewStorage,)

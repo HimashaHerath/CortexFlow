@@ -2,6 +2,7 @@
 
 Shows how to use different vector backends with CortexFlow.
 """
+
 import numpy as np
 
 from cortexflow import ConfigBuilder

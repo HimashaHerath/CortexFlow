@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Add parent directory to sys.path to import cortexflow modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from benchmark.metrics.consistency_metrics import (
     evaluate_knowledge_consistency,
@@ -33,14 +33,17 @@ from cortexflow.reasoning_logger import ReasoningLogger
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
-    ]
+        logging.FileHandler(
+            f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        ),
+    ],
 )
 
 logger = logging.getLogger("evaluation_framework")
+
 
 class EvaluationFramework:
     """
@@ -59,7 +62,7 @@ class EvaluationFramework:
         config_path: str | None = None,
         db_path: str | None = None,
         results_dir: str = "evaluation_results",
-        reasoning_log_db: str | None = None
+        reasoning_log_db: str | None = None,
     ):
         """
         Initialize the evaluation framework.
@@ -97,15 +100,19 @@ class EvaluationFramework:
         # Initialize reasoning logger
         self.reasoning_logger = ReasoningLogger(
             db_path=reasoning_log_db or os.path.join(results_dir, "reasoning_logs.db"),
-            log_dir=os.path.join(results_dir, "logs")
+            log_dir=os.path.join(results_dir, "logs"),
         )
 
         # Initialize test generator
         self.test_generator = None
         if self.manager:
             self.test_generator = ReasoningTestGenerator(
-                graph_store=self.manager.knowledge_store.graph_store if hasattr(self.manager, "knowledge_store") else None,
-                knowledge_store=self.manager.knowledge_store if hasattr(self.manager, "knowledge_store") else None
+                graph_store=self.manager.knowledge_store.graph_store
+                if hasattr(self.manager, "knowledge_store")
+                else None,
+                knowledge_store=self.manager.knowledge_store
+                if hasattr(self.manager, "knowledge_store")
+                else None,
             )
 
         # Initialize results storage
@@ -119,7 +126,7 @@ class EvaluationFramework:
         self,
         test_queries: dict[str, list[dict[str, Any]]] | None = None,
         num_generated_tests: int = 20,
-        save_results: bool = True
+        save_results: bool = True,
     ) -> dict[str, Any]:
         """
         Run multi-hop reasoning benchmarks.
@@ -142,7 +149,7 @@ class EvaluationFramework:
             test_suite = self.test_generator.generate_test_suite(
                 suite_name=f"multi_hop_suite_{datetime.now().strftime('%Y%m%d_%H%M')}",
                 num_multi_hop=int(num_generated_tests * 0.7),  # 70% multi-hop
-                num_counterfactual=int(num_generated_tests * 0.3)  # 30% counterfactual
+                num_counterfactual=int(num_generated_tests * 0.3),  # 30% counterfactual
             )
 
             test_queries = test_suite["tests"]
@@ -150,8 +157,10 @@ class EvaluationFramework:
 
             # Save test suite
             if save_results:
-                test_suite_path = os.path.join(self.results_dir, f"{test_suite['name']}.json")
-                with open(test_suite_path, 'w') as f:
+                test_suite_path = os.path.join(
+                    self.results_dir, f"{test_suite['name']}.json"
+                )
+                with open(test_suite_path, "w") as f:
                     json.dump(test_suite, f, indent=2)
                 logger.info(f"Saved test suite to {test_suite_path}")
 
@@ -165,8 +174,7 @@ class EvaluationFramework:
             with self.reasoning_logger.create_context_manager(query) as ctx:
                 # Log query processing
                 self.reasoning_logger.log_reasoning_step(
-                    "query_processing",
-                    f"Processing query: {query}"
+                    "query_processing", f"Processing query: {query}"
                 )
 
                 # Run query through manager
@@ -189,7 +197,7 @@ class EvaluationFramework:
                     "path": path,
                     "entities": entities,
                     "score": result.get("score"),
-                    "reasoning_id": ctx.session_id
+                    "reasoning_id": ctx.session_id,
                 }
 
         # Run benchmarks
@@ -197,9 +205,7 @@ class EvaluationFramework:
         start_time = time.time()
 
         results = benchmark_multi_hop_reasoning(
-            test_queries,
-            reasoning_function,
-            logger=logger
+            test_queries, reasoning_function, logger=logger
         )
 
         execution_time = time.time() - start_time
@@ -216,7 +222,7 @@ class EvaluationFramework:
         # Save results if requested
         if save_results:
             results_path = os.path.join(self.results_dir, f"{result_id}.json")
-            with open(results_path, 'w') as f:
+            with open(results_path, "w") as f:
                 json.dump(results, f, indent=2)
             logger.info(f"Saved benchmark results to {results_path}")
 
@@ -229,7 +235,7 @@ class EvaluationFramework:
         self,
         time_window_days: int | None = 30,
         take_snapshot: bool = True,
-        save_results: bool = True
+        save_results: bool = True,
     ) -> dict[str, Any]:
         """
         Evaluate knowledge consistency over time.
@@ -256,7 +262,7 @@ class EvaluationFramework:
         results = evaluate_knowledge_consistency(
             self.manager.knowledge_store,
             time_window=time_window,
-            take_snapshot=take_snapshot
+            take_snapshot=take_snapshot,
         )
 
         execution_time = time.time() - start_time
@@ -273,7 +279,7 @@ class EvaluationFramework:
         # Save results if requested
         if save_results:
             results_path = os.path.join(self.results_dir, f"{result_id}.json")
-            with open(results_path, 'w') as f:
+            with open(results_path, "w") as f:
                 json.dump(results, f, indent=2)
             logger.info(f"Saved consistency results to {results_path}")
 
@@ -283,9 +289,7 @@ class EvaluationFramework:
         return results
 
     def generate_and_run_tests(
-        self,
-        num_tests: int = 30,
-        save_results: bool = True
+        self, num_tests: int = 30, save_results: bool = True
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         Generate and run tests for reasoning capability assessment.
@@ -307,28 +311,25 @@ class EvaluationFramework:
         test_suite = self.test_generator.generate_test_suite(
             suite_name=suite_name,
             num_multi_hop=int(num_tests * 0.7),  # 70% multi-hop
-            num_counterfactual=int(num_tests * 0.3)  # 30% counterfactual
+            num_counterfactual=int(num_tests * 0.3),  # 30% counterfactual
         )
 
         # Save test suite
         if save_results:
             test_suite_path = os.path.join(self.results_dir, f"{suite_name}.json")
-            with open(test_suite_path, 'w') as f:
+            with open(test_suite_path, "w") as f:
                 json.dump(test_suite, f, indent=2)
             logger.info(f"Saved test suite to {test_suite_path}")
 
         # Run benchmarks with generated tests
         benchmark_results = self.run_multi_hop_benchmarks(
-            test_queries=test_suite["tests"],
-            save_results=save_results
+            test_queries=test_suite["tests"], save_results=save_results
         )
 
         return test_suite, benchmark_results
 
     def analyze_reasoning_paths(
-        self,
-        n_sessions: int = 10,
-        save_results: bool = True
+        self, n_sessions: int = 10, save_results: bool = True
     ) -> dict[str, Any]:
         """
         Analyze reasoning paths from recent sessions.
@@ -359,8 +360,8 @@ class EvaluationFramework:
                 "avg_duration": 0,
                 "common_entities": {},
                 "common_relations": {},
-                "step_type_distribution": {}
-            }
+                "step_type_distribution": {},
+            },
         }
 
         # Analyze individual sessions
@@ -374,16 +375,35 @@ class EvaluationFramework:
         # Calculate summary metrics
         if analysis_results["sessions"]:
             # Extract values for averaging
-            path_lengths = [s.get("avg_path_length", 0) for s in analysis_results["sessions"].values()]
-            confidences = [s.get("avg_confidence", 0) for s in analysis_results["sessions"].values()]
-            success_rates = [1 if s.get("success", False) else 0 for s in analysis_results["sessions"].values()]
-            durations = [s.get("duration", 0) for s in analysis_results["sessions"].values()]
+            path_lengths = [
+                s.get("avg_path_length", 0)
+                for s in analysis_results["sessions"].values()
+            ]
+            confidences = [
+                s.get("avg_confidence", 0)
+                for s in analysis_results["sessions"].values()
+            ]
+            success_rates = [
+                1 if s.get("success", False) else 0
+                for s in analysis_results["sessions"].values()
+            ]
+            durations = [
+                s.get("duration", 0) for s in analysis_results["sessions"].values()
+            ]
 
             # Average metrics
-            analysis_results["summary"]["avg_path_length"] = sum(path_lengths) / len(path_lengths) if path_lengths else 0
-            analysis_results["summary"]["avg_confidence"] = sum(confidences) / len(confidences) if confidences else 0
-            analysis_results["summary"]["success_rate"] = sum(success_rates) / len(success_rates) if success_rates else 0
-            analysis_results["summary"]["avg_duration"] = sum(durations) / len(durations) if durations else 0
+            analysis_results["summary"]["avg_path_length"] = (
+                sum(path_lengths) / len(path_lengths) if path_lengths else 0
+            )
+            analysis_results["summary"]["avg_confidence"] = (
+                sum(confidences) / len(confidences) if confidences else 0
+            )
+            analysis_results["summary"]["success_rate"] = (
+                sum(success_rates) / len(success_rates) if success_rates else 0
+            )
+            analysis_results["summary"]["avg_duration"] = (
+                sum(durations) / len(durations) if durations else 0
+            )
 
             # Aggregate entity and relation frequencies
             entity_freq = {}
@@ -392,19 +412,25 @@ class EvaluationFramework:
 
             for session_analysis in analysis_results["sessions"].values():
                 # Entities
-                for entity, count in session_analysis.get("entity_frequencies", {}).items():
+                for entity, count in session_analysis.get(
+                    "entity_frequencies", {}
+                ).items():
                     if entity not in entity_freq:
                         entity_freq[entity] = 0
                     entity_freq[entity] += count
 
                 # Relations
-                for relation, count in session_analysis.get("relation_frequencies", {}).items():
+                for relation, count in session_analysis.get(
+                    "relation_frequencies", {}
+                ).items():
                     if relation not in relation_freq:
                         relation_freq[relation] = 0
                     relation_freq[relation] += count
 
                 # Step types
-                for step_type, count in session_analysis.get("step_type_distribution", {}).items():
+                for step_type, count in session_analysis.get(
+                    "step_type_distribution", {}
+                ).items():
                     if step_type not in step_type_dist:
                         step_type_dist[step_type] = 0
                     step_type_dist[step_type] += count
@@ -423,14 +449,18 @@ class EvaluationFramework:
         # Save results if requested
         if save_results:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            results_path = os.path.join(self.results_dir, f"reasoning_analysis_{timestamp}.json")
+            results_path = os.path.join(
+                self.results_dir, f"reasoning_analysis_{timestamp}.json"
+            )
 
-            with open(results_path, 'w') as f:
+            with open(results_path, "w") as f:
                 json.dump(analysis_results, f, indent=2)
             logger.info(f"Saved reasoning analysis to {results_path}")
 
             # Generate visualizations
-            self._visualize_reasoning_analysis(analysis_results, f"reasoning_analysis_{timestamp}")
+            self._visualize_reasoning_analysis(
+                analysis_results, f"reasoning_analysis_{timestamp}"
+            )
 
         return analysis_results
 
@@ -449,11 +479,22 @@ class EvaluationFramework:
             categories = [cat for cat in results["aggregated"] if cat != "overall"]
 
             # Prepare data
-            metrics = ["path_overlap", "path_order", "entity_coverage", "hop_accuracy", "composite_score"]
+            metrics = [
+                "path_overlap",
+                "path_order",
+                "entity_coverage",
+                "hop_accuracy",
+                "composite_score",
+            ]
 
             for i, metric in enumerate(metrics):
                 values = [results["aggregated"][cat][metric] for cat in categories]
-                plt.bar([x + i*0.15 for x in range(len(categories))], values, width=0.15, label=metric)
+                plt.bar(
+                    [x + i * 0.15 for x in range(len(categories))],
+                    values,
+                    width=0.15,
+                    label=metric,
+                )
 
             plt.xlabel("Query Types")
             plt.ylabel("Score")
@@ -461,7 +502,7 @@ class EvaluationFramework:
             plt.xticks(range(len(categories)), categories)
             plt.legend()
             plt.ylim(0, 1)
-            plt.grid(axis='y', linestyle='--', alpha=0.7)
+            plt.grid(axis="y", linestyle="--", alpha=0.7)
 
             # Save figure
             plt.tight_layout()
@@ -469,20 +510,23 @@ class EvaluationFramework:
 
             # Create execution time visualization
             plt.figure(figsize=(8, 5))
-            exec_times = [np.mean([r["scores"]["execution_time"] for r in results[cat]]) for cat in categories]
+            exec_times = [
+                np.mean([r["scores"]["execution_time"] for r in results[cat]])
+                for cat in categories
+            ]
 
             plt.bar(range(len(categories)), exec_times)
             plt.xlabel("Query Types")
             plt.ylabel("Execution Time (s)")
             plt.title("Average Execution Time by Query Type")
             plt.xticks(range(len(categories)), categories)
-            plt.grid(axis='y', linestyle='--', alpha=0.7)
+            plt.grid(axis="y", linestyle="--", alpha=0.7)
 
             # Save figure
             plt.tight_layout()
             plt.savefig(os.path.join(self.results_dir, f"{result_id}_exec_time.png"))
 
-            plt.close('all')
+            plt.close("all")
 
         except Exception as e:
             logger.error(f"Error generating visualizations: {e}")
@@ -506,7 +550,7 @@ class EvaluationFramework:
                 "stability_score",
                 "contradiction_rate",
                 "entity_consistency",
-                "relation_consistency"
+                "relation_consistency",
             ]
 
             values = [consistency_metrics.get(metric, 0) for metric in metrics]
@@ -516,7 +560,7 @@ class EvaluationFramework:
             plt.ylabel("Score")
             plt.title("Knowledge Consistency Metrics")
             plt.xticks(range(len(metrics)), metrics, rotation=45)
-            plt.grid(axis='y', linestyle='--', alpha=0.7)
+            plt.grid(axis="y", linestyle="--", alpha=0.7)
 
             # Save figure
             plt.tight_layout()
@@ -533,8 +577,8 @@ class EvaluationFramework:
                 relation_counts = growth_metrics.get("relation_count", [])
 
                 plt.subplot(2, 1, 1)
-                plt.plot(timestamps, entity_counts, 'b-', label="Entities")
-                plt.plot(timestamps, relation_counts, 'r-', label="Relations")
+                plt.plot(timestamps, entity_counts, "b-", label="Entities")
+                plt.plot(timestamps, relation_counts, "r-", label="Relations")
                 plt.xlabel("Time")
                 plt.ylabel("Count")
                 plt.title("Knowledge Growth Over Time")
@@ -543,12 +587,27 @@ class EvaluationFramework:
 
                 # Growth rates
                 plt.subplot(2, 1, 2)
-                entity_growth = growth_metrics.get("cumulative_entity_growth", [])[1:] if len(growth_metrics.get("cumulative_entity_growth", [])) > 1 else []
-                relation_growth = growth_metrics.get("cumulative_relation_growth", [])[1:] if len(growth_metrics.get("cumulative_relation_growth", [])) > 1 else []
+                entity_growth = (
+                    growth_metrics.get("cumulative_entity_growth", [])[1:]
+                    if len(growth_metrics.get("cumulative_entity_growth", [])) > 1
+                    else []
+                )
+                relation_growth = (
+                    growth_metrics.get("cumulative_relation_growth", [])[1:]
+                    if len(growth_metrics.get("cumulative_relation_growth", [])) > 1
+                    else []
+                )
 
                 if entity_growth and relation_growth:
-                    plt.plot(timestamps[1:], entity_growth, 'b--', label="Entity Growth Rate")
-                    plt.plot(timestamps[1:], relation_growth, 'r--', label="Relation Growth Rate")
+                    plt.plot(
+                        timestamps[1:], entity_growth, "b--", label="Entity Growth Rate"
+                    )
+                    plt.plot(
+                        timestamps[1:],
+                        relation_growth,
+                        "r--",
+                        label="Relation Growth Rate",
+                    )
                     plt.xlabel("Time")
                     plt.ylabel("Growth Rate")
                     plt.title("Knowledge Growth Rates")
@@ -559,7 +618,7 @@ class EvaluationFramework:
                 plt.tight_layout()
                 plt.savefig(os.path.join(self.results_dir, f"{result_id}_growth.png"))
 
-            plt.close('all')
+            plt.close("all")
 
         except Exception as e:
             logger.error(f"Error generating visualizations: {e}")
@@ -578,7 +637,12 @@ class EvaluationFramework:
 
             # Extract metrics
             summary = results.get("summary", {})
-            metrics = ["avg_path_length", "avg_confidence", "success_rate", "avg_duration"]
+            metrics = [
+                "avg_path_length",
+                "avg_confidence",
+                "success_rate",
+                "avg_duration",
+            ]
             values = [summary.get(metric, 0) for metric in metrics]
 
             plt.bar(range(len(metrics)), values)
@@ -586,7 +650,7 @@ class EvaluationFramework:
             plt.ylabel("Value")
             plt.title("Reasoning Path Analysis Summary")
             plt.xticks(range(len(metrics)), metrics, rotation=45)
-            plt.grid(axis='y', linestyle='--', alpha=0.7)
+            plt.grid(axis="y", linestyle="--", alpha=0.7)
 
             # Save figure
             plt.tight_layout()
@@ -600,12 +664,12 @@ class EvaluationFramework:
                 entities = list(common_entities.keys())[:10]  # Top 10
                 frequencies = [common_entities[e] for e in entities]
 
-                plt.barh(range(len(entities)), frequencies, color='skyblue')
+                plt.barh(range(len(entities)), frequencies, color="skyblue")
                 plt.xlabel("Frequency")
                 plt.ylabel("Entity")
                 plt.title("Most Common Entities in Reasoning Paths")
                 plt.yticks(range(len(entities)), entities)
-                plt.grid(axis='x', linestyle='--', alpha=0.7)
+                plt.grid(axis="x", linestyle="--", alpha=0.7)
 
                 # Save figure
                 plt.tight_layout()
@@ -619,24 +683,25 @@ class EvaluationFramework:
                 types = list(step_types.keys())
                 counts = [step_types[t] for t in types]
 
-                plt.pie(counts, labels=types, autopct='%1.1f%%', startangle=90, shadow=True)
-                plt.axis('equal')
+                plt.pie(
+                    counts, labels=types, autopct="%1.1f%%", startangle=90, shadow=True
+                )
+                plt.axis("equal")
                 plt.title("Reasoning Step Type Distribution")
 
                 # Save figure
                 plt.tight_layout()
-                plt.savefig(os.path.join(self.results_dir, f"{result_id}_step_types.png"))
+                plt.savefig(
+                    os.path.join(self.results_dir, f"{result_id}_step_types.png")
+                )
 
-            plt.close('all')
+            plt.close("all")
 
         except Exception as e:
             logger.error(f"Error generating visualizations: {e}")
 
     def run_full_evaluation(
-        self,
-        n_tests: int = 30,
-        consistency_days: int = 30,
-        save_results: bool = True
+        self, n_tests: int = 30, consistency_days: int = 30, save_results: bool = True
     ) -> dict[str, Any]:
         """
         Run a full evaluation suite.
@@ -653,10 +718,14 @@ class EvaluationFramework:
         start_time = time.time()
 
         # Generate and run tests
-        test_suite, benchmark_results = self.generate_and_run_tests(n_tests, save_results)
+        test_suite, benchmark_results = self.generate_and_run_tests(
+            n_tests, save_results
+        )
 
         # Evaluate knowledge consistency
-        consistency_results = self.evaluate_knowledge_consistency(consistency_days, save_results=save_results)
+        consistency_results = self.evaluate_knowledge_consistency(
+            consistency_days, save_results=save_results
+        )
 
         # Analyze reasoning paths
         reasoning_analysis = self.analyze_reasoning_paths(save_results=save_results)
@@ -668,57 +737,75 @@ class EvaluationFramework:
             "reasoning_analysis": reasoning_analysis,
             "execution_time": time.time() - start_time,
             "timestamp": datetime.now().isoformat(),
-            "config": {
-                "n_tests": n_tests,
-                "consistency_days": consistency_days
-            }
+            "config": {"n_tests": n_tests, "consistency_days": consistency_days},
         }
 
         # Save full results
         if save_results:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            results_path = os.path.join(self.results_dir, f"full_evaluation_{timestamp}.json")
+            results_path = os.path.join(
+                self.results_dir, f"full_evaluation_{timestamp}.json"
+            )
 
-            with open(results_path, 'w') as f:
+            with open(results_path, "w") as f:
                 json.dump(full_results, f, indent=2)
             logger.info(f"Saved full evaluation results to {results_path}")
 
-        logger.info(f"Full evaluation completed in {full_results['execution_time']:.2f} seconds")
+        logger.info(
+            f"Full evaluation completed in {full_results['execution_time']:.2f} seconds"
+        )
 
         return full_results
+
 
 def main():
     """Main function for running the evaluation framework."""
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='CortexFlow Evaluation Framework')
-    parser.add_argument('--db_path', type=str, help='Path to knowledge database')
-    parser.add_argument('--config', type=str, help='Path to configuration file')
-    parser.add_argument('--results_dir', type=str, default='evaluation_results', help='Directory for results')
-    parser.add_argument('--mode', type=str, choices=['full', 'multi_hop', 'consistency', 'test_gen', 'reasoning'],
-                        default='full', help='Evaluation mode')
-    parser.add_argument('--n_tests', type=int, default=30, help='Number of tests to generate')
-    parser.add_argument('--days', type=int, default=30, help='Time window in days for consistency evaluation')
+    parser = argparse.ArgumentParser(description="CortexFlow Evaluation Framework")
+    parser.add_argument("--db_path", type=str, help="Path to knowledge database")
+    parser.add_argument("--config", type=str, help="Path to configuration file")
+    parser.add_argument(
+        "--results_dir",
+        type=str,
+        default="evaluation_results",
+        help="Directory for results",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["full", "multi_hop", "consistency", "test_gen", "reasoning"],
+        default="full",
+        help="Evaluation mode",
+    )
+    parser.add_argument(
+        "--n_tests", type=int, default=30, help="Number of tests to generate"
+    )
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=30,
+        help="Time window in days for consistency evaluation",
+    )
 
     args = parser.parse_args()
 
     # Initialize evaluation framework
     framework = EvaluationFramework(
-        db_path=args.db_path,
-        config_path=args.config,
-        results_dir=args.results_dir
+        db_path=args.db_path, config_path=args.config, results_dir=args.results_dir
     )
 
     # Run evaluation based on mode
-    if args.mode == 'full':
+    if args.mode == "full":
         framework.run_full_evaluation(args.n_tests, args.days)
-    elif args.mode == 'multi_hop':
+    elif args.mode == "multi_hop":
         framework.run_multi_hop_benchmarks(num_generated_tests=args.n_tests)
-    elif args.mode == 'consistency':
+    elif args.mode == "consistency":
         framework.evaluate_knowledge_consistency(time_window_days=args.days)
-    elif args.mode == 'test_gen':
+    elif args.mode == "test_gen":
         framework.generate_and_run_tests(num_tests=args.n_tests)
-    elif args.mode == 'reasoning':
+    elif args.mode == "reasoning":
         framework.analyze_reasoning_paths()
+
 
 if __name__ == "__main__":
     main()

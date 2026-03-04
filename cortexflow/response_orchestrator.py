@@ -6,13 +6,14 @@ focused class.  CortexFlowManager delegates to an instance of
 ResponseOrchestrator for ``generate_response`` and
 ``generate_response_stream``.
 """
+
 from __future__ import annotations
 
 import logging
 import traceback
 from collections.abc import Iterator
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
 
 
 class ResponseOrchestrator:
@@ -70,7 +71,9 @@ class ResponseOrchestrator:
         """Build an optional system message from persona + emotion + relationship."""
         parts: list[str] = []
 
-        session = self._get_current_session_fn() if self._get_current_session_fn else None
+        session = (
+            self._get_current_session_fn() if self._get_current_session_fn else None
+        )
         user_id = session.user_id if session else None
         persona_id = session.persona_id if session else None
 
@@ -79,7 +82,9 @@ class ResponseOrchestrator:
             user_profile_text = ""
             if self._user_profile_manager and user_id:
                 try:
-                    user_profile_text = self._user_profile_manager.get_profile_for_prompt(user_id)
+                    user_profile_text = (
+                        self._user_profile_manager.get_profile_for_prompt(user_id)
+                    )
                 except Exception:  # noqa: S110
                     pass
 
@@ -100,8 +105,11 @@ class ResponseOrchestrator:
             relationship_context = ""
             if self._relationship_tracker and user_id:
                 try:
-                    relationship_context = self._relationship_tracker.get_relationship_context(
-                        user_id, persona_id,
+                    relationship_context = (
+                        self._relationship_tracker.get_relationship_context(
+                            user_id,
+                            persona_id,
+                        )
                     )
                 except Exception:  # noqa: S110
                     pass
@@ -149,7 +157,6 @@ class ResponseOrchestrator:
             Generated response
         """
         try:
-
             # Use model from config if not specified
             if model is None:
                 model = self.config.default_model
@@ -186,8 +193,10 @@ class ResponseOrchestrator:
                                 entity_id = item.get("entity_id")
                                 if entity_id and entity_id not in seen_entity_ids:
                                     seen_entity_ids.add(entity_id)
-                                    contradictions = self.uncertainty_handler.detect_contradictions(
-                                        entity_id=entity_id, max_results=3
+                                    contradictions = (
+                                        self.uncertainty_handler.detect_contradictions(
+                                            entity_id=entity_id, max_results=3
+                                        )
                                     )
                                     all_contradictions.extend(contradictions)
 
@@ -203,7 +212,9 @@ class ResponseOrchestrator:
                                     "Please acknowledge the uncertainty and present the most reliable information:\n"
                                     + "\n".join(contradiction_details)
                                 )
-                                logger.info(f"Found {len(all_contradictions)} contradictions in retrieved knowledge")
+                                logger.info(
+                                    f"Found {len(all_contradictions)} contradictions in retrieved knowledge"
+                                )
                         except Exception as e:
                             logger.debug(f"Contradiction detection skipped: {e}")
 
@@ -212,7 +223,9 @@ class ResponseOrchestrator:
                         system_content = f"Use this knowledge to answer the question:\n{knowledge_text}"
                         if contradiction_note:
                             system_content += contradiction_note
-                        messages = [{"role": "system", "content": system_content}] + messages
+                        messages = [
+                            {"role": "system", "content": system_content}
+                        ] + messages
 
                 # Inject companion AI context (persona + emotion + relationship)
                 companion_ctx = self._build_companion_system_message()
@@ -229,51 +242,71 @@ class ResponseOrchestrator:
 
                 # Enrich context with inference results if available
                 inference_context = ""
-                if (hasattr(self, 'knowledge_store') and self.knowledge_store and
-                        hasattr(self.knowledge_store, 'inference_engine') and
-                        self.knowledge_store.inference_engine and query):
+                if (
+                    hasattr(self, "knowledge_store")
+                    and self.knowledge_store
+                    and hasattr(self.knowledge_store, "inference_engine")
+                    and self.knowledge_store.inference_engine
+                    and query
+                ):
                     try:
                         inference_engine = self.knowledge_store.inference_engine
                         # Try backward chaining to find relevant logical derivations
-                        fact_pattern = inference_engine._extract_fact_from_question(query)
+                        fact_pattern = inference_engine._extract_fact_from_question(
+                            query
+                        )
                         if fact_pattern:
-                            success, explanation = inference_engine.backward_chain(fact_pattern)
+                            success, explanation = inference_engine.backward_chain(
+                                fact_pattern
+                            )
                             if success and explanation:
                                 inference_parts = []
                                 for step in explanation[:5]:
-                                    fact = step.get('fact', {})
+                                    fact = step.get("fact", {})
                                     if isinstance(fact, dict):
-                                        source = fact.get('source', '')
-                                        relation = fact.get('relation', '')
-                                        target = fact.get('target', '')
+                                        source = fact.get("source", "")
+                                        relation = fact.get("relation", "")
+                                        target = fact.get("target", "")
                                         if source and relation and target:
-                                            inference_parts.append(f"- {source} {relation} {target}")
+                                            inference_parts.append(
+                                                f"- {source} {relation} {target}"
+                                            )
                                     elif fact:
                                         inference_parts.append(f"- {fact}")
                                 if inference_parts:
-                                    inference_context = "Logical inference results:\n" + "\n".join(inference_parts)
-                                    logger.info(f"Inference engine provided {len(inference_parts)} derivation steps")
+                                    inference_context = (
+                                        "Logical inference results:\n"
+                                        + "\n".join(inference_parts)
+                                    )
+                                    logger.info(
+                                        f"Inference engine provided {len(inference_parts)} derivation steps"
+                                    )
                     except Exception as e:
                         logger.debug(f"Inference enrichment skipped: {e}")
 
                 # Prepend inference context to messages if available
                 if inference_context:
                     # Add as a system message before the knowledge system message
-                    messages = [{"role": "system", "content": inference_context}] + messages
+                    messages = [
+                        {"role": "system", "content": inference_context}
+                    ] + messages
 
                 # Use Chain of Agents for complex queries if enabled
-                if (self.agent_chain_manager is not None and
-                    hasattr(self.config, "use_chain_of_agents") and
-                    self.config.use_chain_of_agents):
-
+                if (
+                    self.agent_chain_manager is not None
+                    and hasattr(self.config, "use_chain_of_agents")
+                    and self.config.use_chain_of_agents
+                ):
                     try:
-                        logger.info(f"Processing query with Chain of Agents: {query[:50]}...")
+                        logger.info(
+                            f"Processing query with Chain of Agents: {query[:50]}..."
+                        )
 
                         # process_query uses _is_complex_query() internally and
                         # returns skipped=True for simple queries
                         coa_result = self.agent_chain_manager.process_query(
                             query=query,
-                            context={"messages": messages, "knowledge": knowledge}
+                            context={"messages": messages, "knowledge": knowledge},
                         )
 
                         if not coa_result.get("skipped"):
@@ -282,38 +315,49 @@ class ResponseOrchestrator:
 
                             if generated_text:
                                 # Apply self-reflection if enabled
-                                if (self.reflection_engine and
-                                    hasattr(self.config, "use_self_reflection") and
-                                    self.config.use_self_reflection):
-
+                                if (
+                                    self.reflection_engine
+                                    and hasattr(self.config, "use_self_reflection")
+                                    and self.config.use_self_reflection
+                                ):
                                     try:
                                         # Check response consistency
                                         consistency_result = self.reflection_engine.check_response_consistency(
-                                            query,
-                                            generated_text,
-                                            knowledge
+                                            query, generated_text, knowledge
                                         )
 
                                         # Revise if needed
-                                        if not consistency_result.get("is_consistent", True):
-                                            generated_text = self.reflection_engine.revise_response(
-                                                query,
-                                                generated_text,
-                                                knowledge,
-                                                consistency_result
+                                        if not consistency_result.get(
+                                            "is_consistent", True
+                                        ):
+                                            generated_text = (
+                                                self.reflection_engine.revise_response(
+                                                    query,
+                                                    generated_text,
+                                                    knowledge,
+                                                    consistency_result,
+                                                )
                                             )
-                                            logger.info("Response revised through self-reflection")
+                                            logger.info(
+                                                "Response revised through self-reflection"
+                                            )
                                     except Exception as e:
                                         logger.error(f"Error in self-reflection: {e}")
 
                                 # Add the response to memory
                                 self._add_message("assistant", generated_text)
-                                logger.info(f"Chain of Agents generated response in {coa_result.get('total_processing_time', 0):.2f} seconds")
+                                logger.info(
+                                    f"Chain of Agents generated response in {coa_result.get('total_processing_time', 0):.2f} seconds"
+                                )
                                 return generated_text
                             # If Chain of Agents produced no answer, fall back to standard processing
-                            logger.warning("Chain of Agents failed to generate response, falling back to standard processing")
+                            logger.warning(
+                                "Chain of Agents failed to generate response, falling back to standard processing"
+                            )
                         else:
-                            logger.info(f"Chain of Agents skipped (simple query): {coa_result.get('reason', '')}")
+                            logger.info(
+                                f"Chain of Agents skipped (simple query): {coa_result.get('reason', '')}"
+                            )
                     except Exception as e:
                         logger.error(f"Error processing with Chain of Agents: {e}")
                         logger.error(traceback.format_exc())
@@ -331,26 +375,24 @@ class ResponseOrchestrator:
                 return f"Error generating response: {generated_text}"
 
             # Apply self-reflection if enabled
-            if (self.reflection_engine and
-                    hasattr(self.config, "use_self_reflection") and
-                    self.config.use_self_reflection and
-                    len(user_messages) > 0):  # Need a user query for reflection
-
+            if (
+                self.reflection_engine
+                and hasattr(self.config, "use_self_reflection")
+                and self.config.use_self_reflection
+                and len(user_messages) > 0
+            ):  # Need a user query for reflection
                 try:
                     # Check response consistency
-                    consistency_result = self.reflection_engine.check_response_consistency(
-                        query,
-                        generated_text,
-                        knowledge
+                    consistency_result = (
+                        self.reflection_engine.check_response_consistency(
+                            query, generated_text, knowledge
+                        )
                     )
 
                     # Revise if needed
                     if not consistency_result.get("is_consistent", True):
                         generated_text = self.reflection_engine.revise_response(
-                            query,
-                            generated_text,
-                            knowledge,
-                            consistency_result
+                            query, generated_text, knowledge, consistency_result
                         )
                         logger.info("Response revised through self-reflection")
                 except Exception as e:
@@ -366,7 +408,9 @@ class ResponseOrchestrator:
             logger.error(traceback.format_exc())
             return f"Error generating response: {str(e)}"
 
-    def generate_response_stream(self, prompt: str = None, model: str = None) -> Iterator[str]:
+    def generate_response_stream(
+        self, prompt: str = None, model: str = None
+    ) -> Iterator[str]:
         """
         Generate a streaming response using the conversation context.
 
@@ -382,7 +426,6 @@ class ResponseOrchestrator:
             Chunks of the generated response
         """
         try:
-
             # Use model from config if not specified
             if model is None:
                 model = self.config.default_model
@@ -405,7 +448,12 @@ class ResponseOrchestrator:
 
                     if knowledge_text:
                         # Add knowledge context as a system message
-                        messages = [{"role": "system", "content": f"Use this knowledge to answer the question:\n{knowledge_text}"}] + messages
+                        messages = [
+                            {
+                                "role": "system",
+                                "content": f"Use this knowledge to answer the question:\n{knowledge_text}",
+                            }
+                        ] + messages
 
                 # Format as prompt if needed
                 if not messages:
@@ -415,15 +463,19 @@ class ResponseOrchestrator:
                 user_messages = [msg for msg in messages if msg.get("role") == "user"]
                 query = user_messages[-1]["content"] if user_messages else ""
 
-                if (self.agent_chain_manager is not None and
-                    hasattr(self.config, "use_chain_of_agents") and
-                    self.config.use_chain_of_agents and query):
-
+                if (
+                    self.agent_chain_manager is not None
+                    and hasattr(self.config, "use_chain_of_agents")
+                    and self.config.use_chain_of_agents
+                    and query
+                ):
                     try:
-                        logger.info("Streaming mode: running COA synchronously before streaming result")
+                        logger.info(
+                            "Streaming mode: running COA synchronously before streaming result"
+                        )
                         coa_result = self.agent_chain_manager.process_query(
                             query=query,
-                            context={"messages": messages, "knowledge": knowledge}
+                            context={"messages": messages, "knowledge": knowledge},
                         )
 
                         if not coa_result.get("skipped"):
@@ -433,10 +485,12 @@ class ResponseOrchestrator:
                                 self._add_message("assistant", generated_text)
                                 chunk_size = 20
                                 for i in range(0, len(generated_text), chunk_size):
-                                    yield generated_text[i:i + chunk_size]
+                                    yield generated_text[i : i + chunk_size]
                                 return
                     except Exception as e:
-                        logger.error(f"COA failed in streaming mode, falling back to standard streaming: {e}")
+                        logger.error(
+                            f"COA failed in streaming mode, falling back to standard streaming: {e}"
+                        )
             else:
                 messages = [{"role": "user", "content": prompt}]
 

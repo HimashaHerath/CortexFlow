@@ -3,6 +3,7 @@ CortexFlow Memory module.
 
 This module provides the memory management system for the CortexFlow.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,11 +15,13 @@ from typing import Any
 from .config import CortexFlowConfig
 from .interfaces import MemoryTierInterface
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
+
 
 @dataclass
 class ContextSegment:
     """Represents a segment of conversation context with metadata."""
+
     content: str
     importance: float
     timestamp: float
@@ -72,7 +75,7 @@ class MemoryTier(MemoryTierInterface):
                 importance=importance,
                 timestamp=time.time(),
                 token_count=len(str(content).split()),  # Simple token count estimation
-                segment_type="generic"
+                segment_type="generic",
             )
             return self.add_segment(segment)
 
@@ -154,8 +157,10 @@ class MemoryTier(MemoryTierInterface):
 
         # Factor in both importance and age
         # Older and less important segments are more likely to be removed
-        return min(range(len(self.segments)),
-                   key=lambda i: (self.segments[i].importance, -self.segments[i].age))
+        return min(
+            range(len(self.segments)),
+            key=lambda i: (self.segments[i].importance, -self.segments[i].age),
+        )
 
     def update_token_limit(self, new_limit: int) -> bool:
         """
@@ -169,11 +174,15 @@ class MemoryTier(MemoryTierInterface):
         """
         # Don't allow reducing below current usage or below minimum (1000 tokens)
         if new_limit < self.current_token_count or new_limit < 1000:
-            logger.warning(f"Cannot update {self.name} tier limit to {new_limit} tokens "
-                          f"(current usage: {self.current_token_count})")
+            logger.warning(
+                f"Cannot update {self.name} tier limit to {new_limit} tokens "
+                f"(current usage: {self.current_token_count})"
+            )
             return False
 
-        logger.debug(f"Updating {self.name} tier limit from {self.max_tokens} to {new_limit} tokens")
+        logger.debug(
+            f"Updating {self.name} tier limit from {self.max_tokens} to {new_limit} tokens"
+        )
         self.max_tokens = new_limit
         return True
 
@@ -209,7 +218,9 @@ class ActiveTier(MemoryTier):
             Concatenated content of all segments
         """
         # Order by recency (timestamp)
-        ordered_segments = sorted(self.segments, key=lambda s: s.timestamp, reverse=True)
+        ordered_segments = sorted(
+            self.segments, key=lambda s: s.timestamp, reverse=True
+        )
         return "\n".join(segment.content for segment in ordered_segments)
 
 
@@ -227,7 +238,9 @@ class WorkingTier(MemoryTier):
             Concatenated content of all segments
         """
         # Order by importance
-        ordered_segments = sorted(self.segments, key=lambda s: s.importance, reverse=True)
+        ordered_segments = sorted(
+            self.segments, key=lambda s: s.importance, reverse=True
+        )
         return "\n".join(segment.content for segment in ordered_segments)
 
 
@@ -247,9 +260,7 @@ class ArchiveTier(MemoryTier):
         # In the archive tier, content is already compressed
         # Order by importance and then by recency
         ordered_segments = sorted(
-            self.segments,
-            key=lambda s: (s.importance, s.timestamp),
-            reverse=True
+            self.segments, key=lambda s: (s.importance, s.timestamp), reverse=True
         )
         return "\n".join(segment.content for segment in ordered_segments)
 
@@ -271,9 +282,19 @@ class ConversationMemory:
         """
         self.config = config
         self._lock = threading.RLock()
-        self.active_token_limit = config.active_token_limit if hasattr(config, 'active_token_limit') else 4096
-        self.working_token_limit = config.working_token_limit if hasattr(config, 'working_token_limit') else 8192
-        self.archive_token_limit = config.archive_token_limit if hasattr(config, 'archive_token_limit') else 16384
+        self.active_token_limit = (
+            config.active_token_limit if hasattr(config, "active_token_limit") else 4096
+        )
+        self.working_token_limit = (
+            config.working_token_limit
+            if hasattr(config, "working_token_limit")
+            else 8192
+        )
+        self.archive_token_limit = (
+            config.archive_token_limit
+            if hasattr(config, "archive_token_limit")
+            else 16384
+        )
 
         # Initialize memory tiers
         self.active_tier = ActiveTier(self.active_token_limit)
@@ -285,25 +306,30 @@ class ConversationMemory:
             "active": {
                 "original_limit": self.active_token_limit,
                 "current_limit": self.active_token_limit,
-                "usage_history": []
+                "usage_history": [],
             },
             "working": {
                 "original_limit": self.working_token_limit,
                 "current_limit": self.working_token_limit,
-                "usage_history": []
+                "usage_history": [],
             },
             "archive": {
                 "original_limit": self.archive_token_limit,
                 "current_limit": self.archive_token_limit,
-                "usage_history": []
-            }
+                "usage_history": [],
+            },
         }
 
         # Initialize message storage
         self.messages = []
         self.next_message_id = 1
 
-    def update_tier_limits(self, active_limit: int = None, working_limit: int = None, archive_limit: int = None) -> bool:
+    def update_tier_limits(
+        self,
+        active_limit: int = None,
+        working_limit: int = None,
+        archive_limit: int = None,
+    ) -> bool:
         with self._lock:
             success = True
 
@@ -316,7 +342,9 @@ class ConversationMemory:
                     self.tier_stats["active"]["current_limit"] = active_limit
                 else:
                     success = False
-                    logger.warning(f"Cannot update active tier limit to {active_limit} (current usage: {self.active_tier.current_token_count})")
+                    logger.warning(
+                        f"Cannot update active tier limit to {active_limit} (current usage: {self.active_tier.current_token_count})"
+                    )
 
             # Update working tier if specified
             if working_limit is not None:
@@ -326,7 +354,9 @@ class ConversationMemory:
                     self.tier_stats["working"]["current_limit"] = working_limit
                 else:
                     success = False
-                    logger.warning(f"Cannot update working tier limit to {working_limit} (current usage: {self.working_tier.current_token_count})")
+                    logger.warning(
+                        f"Cannot update working tier limit to {working_limit} (current usage: {self.working_tier.current_token_count})"
+                    )
 
             # Update archive tier if specified
             if archive_limit is not None:
@@ -336,14 +366,18 @@ class ConversationMemory:
                     self.tier_stats["archive"]["current_limit"] = archive_limit
                 else:
                     success = False
-                    logger.warning(f"Cannot update archive tier limit to {archive_limit} (current usage: {self.archive_tier.current_token_count})")
+                    logger.warning(
+                        f"Cannot update archive tier limit to {archive_limit} (current usage: {self.archive_tier.current_token_count})"
+                    )
 
             # Update tier usage history
             self._update_tier_usage_stats()
 
             return success
 
-    def add_message(self, role: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    def add_message(
+        self, role: str, content: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Add a new message to the conversation memory.
 
@@ -363,7 +397,9 @@ class ConversationMemory:
         msg_timestamp = time.time()
 
         # Compute importance and token count outside the lock (no shared state)
-        importance = msg_metadata.get("importance", self._estimate_importance(role, content))
+        importance = msg_metadata.get(
+            "importance", self._estimate_importance(role, content)
+        )
         token_count = self._estimate_tokens(content)
 
         with self._lock:
@@ -373,7 +409,7 @@ class ConversationMemory:
                 "role": role,
                 "content": content,
                 "timestamp": msg_timestamp,
-                "metadata": msg_metadata
+                "metadata": msg_metadata,
             }
 
             # Increment message ID
@@ -390,7 +426,7 @@ class ConversationMemory:
                 timestamp=msg_timestamp,
                 token_count=token_count,
                 segment_type=role,
-                metadata={**msg_metadata, "message_id": message["id"]}
+                metadata={**msg_metadata, "message_id": message["id"]},
             )
 
             # Try to add to active tier; if it won't fit, free space first
@@ -433,6 +469,7 @@ class ConversationMemory:
             cls._tiktoken_checked = True
             try:
                 import tiktoken
+
                 cls._tiktoken_encoder = tiktoken.get_encoding("cl100k_base")
             except Exception:  # noqa: S110
                 pass  # tiktoken not installed — fall back to heuristic
@@ -468,6 +505,7 @@ class ConversationMemory:
     def _get_fact_detector(cls):
         if cls._fact_detector is None:
             from .fact_detector import PersonalFactDetector
+
             cls._fact_detector = PersonalFactDetector(use_spacy=False)
         return cls._fact_detector
 
@@ -504,9 +542,20 @@ class ConversationMemory:
         # User messages with questions or important keywords get higher score
         if role == "user":
             importance_keywords = {
-                "important", "critical", "urgent", "remember", "always",
-                "never", "must", "required", "error", "bug", "fix",
-                "explain", "why", "how"
+                "important",
+                "critical",
+                "urgent",
+                "remember",
+                "always",
+                "never",
+                "must",
+                "required",
+                "error",
+                "bug",
+                "fix",
+                "explain",
+                "why",
+                "how",
             }
             content_lower = content.lower()
             if "?" in content:
@@ -533,8 +582,9 @@ class ConversationMemory:
         Returns:
             ContextCompressor instance
         """
-        if not hasattr(self, '_compressor') or self._compressor is None:
+        if not hasattr(self, "_compressor") or self._compressor is None:
             from .compressor import ContextCompressor
+
             # Use the default (extractive-only) compressor to avoid blocking
             # on LLM client initialization during memory management.
             # The full LLM-backed compressor can be injected externally via
@@ -569,7 +619,9 @@ class ConversationMemory:
             idx = self._get_demotable_segment_index(self.active_tier)
             if idx is None:
                 # Only system messages left, nothing to demote
-                logger.warning("Active tier full but contains only system-level segments")
+                logger.warning(
+                    "Active tier full but contains only system-level segments"
+                )
                 break
 
             segment = self.active_tier.remove_segment(idx)
@@ -592,7 +644,9 @@ class ConversationMemory:
                     compressed = compressor.compress_segment(compressed, 0.5)
                     if not self.working_tier.add_segment(compressed):
                         # Last resort: send directly to archive
-                        archive_compressed = compressor.compress_segment(compressed, 0.3)
+                        archive_compressed = compressor.compress_segment(
+                            compressed, 0.3
+                        )
                         if not self.archive_tier.add_segment(archive_compressed):
                             logger.warning("All tiers full, discarding segment")
 
@@ -611,7 +665,9 @@ class ConversationMemory:
         while self.working_tier.is_full:
             idx = self._get_demotable_segment_index(self.working_tier)
             if idx is None:
-                logger.warning("Working tier full but contains only system-level segments")
+                logger.warning(
+                    "Working tier full but contains only system-level segments"
+                )
                 break
 
             segment = self.working_tier.remove_segment(idx)
@@ -630,14 +686,18 @@ class ConversationMemory:
                 self._manage_archive_tier_overflow()
                 # Retry
                 if not self.archive_tier.add_segment(compressed):
-                    logger.warning("Archive tier full after cleanup, discarding segment")
+                    logger.warning(
+                        "Archive tier full after cleanup, discarding segment"
+                    )
 
     def _manage_archive_tier_overflow(self):
         """Handle archive tier overflow by discarding least important segments."""
         while self.archive_tier.is_full:
             idx = self._get_demotable_segment_index(self.archive_tier)
             if idx is None:
-                logger.warning("Archive tier full but contains only system-level segments")
+                logger.warning(
+                    "Archive tier full but contains only system-level segments"
+                )
                 break
 
             discarded = self.archive_tier.remove_segment(idx)
@@ -666,7 +726,8 @@ class ConversationMemory:
 
         # Filter to non-system segments (importance < 9.0)
         candidates = [
-            (i, seg) for i, seg in enumerate(tier.segments)
+            (i, seg)
+            for i, seg in enumerate(tier.segments)
             if seg.segment_type != "system" and seg.importance < 9.0
         ]
 
@@ -676,7 +737,9 @@ class ConversationMemory:
         # Return the least important (factoring in age like get_least_important_segment)
         return min(candidates, key=lambda pair: (pair[1].importance, -pair[1].age))[0]
 
-    def get_context_messages(self, token_budget: int | None = None) -> list[dict[str, Any]]:
+    def get_context_messages(
+        self, token_budget: int | None = None
+    ) -> list[dict[str, Any]]:
         """
         Get messages for context window from the tier system.
 
@@ -719,10 +782,9 @@ class ConversationMemory:
             if not all_segments and self.messages:
                 formatted_messages = []
                 for message in self.messages:
-                    formatted_messages.append({
-                        "role": message["role"],
-                        "content": message["content"]
-                    })
+                    formatted_messages.append(
+                        {"role": message["role"], "content": message["content"]}
+                    )
                 return formatted_messages
 
             # Sort all collected segments chronologically by timestamp
@@ -733,10 +795,9 @@ class ConversationMemory:
                 if tokens_used + segment.token_count > token_budget:
                     # Budget exhausted - stop adding
                     break
-                formatted_segments.append({
-                    "role": segment.segment_type,
-                    "content": segment.content
-                })
+                formatted_segments.append(
+                    {"role": segment.segment_type, "content": segment.content}
+                )
                 tokens_used += segment.token_count
 
             return formatted_segments
@@ -787,10 +848,14 @@ class ConversationMemory:
             # Add first and last message summaries
             if self.messages:
                 first_msg = self.messages[0]
-                summary_lines.append(f"- First message ({first_msg['role']}): {first_msg['content'][:50]}...")
+                summary_lines.append(
+                    f"- First message ({first_msg['role']}): {first_msg['content'][:50]}..."
+                )
 
                 last_msg = self.messages[-1]
-                summary_lines.append(f"- Latest message ({last_msg['role']}): {last_msg['content'][:50]}...")
+                summary_lines.append(
+                    f"- Latest message ({last_msg['role']}): {last_msg['content'][:50]}..."
+                )
 
             return "\n".join(summary_lines)
 
@@ -799,30 +864,38 @@ class ConversationMemory:
         timestamp = time.time()
 
         # Update active tier stats
-        self.tier_stats["active"]["usage_history"].append({
-            "timestamp": timestamp,
-            "tokens_used": self.active_tier.current_token_count,
-            "fullness_ratio": self.active_tier.fullness_ratio
-        })
+        self.tier_stats["active"]["usage_history"].append(
+            {
+                "timestamp": timestamp,
+                "tokens_used": self.active_tier.current_token_count,
+                "fullness_ratio": self.active_tier.fullness_ratio,
+            }
+        )
 
         # Update working tier stats
-        self.tier_stats["working"]["usage_history"].append({
-            "timestamp": timestamp,
-            "tokens_used": self.working_tier.current_token_count,
-            "fullness_ratio": self.working_tier.fullness_ratio
-        })
+        self.tier_stats["working"]["usage_history"].append(
+            {
+                "timestamp": timestamp,
+                "tokens_used": self.working_tier.current_token_count,
+                "fullness_ratio": self.working_tier.fullness_ratio,
+            }
+        )
 
         # Update archive tier stats
-        self.tier_stats["archive"]["usage_history"].append({
-            "timestamp": timestamp,
-            "tokens_used": self.archive_tier.current_token_count,
-            "fullness_ratio": self.archive_tier.fullness_ratio
-        })
+        self.tier_stats["archive"]["usage_history"].append(
+            {
+                "timestamp": timestamp,
+                "tokens_used": self.archive_tier.current_token_count,
+                "fullness_ratio": self.archive_tier.fullness_ratio,
+            }
+        )
 
         # Keep history size manageable
         for tier in self.tier_stats:
             if len(self.tier_stats[tier]["usage_history"]) > 50:
-                self.tier_stats[tier]["usage_history"] = self.tier_stats[tier]["usage_history"][-50:]
+                self.tier_stats[tier]["usage_history"] = self.tier_stats[tier][
+                    "usage_history"
+                ][-50:]
 
     def get_stats(self) -> dict[str, Any]:
         """
@@ -842,22 +915,22 @@ class ConversationMemory:
                         "limit": self.active_token_limit,
                         "used": self.active_tier.current_token_count,
                         "fullness": self.active_tier.fullness_ratio,
-                        "segment_count": len(self.active_tier.segments)
+                        "segment_count": len(self.active_tier.segments),
                     },
                     "working": {
                         "limit": self.working_token_limit,
                         "used": self.working_tier.current_token_count,
                         "fullness": self.working_tier.fullness_ratio,
-                        "segment_count": len(self.working_tier.segments)
+                        "segment_count": len(self.working_tier.segments),
                     },
                     "archive": {
                         "limit": self.archive_token_limit,
                         "used": self.archive_tier.current_token_count,
                         "fullness": self.archive_tier.fullness_ratio,
-                        "segment_count": len(self.archive_tier.segments)
-                    }
+                        "segment_count": len(self.archive_tier.segments),
+                    },
                 },
-                "tier_stats": self.tier_stats
+                "tier_stats": self.tier_stats,
             }
 
     def clear_memory(self):
@@ -891,13 +964,15 @@ class ConversationMemory:
                 "tiers": {
                     "active_limit": self.active_token_limit,
                     "working_limit": self.working_token_limit,
-                    "archive_limit": self.archive_token_limit
+                    "archive_limit": self.archive_token_limit,
                 },
-                "next_message_id": self.next_message_id
+                "next_message_id": self.next_message_id,
             }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], config: CortexFlowConfig) -> ConversationMemory:
+    def from_dict(
+        cls, data: dict[str, Any], config: CortexFlowConfig
+    ) -> ConversationMemory:
         """
         Create from serialized dictionary.
 
@@ -917,9 +992,15 @@ class ConversationMemory:
         # Restore tier limits if available
         tiers = data.get("tiers", {})
         if tiers:
-            memory.active_token_limit = tiers.get("active_limit", config.active_token_limit)
-            memory.working_token_limit = tiers.get("working_limit", config.working_token_limit)
-            memory.archive_token_limit = tiers.get("archive_limit", config.archive_token_limit)
+            memory.active_token_limit = tiers.get(
+                "active_limit", config.active_token_limit
+            )
+            memory.working_token_limit = tiers.get(
+                "working_limit", config.working_token_limit
+            )
+            memory.archive_token_limit = tiers.get(
+                "archive_limit", config.archive_token_limit
+            )
 
             # Recreate tiers with restored limits
             memory.active_tier = ActiveTier(memory.active_token_limit)

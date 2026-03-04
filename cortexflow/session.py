@@ -4,6 +4,7 @@ Session management for CortexFlow.
 Provides per-user session isolation so that memory, knowledge, and
 conversation state can be scoped to individual users and sessions.
 """
+
 from __future__ import annotations
 
 import logging
@@ -64,8 +65,12 @@ class SessionManager:
     the database or in-memory session cache.
     """
 
-    def __init__(self, db_path: str = ":memory:", session_ttl: int = 86400,
-                 max_sessions_per_user: int = 10):
+    def __init__(
+        self,
+        db_path: str = ":memory:",
+        session_ttl: int = 86400,
+        max_sessions_per_user: int = 10,
+    ):
         self._db_path = db_path
         self._session_ttl = session_ttl
         self._max_sessions_per_user = max_sessions_per_user
@@ -103,8 +108,12 @@ class SessionManager:
     # Public API
     # ------------------------------------------------------------------
 
-    def create_session(self, user_id: str, persona_id: str | None = None,
-                       metadata: dict[str, Any] | None = None) -> SessionContext:
+    def create_session(
+        self,
+        user_id: str,
+        persona_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> SessionContext:
         """Create a new session for *user_id*.
 
         If the user already has ``max_sessions_per_user`` active sessions the
@@ -128,9 +137,14 @@ class SessionManager:
                    (session_id, user_id, persona_id, created_at, last_active_at,
                     metadata, is_active)
                    VALUES (?, ?, ?, ?, ?, ?, 1)""",
-                (session.session_id, session.user_id, session.persona_id,
-                 session.created_at, session.last_active_at,
-                 json.dumps(session.metadata)),
+                (
+                    session.session_id,
+                    session.user_id,
+                    session.persona_id,
+                    session.created_at,
+                    session.last_active_at,
+                    json.dumps(session.metadata),
+                ),
             )
             self._conn.commit()
 
@@ -145,7 +159,9 @@ class SessionManager:
                 return self._sessions[session_id]
             return self._load_session(session_id)
 
-    def list_sessions(self, user_id: str, *, active_only: bool = True) -> list[SessionContext]:
+    def list_sessions(
+        self, user_id: str, *, active_only: bool = True
+    ) -> list[SessionContext]:
         """List sessions belonging to *user_id*."""
         import json
 
@@ -208,8 +224,9 @@ class SessionManager:
             )
             self._conn.commit()
             # Evict from cache
-            expired = [sid for sid, s in self._sessions.items()
-                       if s.last_active_at < cutoff]
+            expired = [
+                sid for sid, s in self._sessions.items() if s.last_active_at < cutoff
+            ]
             for sid in expired:
                 del self._sessions[sid]
             return cur.rowcount

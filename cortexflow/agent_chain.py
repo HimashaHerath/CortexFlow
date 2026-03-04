@@ -12,6 +12,7 @@ require multi-hop reasoning over long contexts.
 Based on research from Google's "Chain of Agents: Large Language Models
 Collaborating on Long Context Tasks" (2025).
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,8 @@ from cortexflow.config import CortexFlowConfig
 from cortexflow.knowledge import KnowledgeStore
 from cortexflow.llm_client import create_llm_client
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
+
 
 class Agent:
     """Base class for specialized agents in the Chain of Agents framework."""
@@ -33,7 +35,7 @@ class Agent:
         name: str,
         role: str,
         config: CortexFlowConfig,
-        knowledge_store: KnowledgeStore | None = None
+        knowledge_store: KnowledgeStore | None = None,
     ):
         """
         Initialize an agent with a specific role.
@@ -54,7 +56,7 @@ class Agent:
         self,
         query: str,
         context: dict[str, Any],
-        agent_history: list[dict[str, Any]] | None = None
+        agent_history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Process a query with the agent's specialized capability.
@@ -83,14 +85,14 @@ class ExplorerAgent(Agent):
             name="Explorer",
             role="Explore the knowledge base to find relevant information and topics",
             config=config,
-            knowledge_store=knowledge_store
+            knowledge_store=knowledge_store,
         )
 
     def process(
         self,
         query: str,
         context: dict[str, Any],
-        agent_history: list[dict[str, Any]] | None = None
+        agent_history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Explore the knowledge base to find relevant information.
@@ -112,20 +114,25 @@ class ExplorerAgent(Agent):
             # Use a higher threshold to get more diverse results
             knowledge_items = self.knowledge_store.get_relevant_knowledge(
                 query,
-                max_results=10  # Retrieve more results for exploration
+                max_results=10,  # Retrieve more results for exploration
             )
 
             # If graph-based retrieval is enabled, use it for additional exploration
-            if hasattr(self.knowledge_store, 'graph_store') and self.knowledge_store.use_graph_rag:
+            if (
+                hasattr(self.knowledge_store, "graph_store")
+                and self.knowledge_store.use_graph_rag
+            ):
                 # Get related entities to expand the search
-                if hasattr(self.knowledge_store, '_graph_search'):
-                    graph_results = self.knowledge_store._graph_search(query, max_results=5)
+                if hasattr(self.knowledge_store, "_graph_search"):
+                    graph_results = self.knowledge_store._graph_search(
+                        query, max_results=5
+                    )
                     # Add unique results to knowledge_items
-                    existing_texts = {item.get('text', '') for item in knowledge_items}
+                    existing_texts = {item.get("text", "") for item in knowledge_items}
                     for result in graph_results:
-                        if result.get('text', '') not in existing_texts:
+                        if result.get("text", "") not in existing_texts:
                             knowledge_items.append(result)
-                            existing_texts.add(result.get('text', ''))
+                            existing_texts.add(result.get("text", ""))
 
         # Format the knowledge as context
         knowledge_context = self._format_knowledge_context(knowledge_items)
@@ -137,7 +144,7 @@ class ExplorerAgent(Agent):
             "agent": self.name,
             "role": self.role,
             "exploration_results": exploration_results,
-            "knowledge_items": knowledge_items
+            "knowledge_items": knowledge_items,
         }
 
     def _create_explorer_prompt(self, query: str, context: dict[str, Any]) -> str:
@@ -164,7 +171,7 @@ Output your exploration findings in a clear, structured format.
 
         formatted_items = []
         for i, item in enumerate(knowledge_items):
-            formatted_items.append(f"[{i+1}] {item.get('text', '')}")
+            formatted_items.append(f"[{i + 1}] {item.get('text', '')}")
 
         return "KNOWLEDGE CONTEXT:\n" + "\n".join(formatted_items)
 
@@ -192,7 +199,7 @@ Output your exploration findings in a clear, structured format.
                 "exploration_text": "",
                 "status": "error",
                 "error": f"LLM request timed out: {e}",
-                "error_type": "timeout"
+                "error_type": "timeout",
             }
         except Exception as e:
             logger.error(f"Error in Explorer LLM processing: {e}")
@@ -200,7 +207,7 @@ Output your exploration findings in a clear, structured format.
                 "exploration_text": "",
                 "status": "error",
                 "error": str(e),
-                "error_type": type(e).__name__
+                "error_type": type(e).__name__,
             }
 
 
@@ -216,14 +223,14 @@ class AnalyzerAgent(Agent):
             name="Analyzer",
             role="Analyze relationships between facts and build coherent understanding",
             config=config,
-            knowledge_store=knowledge_store
+            knowledge_store=knowledge_store,
         )
 
     def process(
         self,
         query: str,
         context: dict[str, Any],
-        agent_history: list[dict[str, Any]] | None = None
+        agent_history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Analyze relationships between facts from the Explorer agent.
@@ -235,8 +242,11 @@ class AnalyzerAgent(Agent):
             return {
                 "agent": self.name,
                 "role": self.role,
-                "analysis_results": {"status": "error", "error": "No previous agent history"},
-                "status": "error"
+                "analysis_results": {
+                    "status": "error",
+                    "error": "No previous agent history",
+                },
+                "status": "error",
             }
 
         # Get the Explorer agent's results
@@ -251,12 +261,16 @@ class AnalyzerAgent(Agent):
         return {
             "agent": self.name,
             "role": self.role,
-            "analysis_results": analysis_results
+            "analysis_results": analysis_results,
         }
 
-    def _create_analyzer_prompt(self, query: str, explorer_results: dict[str, Any]) -> str:
+    def _create_analyzer_prompt(
+        self, query: str, explorer_results: dict[str, Any]
+    ) -> str:
         """Create a prompt for the analyzer agent."""
-        exploration_text = explorer_results.get("exploration_results", {}).get("exploration_text", "No exploration results")
+        exploration_text = explorer_results.get("exploration_results", {}).get(
+            "exploration_text", "No exploration results"
+        )
 
         return f"""You are the Analyzer Agent. Your task is to analyze relationships between facts and concepts
 discovered by the Explorer Agent. Focus on finding connections, patterns, and logical relationships
@@ -288,9 +302,7 @@ Output your analysis in a clear, structured format.
         """
         logger.debug(f"Analyzer LLM prompt length: {len(prompt)} chars")
         try:
-            analysis_text = self.llm_client.generate_from_prompt(
-                prompt, timeout=30
-            )
+            analysis_text = self.llm_client.generate_from_prompt(prompt, timeout=30)
             logger.debug(f"Analyzer LLM response length: {len(analysis_text)} chars")
             return {"analysis_text": analysis_text, "status": "success"}
         except TimeoutError as e:
@@ -299,7 +311,7 @@ Output your analysis in a clear, structured format.
                 "analysis_text": "",
                 "status": "error",
                 "error": f"LLM request timed out: {e}",
-                "error_type": "timeout"
+                "error_type": "timeout",
             }
         except Exception as e:
             logger.error(f"Error in Analyzer LLM processing: {e}")
@@ -307,7 +319,7 @@ Output your analysis in a clear, structured format.
                 "analysis_text": "",
                 "status": "error",
                 "error": str(e),
-                "error_type": type(e).__name__
+                "error_type": type(e).__name__,
             }
 
 
@@ -323,14 +335,14 @@ class SynthesizerAgent(Agent):
             name="Synthesizer",
             role="Synthesize information and generate comprehensive answer",
             config=config,
-            knowledge_store=knowledge_store
+            knowledge_store=knowledge_store,
         )
 
     def process(
         self,
         query: str,
         context: dict[str, Any],
-        agent_history: list[dict[str, Any]] | None = None
+        agent_history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Synthesize information from previous agents to answer the query.
@@ -343,7 +355,7 @@ class SynthesizerAgent(Agent):
                 "agent": self.name,
                 "role": self.role,
                 "answer": "Insufficient information from previous agents to synthesize an answer.",
-                "status": "error"
+                "status": "error",
             }
 
         # Get results from previous agents
@@ -352,9 +364,7 @@ class SynthesizerAgent(Agent):
 
         # Create synthesizer prompt
         prompt = self._create_synthesizer_prompt(
-            query,
-            explorer_results,
-            analyzer_results
+            query, explorer_results, analyzer_results
         )
 
         # Process with LLM to synthesize answer
@@ -364,18 +374,24 @@ class SynthesizerAgent(Agent):
             "agent": self.name,
             "role": self.role,
             "synthesis_results": synthesis_results,
-            "answer": synthesis_results.get("synthesis_text", "Failed to synthesize an answer.")
+            "answer": synthesis_results.get(
+                "synthesis_text", "Failed to synthesize an answer."
+            ),
         }
 
     def _create_synthesizer_prompt(
         self,
         query: str,
         explorer_results: dict[str, Any],
-        analyzer_results: dict[str, Any]
+        analyzer_results: dict[str, Any],
     ) -> str:
         """Create a prompt for the synthesizer agent."""
-        exploration_text = explorer_results.get("exploration_results", {}).get("exploration_text", "No exploration results")
-        analysis_text = analyzer_results.get("analysis_results", {}).get("analysis_text", "No analysis results")
+        exploration_text = explorer_results.get("exploration_results", {}).get(
+            "exploration_text", "No exploration results"
+        )
+        analysis_text = analyzer_results.get("analysis_results", {}).get(
+            "analysis_text", "No analysis results"
+        )
 
         return f"""You are the Synthesizer Agent. Your task is to synthesize information from the Explorer
 and Analyzer Agents to provide a comprehensive answer to the user's query.
@@ -409,10 +425,10 @@ Provide your answer directly.
         """
         logger.debug(f"Synthesizer LLM prompt length: {len(prompt)} chars")
         try:
-            synthesis_text = self.llm_client.generate_from_prompt(
-                prompt, timeout=30
+            synthesis_text = self.llm_client.generate_from_prompt(prompt, timeout=30)
+            logger.debug(
+                f"Synthesizer LLM response length: {len(synthesis_text)} chars"
             )
-            logger.debug(f"Synthesizer LLM response length: {len(synthesis_text)} chars")
             return {"synthesis_text": synthesis_text, "status": "success"}
         except TimeoutError as e:
             logger.error(f"Timeout in Synthesizer LLM processing: {e}")
@@ -420,7 +436,7 @@ Provide your answer directly.
                 "synthesis_text": "",
                 "status": "error",
                 "error": f"LLM request timed out: {e}",
-                "error_type": "timeout"
+                "error_type": "timeout",
             }
         except Exception as e:
             logger.error(f"Error in Synthesizer LLM processing: {e}")
@@ -428,7 +444,7 @@ Provide your answer directly.
                 "synthesis_text": "",
                 "status": "error",
                 "error": str(e),
-                "error_type": type(e).__name__
+                "error_type": type(e).__name__,
             }
 
 
@@ -453,7 +469,7 @@ class AgentChainManager:
         self.agents = [
             ExplorerAgent(config, knowledge_store),
             AnalyzerAgent(config, knowledge_store),
-            SynthesizerAgent(config, knowledge_store)
+            SynthesizerAgent(config, knowledge_store),
         ]
 
         logger.info(f"Initialized Chain of Agents with {len(self.agents)} agents")
@@ -474,12 +490,14 @@ class AgentChainManager:
         words = query.split()
         # Multi-clause queries (conjunctions suggest complexity)
         has_conjunctions = any(
-            w.lower() in ('and', 'but', 'however', 'because', 'therefore', 'while', 'although')
+            w.lower()
+            in ("and", "but", "however", "because", "therefore", "while", "although")
             for w in words
         )
         # Comparison/analysis queries
         has_analysis_words = any(
-            w.lower() in ('compare', 'contrast', 'analyze', 'explain', 'evaluate', 'why', 'how')
+            w.lower()
+            in ("compare", "contrast", "analyze", "explain", "evaluate", "why", "how")
             for w in words
         )
         # Length-based (longer queries are generally more complex)
@@ -497,7 +515,9 @@ class AgentChainManager:
             logger.error(f"Error in batch LLM processing: {e}")
             return [""] * len(prompts)
 
-    def process_query(self, query: str, context: dict[str, Any] = None) -> dict[str, Any]:
+    def process_query(
+        self, query: str, context: dict[str, Any] = None
+    ) -> dict[str, Any]:
         """Process a query through the chain of agents.
 
         If the query is not complex enough to warrant multi-agent processing,
@@ -509,14 +529,16 @@ class AgentChainManager:
 
         # Check if the query warrants multi-agent processing
         if not self._is_complex_query(query):
-            logger.info(f"Query not complex enough for agent chain, skipping: {query[:50]}...")
+            logger.info(
+                f"Query not complex enough for agent chain, skipping: {query[:50]}..."
+            )
             return {
                 "query": query,
                 "answer": None,
                 "agent_chain": [],
                 "total_processing_time": 0.0,
                 "skipped": True,
-                "reason": "Query did not meet complexity threshold for multi-agent processing."
+                "reason": "Query did not meet complexity threshold for multi-agent processing.",
             }
 
         start_time = time.time()
@@ -525,7 +547,7 @@ class AgentChainManager:
         logger.info(f"Starting Chain of Agents processing for query: {query[:50]}...")
 
         for i, agent in enumerate(self.agents):
-            logger.info(f"Running agent {i+1}/{len(self.agents)}: {agent.name}")
+            logger.info(f"Running agent {i + 1}/{len(self.agents)}: {agent.name}")
 
             # Process with current agent
             agent_start_time = time.time()
@@ -536,7 +558,9 @@ class AgentChainManager:
                 logger.error(traceback.format_exc())
 
                 # Generate fallback result
-                agent_result = self._generate_fallback_result(agent, query, context, agent_history, e)
+                agent_result = self._generate_fallback_result(
+                    agent, query, context, agent_history, e
+                )
 
             agent_duration = time.time() - agent_start_time
 
@@ -551,7 +575,9 @@ class AgentChainManager:
             if agent_result.get("status") == "error" and i < len(self.agents) - 1:
                 # For non-terminal agents, check if we should continue
                 if not self._can_continue_after_failure(agent, agent_result):
-                    logger.warning(f"Aborting agent chain due to critical failure in agent {agent.name}")
+                    logger.warning(
+                        f"Aborting agent chain due to critical failure in agent {agent.name}"
+                    )
                     break
 
             logger.info(f"Completed agent {agent.name} in {agent_duration:.2f} seconds")
@@ -576,7 +602,7 @@ class AgentChainManager:
             "query": query,
             "answer": answer,
             "agent_chain": agent_history,
-            "total_processing_time": total_duration
+            "total_processing_time": total_duration,
         }
 
     def _generate_fallback_result(self, agent, query, context, agent_history, error):
@@ -588,16 +614,18 @@ class AgentChainManager:
             "agent": agent.name,
             "role": agent.role,
             "status": "error",
-            "error": str(error)
+            "error": str(error),
         }
 
         if agent_type == "explorer":
             # For explorer, we can fall back to direct knowledge retrieval
             if self.knowledge_store:
-                knowledge_items = self.knowledge_store.get_relevant_knowledge(query, max_results=5)
+                knowledge_items = self.knowledge_store.get_relevant_knowledge(
+                    query, max_results=5
+                )
                 fallback_result["exploration_results"] = {
                     "exploration_text": "Direct knowledge retrieval results.",
-                    "status": "fallback"
+                    "status": "fallback",
                 }
                 fallback_result["knowledge_items"] = knowledge_items
 
@@ -607,23 +635,27 @@ class AgentChainManager:
                 agent_history[0]["exploration_results"].get("exploration_text", "")
                 fallback_result["analysis_results"] = {
                     "analysis_text": f"Based on exploration, the main topics appear to be related to {query}.",
-                    "status": "fallback"
+                    "status": "fallback",
                 }
 
         elif agent_type == "synthesizer":
             # For synthesizer, we need to provide some answer
             fallback_result["synthesis_results"] = {
                 "synthesis_text": f"I've analyzed information related to {query}, but cannot provide a comprehensive answer due to processing limitations.",
-                "status": "fallback"
+                "status": "fallback",
             }
-            fallback_result["answer"] = fallback_result["synthesis_results"]["synthesis_text"]
+            fallback_result["answer"] = fallback_result["synthesis_results"][
+                "synthesis_text"
+            ]
 
         return fallback_result
 
     def _can_continue_after_failure(self, failed_agent, failure_result):
         """Determine if the agent chain can continue after a failure."""
         # Explorer failures are critical - need information to proceed
-        if failed_agent.name == "Explorer" and not failure_result.get("knowledge_items"):
+        if failed_agent.name == "Explorer" and not failure_result.get(
+            "knowledge_items"
+        ):
             return False
 
         # If we have some results even in failure, we can try to continue

@@ -30,6 +30,7 @@ def jaccard_similarity(set1: set[str], set2: set[str]) -> float:
 
     return intersection / union if union > 0 else 0.0
 
+
 def temporal_consistency_score(snapshots, time_window=None):
     """
     Calculate temporal consistency score based on knowledge snapshots.
@@ -49,7 +50,7 @@ def temporal_consistency_score(snapshots, time_window=None):
             "stability_score": 1.0,
             "contradiction_rate": 0.0,
             "entity_count": len(snapshots[0]["entities"]) if snapshots else 0,
-            "relation_count": len(snapshots[0]["relations"]) if snapshots else 0
+            "relation_count": len(snapshots[0]["relations"]) if snapshots else 0,
         }
 
     # Sort snapshots by timestamp
@@ -67,7 +68,9 @@ def temporal_consistency_score(snapshots, time_window=None):
             # Assume time_window is in days
             cutoff_time = current_time - (time_window * 86400)
 
-        sorted_snapshots = [s for s in sorted_snapshots if s["timestamp"] >= cutoff_time]
+        sorted_snapshots = [
+            s for s in sorted_snapshots if s["timestamp"] >= cutoff_time
+        ]
 
     # Need at least 2 snapshots to evaluate consistency
     if len(sorted_snapshots) < 2:
@@ -76,8 +79,12 @@ def temporal_consistency_score(snapshots, time_window=None):
             "change_rate": 0.0,
             "stability_score": 1.0,
             "contradiction_rate": 0.0,
-            "entity_count": len(sorted_snapshots[0]["entities"]) if sorted_snapshots else 0,
-            "relation_count": len(sorted_snapshots[0]["relations"]) if sorted_snapshots else 0
+            "entity_count": len(sorted_snapshots[0]["entities"])
+            if sorted_snapshots
+            else 0,
+            "relation_count": len(sorted_snapshots[0]["relations"])
+            if sorted_snapshots
+            else 0,
         }
 
     # Calculate metrics
@@ -86,12 +93,16 @@ def temporal_consistency_score(snapshots, time_window=None):
     contradictions = []
 
     for i in range(1, len(sorted_snapshots)):
-        prev = sorted_snapshots[i-1]
+        prev = sorted_snapshots[i - 1]
         curr = sorted_snapshots[i]
 
         # Compare entities
-        prev_entities = {e.get("entity", e.get("id", "")): e for e in prev.get("entities", [])}
-        curr_entities = {e.get("entity", e.get("id", "")): e for e in curr.get("entities", [])}
+        prev_entities = {
+            e.get("entity", e.get("id", "")): e for e in prev.get("entities", [])
+        }
+        curr_entities = {
+            e.get("entity", e.get("id", "")): e for e in curr.get("entities", [])
+        }
 
         # Entity changes (added, removed, modified)
         prev_entity_keys = set(prev_entities.keys())
@@ -104,7 +115,9 @@ def temporal_consistency_score(snapshots, time_window=None):
         # Check for entity modifications
         modified_entities = set()
         for entity in common_entities:
-            if prev_entities[entity].get("entity_type") != curr_entities[entity].get("entity_type"):
+            if prev_entities[entity].get("entity_type") != curr_entities[entity].get(
+                "entity_type"
+            ):
                 modified_entities.add(entity)
 
         entity_change = {
@@ -112,7 +125,9 @@ def temporal_consistency_score(snapshots, time_window=None):
             "added": len(added_entities),
             "removed": len(removed_entities),
             "modified": len(modified_entities),
-            "total_change": len(added_entities) + len(removed_entities) + len(modified_entities)
+            "total_change": len(added_entities)
+            + len(removed_entities)
+            + len(modified_entities),
         }
         entity_changes.append(entity_change)
 
@@ -150,15 +165,27 @@ def temporal_consistency_score(snapshots, time_window=None):
         contradictory_relations = set()
 
         for rel in common_relations:
-            if abs(prev_relations[rel].get("confidence", 0.5) - curr_relations[rel].get("confidence", 0.5)) > 0.2:
+            if (
+                abs(
+                    prev_relations[rel].get("confidence", 0.5)
+                    - curr_relations[rel].get("confidence", 0.5)
+                )
+                > 0.2
+            ):
                 modified_relations.add(rel)
 
             # Check for direction inversions as potential contradictions
-            if "source_id" in prev_relations[rel] and "target_id" in prev_relations[rel]:
+            if (
+                "source_id" in prev_relations[rel]
+                and "target_id" in prev_relations[rel]
+            ):
                 prev_source = prev_relations[rel]["source_id"]
                 prev_target = prev_relations[rel]["target_id"]
 
-                if "source_id" in curr_relations[rel] and "target_id" in curr_relations[rel]:
+                if (
+                    "source_id" in curr_relations[rel]
+                    and "target_id" in curr_relations[rel]
+                ):
                     curr_source = curr_relations[rel]["source_id"]
                     curr_target = curr_relations[rel]["target_id"]
 
@@ -171,25 +198,41 @@ def temporal_consistency_score(snapshots, time_window=None):
             "removed": len(removed_relations),
             "modified": len(modified_relations),
             "contradictions": len(contradictory_relations),
-            "total_change": len(added_relations) + len(removed_relations) + len(modified_relations)
+            "total_change": len(added_relations)
+            + len(removed_relations)
+            + len(modified_relations),
         }
         relation_changes.append(relation_change)
 
         # Track contradictions
-        contradictions.append({
-            "timestamp": curr["timestamp"],
-            "count": len(contradictory_relations),
-            "relations": list(contradictory_relations)
-        })
+        contradictions.append(
+            {
+                "timestamp": curr["timestamp"],
+                "count": len(contradictory_relations),
+                "relations": list(contradictory_relations),
+            }
+        )
 
     # Calculate aggregate scores
     total_entities = len(sorted_snapshots[-1].get("entities", []))
     total_relations = len(sorted_snapshots[-1].get("relations", []))
 
-    avg_entity_change_rate = sum(c["total_change"] for c in entity_changes) / len(entity_changes) / max(total_entities, 1)
-    avg_relation_change_rate = sum(c["total_change"] for c in relation_changes) / len(relation_changes) / max(total_relations, 1)
+    avg_entity_change_rate = (
+        sum(c["total_change"] for c in entity_changes)
+        / len(entity_changes)
+        / max(total_entities, 1)
+    )
+    avg_relation_change_rate = (
+        sum(c["total_change"] for c in relation_changes)
+        / len(relation_changes)
+        / max(total_relations, 1)
+    )
 
-    avg_contradiction_rate = sum(c["count"] for c in contradictions) / len(contradictions) / max(total_relations, 1)
+    avg_contradiction_rate = (
+        sum(c["count"] for c in contradictions)
+        / len(contradictions)
+        / max(total_relations, 1)
+    )
 
     # Higher score means more consistent (less change)
     entity_stability = 1.0 - min(avg_entity_change_rate, 1.0)
@@ -205,12 +248,12 @@ def temporal_consistency_score(snapshots, time_window=None):
         "stability_score": stability_score,
         "contradiction_rate": avg_contradiction_rate,
         "entity_count": total_entities,
-        "relation_count": total_relations
+        "relation_count": total_relations,
     }
 
+
 def track_knowledge_growth(
-    knowledge_snapshots: list[dict[str, Any]],
-    time_bins: int = 10
+    knowledge_snapshots: list[dict[str, Any]], time_bins: int = 10
 ) -> dict[str, list[float]]:
     """
     Track knowledge growth over time, divided into time bins.
@@ -228,7 +271,7 @@ def track_knowledge_growth(
             "entity_count": [],
             "relation_count": [],
             "cumulative_entity_growth": [],
-            "cumulative_relation_growth": []
+            "cumulative_relation_growth": [],
         }
 
     # Sort by timestamp
@@ -257,7 +300,9 @@ def track_knowledge_growth(
         bin_center = bin_start + (bin_end - bin_start) / 2
 
         # Filter snapshots in this bin
-        bin_snapshots = [s for s in sorted_snapshots if bin_start <= s["timestamp"] < bin_end]
+        bin_snapshots = [
+            s for s in sorted_snapshots if bin_start <= s["timestamp"] < bin_end
+        ]
 
         if not bin_snapshots:
             continue
@@ -282,8 +327,16 @@ def track_knowledge_growth(
             prev_entity_count = entity_counts[-2]
             prev_relation_count = relation_counts[-2]
 
-            entity_growth = ((entity_count - prev_entity_count) / prev_entity_count) if prev_entity_count > 0 else 1.0
-            relation_growth = ((relation_count - prev_relation_count) / prev_relation_count) if prev_relation_count > 0 else 1.0
+            entity_growth = (
+                ((entity_count - prev_entity_count) / prev_entity_count)
+                if prev_entity_count > 0
+                else 1.0
+            )
+            relation_growth = (
+                ((relation_count - prev_relation_count) / prev_relation_count)
+                if prev_relation_count > 0
+                else 1.0
+            )
 
             cumulative_entity_growth.append(entity_growth)
             cumulative_relation_growth.append(relation_growth)
@@ -293,12 +346,12 @@ def track_knowledge_growth(
         "entity_count": entity_counts,
         "relation_count": relation_counts,
         "cumulative_entity_growth": cumulative_entity_growth,
-        "cumulative_relation_growth": cumulative_relation_growth
+        "cumulative_relation_growth": cumulative_relation_growth,
     }
 
+
 def belief_revision_impact(
-    knowledge_snapshots: list[dict[str, Any]],
-    revision_events: list[dict[str, Any]]
+    knowledge_snapshots: list[dict[str, Any]], revision_events: list[dict[str, Any]]
 ) -> dict[str, float]:
     """
     Measure the impact of belief revision events on knowledge consistency.
@@ -334,12 +387,21 @@ def belief_revision_impact(
             continue
 
         # Calculate consistency before the event
-        before_snapshots = snapshots_before[-min(3, len(snapshots_before)):]  # Last 3 snapshots before
-        consistency_before = temporal_consistency_score(before_snapshots)["consistency_score"]
+        before_snapshots = snapshots_before[
+            -min(3, len(snapshots_before)) :
+        ]  # Last 3 snapshots before
+        consistency_before = temporal_consistency_score(before_snapshots)[
+            "consistency_score"
+        ]
 
         # Calculate consistency immediately after the event
-        after_snapshots = [snapshots_before[-1], snapshots_after[0]]  # Last before + first after
-        consistency_after = temporal_consistency_score(after_snapshots)["consistency_score"]
+        after_snapshots = [
+            snapshots_before[-1],
+            snapshots_after[0],
+        ]  # Last before + first after
+        consistency_after = temporal_consistency_score(after_snapshots)[
+            "consistency_score"
+        ]
 
         # Calculate recovery time
         recovery_time = 0.0
@@ -350,9 +412,13 @@ def belief_revision_impact(
                 continue
 
             recovery_snapshots = [snapshots_after[0], snapshot]
-            recovery_consistency = temporal_consistency_score(recovery_snapshots)["consistency_score"]
+            recovery_consistency = temporal_consistency_score(recovery_snapshots)[
+                "consistency_score"
+            ]
 
-            if recovery_consistency >= consistency_before * 0.95:  # 95% of original consistency
+            if (
+                recovery_consistency >= consistency_before * 0.95
+            ):  # 95% of original consistency
                 recovery_time = snapshot["timestamp"] - event_time
                 recovered = True
                 break
@@ -366,22 +432,29 @@ def belief_revision_impact(
         recovery_times.append(recovery_time)
 
     # Calculate average impact and recovery time
-    avg_consistency_before = np.mean(consistency_before_revisions) if consistency_before_revisions else 1.0
-    avg_consistency_after = np.mean(consistency_after_revisions) if consistency_after_revisions else 1.0
-    revision_impact = 1.0 - (avg_consistency_after / avg_consistency_before) if avg_consistency_before > 0 else 0.0
+    avg_consistency_before = (
+        np.mean(consistency_before_revisions) if consistency_before_revisions else 1.0
+    )
+    avg_consistency_after = (
+        np.mean(consistency_after_revisions) if consistency_after_revisions else 1.0
+    )
+    revision_impact = (
+        1.0 - (avg_consistency_after / avg_consistency_before)
+        if avg_consistency_before > 0
+        else 0.0
+    )
     avg_recovery_time = np.mean(recovery_times) if recovery_times else 0.0
 
     return {
         "revision_impact": revision_impact,
         "recovery_time": avg_recovery_time,
         "consistency_before": avg_consistency_before,
-        "consistency_after": avg_consistency_after
+        "consistency_after": avg_consistency_after,
     }
 
+
 def evaluate_knowledge_consistency(
-    knowledge_store,
-    time_window: timedelta | None = None,
-    take_snapshot: bool = True
+    knowledge_store, time_window: timedelta | None = None, take_snapshot: bool = True
 ) -> dict[str, Any]:
     """
     Evaluate knowledge consistency of a knowledge store.
@@ -404,7 +477,9 @@ def evaluate_knowledge_consistency(
 
     # Get belief revision events
     revision_events = []
-    if hasattr(knowledge_store, "graph_store") and hasattr(knowledge_store.graph_store, "uncertainty_handler"):
+    if hasattr(knowledge_store, "graph_store") and hasattr(
+        knowledge_store.graph_store, "uncertainty_handler"
+    ):
         revision_events = knowledge_store.graph_store.uncertainty_handler.get_belief_revision_history()
 
     # Calculate consistency metrics
@@ -422,7 +497,7 @@ def evaluate_knowledge_consistency(
         "growth_metrics": growth_metrics,
         "revision_metrics": revision_metrics,
         "snapshot_count": len(snapshots),
-        "revision_count": len(revision_events)
+        "revision_count": len(revision_events),
     }
 
     return result

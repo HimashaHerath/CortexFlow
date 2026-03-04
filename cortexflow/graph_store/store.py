@@ -5,6 +5,7 @@ Handles DB connection, entity/relation CRUD, search operations, entity
 extraction (NER), and relation extraction.  Path-finding methods are
 provided by :class:`~cortexflow.graph_store.traversal.TraversalMixin`.
 """
+
 from __future__ import annotations
 
 import json
@@ -88,7 +89,7 @@ class GraphStore(TraversalMixin):
 
         # For in-memory databases, we need to maintain a persistent connection
         self.conn = None
-        if self.db_path == ':memory:':
+        if self.db_path == ":memory:":
             # For Windows compatibility, use empty string instead of ":memory:"
             self.conn = sqlite3.connect("")
 
@@ -132,25 +133,37 @@ class GraphStore(TraversalMixin):
         # Load entity database for entity linking
         self._load_entity_db()
 
-        logging.info(f"Graph store initialized with NetworkX: {NETWORKX_ENABLED}, Spacy: {SPACY_ENABLED}, Flair: {FLAIR_ENABLED}, SpanBERT: {SPANBERT_ENABLED}, Ontology: {ONTOLOGY_ENABLED}")
+        logging.info(
+            f"Graph store initialized with NetworkX: {NETWORKX_ENABLED}, Spacy: {SPACY_ENABLED}, Flair: {FLAIR_ENABLED}, SpanBERT: {SPANBERT_ENABLED}, Ontology: {ONTOLOGY_ENABLED}"
+        )
 
     def _ensure_flair_loaded(self):
         """Lazily load Flair NER model on first use (class-level singleton)."""
         if not GraphStore._flair_loaded and FLAIR_ENABLED:
             GraphStore._flair_loaded = True
             try:
-                GraphStore._flair_ner = SequenceTagger.load("flair/ner-english-ontonotes-large")
+                GraphStore._flair_ner = SequenceTagger.load(
+                    "flair/ner-english-ontonotes-large"
+                )
                 logging.info("Flair NER model loaded successfully")
             except Exception as e:
-                logging.warning(f"Advanced NER is disabled (Flair model failed to load): {e}")
+                logging.warning(
+                    f"Advanced NER is disabled (Flair model failed to load): {e}"
+                )
 
     def _ensure_spanbert_loaded(self):
         """Lazily load SpanBERT model on first use (class-level singleton)."""
         if not GraphStore._spanbert_loaded and SPANBERT_ENABLED:
             GraphStore._spanbert_loaded = True
             try:
-                GraphStore._spanbert_tokenizer = AutoTokenizer.from_pretrained("SpanBERT/spanbert-base-cased")
-                GraphStore._spanbert_model = AutoModelForTokenClassification.from_pretrained("SpanBERT/spanbert-base-cased")
+                GraphStore._spanbert_tokenizer = AutoTokenizer.from_pretrained(
+                    "SpanBERT/spanbert-base-cased"
+                )
+                GraphStore._spanbert_model = (
+                    AutoModelForTokenClassification.from_pretrained(
+                        "SpanBERT/spanbert-base-cased"
+                    )
+                )
                 logging.info("SpanBERT model loaded successfully")
             except Exception as e:
                 logging.error(f"Error loading SpanBERT model: {e}")
@@ -167,28 +180,30 @@ class GraphStore(TraversalMixin):
 
         try:
             # Load all entities for linking
-            cursor.execute('SELECT id, entity, entity_type, metadata FROM graph_entities')
+            cursor.execute(
+                "SELECT id, entity, entity_type, metadata FROM graph_entities"
+            )
             entities = cursor.fetchall()
 
             for entity in entities:
-                canonical_name = entity['entity']
-                entity_id = entity['id']
-                entity_type = entity['entity_type']
-                metadata = json.loads(entity['metadata']) if entity['metadata'] else {}
+                canonical_name = entity["entity"]
+                entity_id = entity["id"]
+                entity_type = entity["entity_type"]
+                metadata = json.loads(entity["metadata"]) if entity["metadata"] else {}
 
                 # Store entity in the linking database
                 self.entity_db[canonical_name] = {
-                    'id': entity_id,
-                    'type': entity_type,
-                    'metadata': metadata,
-                    'aliases': metadata.get('aliases', [])
+                    "id": entity_id,
+                    "type": entity_type,
+                    "metadata": metadata,
+                    "aliases": metadata.get("aliases", []),
                 }
 
                 # Add aliases to the lookup
-                for alias in metadata.get('aliases', []):
+                for alias in metadata.get("aliases", []):
                     self.entity_db[alias] = {
-                        'canonical': canonical_name,
-                        'id': entity_id
+                        "canonical": canonical_name,
+                        "id": entity_id,
                     }
 
         except Exception as e:
@@ -237,37 +252,41 @@ class GraphStore(TraversalMixin):
 
         try:
             # Load all entities
-            cursor.execute('SELECT id, entity, entity_type, metadata FROM graph_entities')
+            cursor.execute(
+                "SELECT id, entity, entity_type, metadata FROM graph_entities"
+            )
             entities = cursor.fetchall()
 
             for entity in entities:
-                metadata = json.loads(entity['metadata']) if entity['metadata'] else {}
+                metadata = json.loads(entity["metadata"]) if entity["metadata"] else {}
                 self.graph.add_node(
-                    entity['id'],
-                    name=entity['entity'],
-                    entity_type=entity['entity_type'],
-                    **metadata
+                    entity["id"],
+                    name=entity["entity"],
+                    entity_type=entity["entity_type"],
+                    **metadata,
                 )
 
             # Load all relationships
-            cursor.execute('''
+            cursor.execute("""
                 SELECT source_id, target_id, relation_type, weight, metadata
                 FROM graph_relationships
-            ''')
+            """)
             relationships = cursor.fetchall()
 
             for rel in relationships:
-                metadata = json.loads(rel['metadata']) if rel['metadata'] else {}
-                weight = rel['weight'] if rel['weight'] is not None else 1.0
+                metadata = json.loads(rel["metadata"]) if rel["metadata"] else {}
+                weight = rel["weight"] if rel["weight"] is not None else 1.0
                 self.graph.add_edge(
-                    rel['source_id'],
-                    rel['target_id'],
-                    relation=rel['relation_type'],
+                    rel["source_id"],
+                    rel["target_id"],
+                    relation=rel["relation_type"],
                     weight=weight,
-                    **metadata
+                    **metadata,
                 )
 
-            logging.info(f"Loaded graph with {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges")
+            logging.info(
+                f"Loaded graph with {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges"
+            )
 
         except sqlite3.OperationalError as e:
             logging.error(f"Error loading graph from database: {e}")
@@ -301,13 +320,15 @@ class GraphStore(TraversalMixin):
 
                 # Get named entities from spaCy's NER
                 for ent in doc.ents:
-                    entities.append({
-                        'text': ent.text,
-                        'type': ent.label_,
-                        'start': ent.start_char,
-                        'end': ent.end_char,
-                        'source': 'spacy'
-                    })
+                    entities.append(
+                        {
+                            "text": ent.text,
+                            "type": ent.label_,
+                            "start": ent.start_char,
+                            "end": ent.end_char,
+                            "source": "spacy",
+                        }
+                    )
 
                 # 2. Coreference resolution
                 # NOTE: neuralcoref was removed (deprecated since 2020, incompatible with modern spaCy).
@@ -327,7 +348,7 @@ class GraphStore(TraversalMixin):
                 GraphStore._flair_ner.predict(flair_sentence)
 
                 # Extract entities
-                for entity in flair_sentence.get_spans('ner'):
+                for entity in flair_sentence.get_spans("ner"):
                     # Calculate character offsets
                     start_pos = text.find(entity.text)
                     if start_pos >= 0:
@@ -336,29 +357,42 @@ class GraphStore(TraversalMixin):
                         # Check for overlap with existing entities
                         is_new_entity = True
                         for existing_entity in entities:
-                            if (start_pos >= existing_entity['start'] and start_pos < existing_entity['end']) or \
-                               (end_pos > existing_entity['start'] and end_pos <= existing_entity['end']):
+                            if (
+                                start_pos >= existing_entity["start"]
+                                and start_pos < existing_entity["end"]
+                            ) or (
+                                end_pos > existing_entity["start"]
+                                and end_pos <= existing_entity["end"]
+                            ):
                                 is_new_entity = False
                                 break
 
                         if is_new_entity:
-                            entities.append({
-                                'text': entity.text,
-                                'type': entity.tag,
-                                'start': start_pos,
-                                'end': end_pos,
-                                'score': entity.score,
-                                'source': 'flair'
-                            })
+                            entities.append(
+                                {
+                                    "text": entity.text,
+                                    "type": entity.tag,
+                                    "start": start_pos,
+                                    "end": end_pos,
+                                    "score": entity.score,
+                                    "source": "flair",
+                                }
+                            )
             except Exception as e:
                 logging.error(f"Error in Flair NER: {e}")
 
         # 4. Use SpanBERT for NER if available (lazy-loaded on first use)
         self._ensure_spanbert_loaded()
-        if SPANBERT_ENABLED and GraphStore._spanbert_model is not None and GraphStore._spanbert_tokenizer is not None:
+        if (
+            SPANBERT_ENABLED
+            and GraphStore._spanbert_model is not None
+            and GraphStore._spanbert_tokenizer is not None
+        ):
             try:
                 # Tokenize input
-                inputs = GraphStore._spanbert_tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+                inputs = GraphStore._spanbert_tokenizer(
+                    text, return_tensors="pt", truncation=True, max_length=512
+                )
 
                 # Get model predictions
                 with torch.no_grad():
@@ -367,7 +401,9 @@ class GraphStore(TraversalMixin):
                 # Process predictions to extract entities
                 # This is a simplified implementation and would need to be adapted for the specific model
                 predictions = outputs.logits.argmax(-1).squeeze().tolist()
-                tokens = GraphStore._spanbert_tokenizer.convert_ids_to_tokens(inputs.input_ids.squeeze().tolist())
+                tokens = GraphStore._spanbert_tokenizer.convert_ids_to_tokens(
+                    inputs.input_ids.squeeze().tolist()
+                )
 
                 # Map predictions to entity spans (simplified)
                 current_entity = None
@@ -378,7 +414,9 @@ class GraphStore(TraversalMixin):
                 offset = 1
                 char_offset = 0
 
-                for i, (token, prediction) in enumerate(zip(tokens[offset:], predictions[offset:])):
+                for i, (token, prediction) in enumerate(
+                    zip(tokens[offset:], predictions[offset:])
+                ):
                     # Skip special tokens
                     if token.startswith("##") or token in ["[SEP]", "[PAD]"]:
                         continue
@@ -405,19 +443,26 @@ class GraphStore(TraversalMixin):
                             # Check for overlap
                             is_new_entity = True
                             for entity in entities:
-                                if (current_start >= entity['start'] and current_start < entity['end']) or \
-                                   (entity_end > entity['start'] and entity_end <= entity['end']):
+                                if (
+                                    current_start >= entity["start"]
+                                    and current_start < entity["end"]
+                                ) or (
+                                    entity_end > entity["start"]
+                                    and entity_end <= entity["end"]
+                                ):
                                     is_new_entity = False
                                     break
 
                             if is_new_entity:
-                                entities.append({
-                                    'text': current_entity,
-                                    'type': current_type,
-                                    'start': current_start,
-                                    'end': entity_end,
-                                    'source': 'spanbert'
-                                })
+                                entities.append(
+                                    {
+                                        "text": current_entity,
+                                        "type": current_type,
+                                        "start": current_start,
+                                        "end": entity_end,
+                                        "source": "spanbert",
+                                    }
+                                )
 
                             current_entity = None
                             current_type = None
@@ -428,29 +473,31 @@ class GraphStore(TraversalMixin):
                 # Add final entity if there is one
                 if current_entity is not None:
                     entity_end = current_start + len(current_entity)
-                    entities.append({
-                        'text': current_entity,
-                        'type': current_type,
-                        'start': current_start,
-                        'end': entity_end,
-                        'source': 'spanbert'
-                    })
+                    entities.append(
+                        {
+                            "text": current_entity,
+                            "type": current_type,
+                            "start": current_start,
+                            "end": entity_end,
+                            "source": "spanbert",
+                        }
+                    )
 
             except Exception as e:
                 logging.error(f"Error in SpanBERT NER: {e}")
 
         # 5. Add pattern-based entity extraction
         patterns = {
-            'EMAIL': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-            'URL': r'https?://\S+',
-            'DATE': r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',
-            'TIME': r'\b\d{1,2}:\d{2}\b',
-            'PHONE': r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',
-            'NUMBER': r'\b\d+(?:\.\d+)?\b',
-            'PERCENTAGE': r'\b\d+(?:\.\d+)?%\b',
-            'MONEY': r'\$\d+(?:\.\d+)?\b',
-            'HASHTAG': r'#[A-Za-z][A-Za-z0-9_]*',
-            'MENTION': r'@[A-Za-z][A-Za-z0-9_]*'
+            "EMAIL": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+            "URL": r"https?://\S+",
+            "DATE": r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
+            "TIME": r"\b\d{1,2}:\d{2}\b",
+            "PHONE": r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b",
+            "NUMBER": r"\b\d+(?:\.\d+)?\b",
+            "PERCENTAGE": r"\b\d+(?:\.\d+)?%\b",
+            "MONEY": r"\$\d+(?:\.\d+)?\b",
+            "HASHTAG": r"#[A-Za-z][A-Za-z0-9_]*",
+            "MENTION": r"@[A-Za-z][A-Za-z0-9_]*",
         }
 
         for entity_type, pattern in patterns.items():
@@ -458,24 +505,30 @@ class GraphStore(TraversalMixin):
                 # Check if this match overlaps with existing entities
                 overlap = False
                 for entity in entities:
-                    if (match.start() >= entity['start'] and match.start() < entity['end']) or \
-                       (match.end() > entity['start'] and match.end() <= entity['end']):
+                    if (
+                        match.start() >= entity["start"]
+                        and match.start() < entity["end"]
+                    ) or (
+                        match.end() > entity["start"] and match.end() <= entity["end"]
+                    ):
                         overlap = True
                         break
 
                 if not overlap:
-                    entities.append({
-                        'text': match.group(0),
-                        'type': entity_type,
-                        'start': match.start(),
-                        'end': match.end(),
-                        'source': 'pattern'
-                    })
+                    entities.append(
+                        {
+                            "text": match.group(0),
+                            "type": entity_type,
+                            "start": match.start(),
+                            "end": match.end(),
+                            "source": "pattern",
+                        }
+                    )
 
         # 6. Add noun phrase extraction if no entities found yet or to supplement
         if SPACY_ENABLED and self.nlp is not None:
             try:
-                if 'doc' not in locals():  # Only parse if we haven't already
+                if "doc" not in locals():  # Only parse if we haven't already
                     doc = self.nlp(text)
 
                 # Extract noun phrases
@@ -484,19 +537,26 @@ class GraphStore(TraversalMixin):
                         # Check for overlap with existing entities
                         overlap = False
                         for entity in entities:
-                            if (chunk.start_char >= entity['start'] and chunk.start_char < entity['end']) or \
-                               (chunk.end_char > entity['start'] and chunk.end_char <= entity['end']):
+                            if (
+                                chunk.start_char >= entity["start"]
+                                and chunk.start_char < entity["end"]
+                            ) or (
+                                chunk.end_char > entity["start"]
+                                and chunk.end_char <= entity["end"]
+                            ):
                                 overlap = True
                                 break
 
                         if not overlap:
-                            entities.append({
-                                'text': chunk.text,
-                                'type': 'NOUN_PHRASE',
-                                'start': chunk.start_char,
-                                'end': chunk.end_char,
-                                'source': 'noun_chunk'
-                            })
+                            entities.append(
+                                {
+                                    "text": chunk.text,
+                                    "type": "NOUN_PHRASE",
+                                    "start": chunk.start_char,
+                                    "end": chunk.end_char,
+                                    "source": "noun_chunk",
+                                }
+                            )
 
                 # Add proper nouns not already captured
                 for token in doc:
@@ -504,18 +564,23 @@ class GraphStore(TraversalMixin):
                         # Check if already part of an entity
                         is_part_of_entity = False
                         for entity in entities:
-                            if token.idx >= entity['start'] and token.idx + len(token.text) <= entity['end']:
+                            if (
+                                token.idx >= entity["start"]
+                                and token.idx + len(token.text) <= entity["end"]
+                            ):
                                 is_part_of_entity = True
                                 break
 
                         if not is_part_of_entity:
-                            entities.append({
-                                'text': token.text,
-                                'type': 'PROPER_NOUN',
-                                'start': token.idx,
-                                'end': token.idx + len(token.text),
-                                'source': 'pos_tag'
-                            })
+                            entities.append(
+                                {
+                                    "text": token.text,
+                                    "type": "PROPER_NOUN",
+                                    "start": token.idx,
+                                    "end": token.idx + len(token.text),
+                                    "source": "pos_tag",
+                                }
+                            )
             except Exception as e:
                 logging.error(f"Error extracting noun phrases: {e}")
 
@@ -527,13 +592,18 @@ class GraphStore(TraversalMixin):
                 # Check for overlap
                 overlap = False
                 for existing_entity in entities:
-                    if (entity['start'] >= existing_entity['start'] and entity['start'] < existing_entity['end']) or \
-                       (entity['end'] > existing_entity['start'] and entity['end'] <= existing_entity['end']):
+                    if (
+                        entity["start"] >= existing_entity["start"]
+                        and entity["start"] < existing_entity["end"]
+                    ) or (
+                        entity["end"] > existing_entity["start"]
+                        and entity["end"] <= existing_entity["end"]
+                    ):
                         overlap = True
                         break
 
                 if not overlap:
-                    entity['source'] = 'domain'
+                    entity["source"] = "domain"
                     entities.append(entity)
         except Exception as e:
             logging.error(f"Error in domain-specific entity extraction: {e}")
@@ -541,24 +611,28 @@ class GraphStore(TraversalMixin):
         # 8. Perform entity linking to connect mentions to canonical entities
         linked_entities = []
         for entity in entities:
-            entity_text = entity['text']
+            entity_text = entity["text"]
             linked_entity = self._link_entity(entity_text)
 
             if linked_entity:
                 # Copy original entity and add linking information
                 linked_entity_data = entity.copy()
-                linked_entity_data['canonical'] = linked_entity['canonical'] if 'canonical' in linked_entity else entity_text
-                linked_entity_data['entity_id'] = linked_entity['id']
-                linked_entity_data['linked'] = True
+                linked_entity_data["canonical"] = (
+                    linked_entity["canonical"]
+                    if "canonical" in linked_entity
+                    else entity_text
+                )
+                linked_entity_data["entity_id"] = linked_entity["id"]
+                linked_entity_data["linked"] = True
 
                 # Use canonical entity type if available
-                if 'type' in linked_entity and linked_entity['type']:
-                    linked_entity_data['canonical_type'] = linked_entity['type']
+                if "type" in linked_entity and linked_entity["type"]:
+                    linked_entity_data["canonical_type"] = linked_entity["type"]
 
                 linked_entities.append(linked_entity_data)
             else:
                 # No linking found, keep original entity
-                entity['linked'] = False
+                entity["linked"] = False
                 linked_entities.append(entity)
 
         return linked_entities
@@ -587,20 +661,26 @@ class GraphStore(TraversalMixin):
         if FUZZY_MATCHING_ENABLED:
             try:
                 # Get only canonical entities (not aliases)
-                canonical_entities = [key for key in self.entity_db
-                                     if 'canonical' not in self.entity_db[key]]
+                canonical_entities = [
+                    key
+                    for key in self.entity_db
+                    if "canonical" not in self.entity_db[key]
+                ]
 
                 # Find closest match with threshold
-                matches = process.extractBests(entity_text, canonical_entities,
-                                               scorer=fuzz.token_sort_ratio,
-                                               score_cutoff=85,
-                                               limit=1)
+                matches = process.extractBests(
+                    entity_text,
+                    canonical_entities,
+                    scorer=fuzz.token_sort_ratio,
+                    score_cutoff=85,
+                    limit=1,
+                )
 
                 if matches and len(matches) > 0:
                     match, score = matches[0]
                     result = self.entity_db[match].copy()
-                    result['match_score'] = score
-                    result['match_type'] = 'fuzzy'
+                    result["match_score"] = score
+                    result["match_type"] = "fuzzy"
                     return result
             except Exception as e:
                 logging.error(f"Error in fuzzy entity matching: {e}")
@@ -623,39 +703,78 @@ class GraphStore(TraversalMixin):
 
         # Example: Extract programming language entities
         programming_langs = [
-            "Python", "JavaScript", "TypeScript", "Java", "C++", "C#", "Go", "Rust",
-            "Swift", "Kotlin", "Ruby", "PHP", "SQL", "R", "MATLAB", "Scala", "Perl",
-            "Haskell", "Clojure", "Erlang", "Elixir", "Julia"
+            "Python",
+            "JavaScript",
+            "TypeScript",
+            "Java",
+            "C++",
+            "C#",
+            "Go",
+            "Rust",
+            "Swift",
+            "Kotlin",
+            "Ruby",
+            "PHP",
+            "SQL",
+            "R",
+            "MATLAB",
+            "Scala",
+            "Perl",
+            "Haskell",
+            "Clojure",
+            "Erlang",
+            "Elixir",
+            "Julia",
         ]
 
         # Look for programming languages
         for lang in programming_langs:
-            for match in re.finditer(r'\b' + re.escape(lang) + r'\b', text):
-                domain_entities.append({
-                    'text': match.group(0),
-                    'type': 'PROGRAMMING_LANGUAGE',
-                    'start': match.start(),
-                    'end': match.end()
-                })
+            for match in re.finditer(r"\b" + re.escape(lang) + r"\b", text):
+                domain_entities.append(
+                    {
+                        "text": match.group(0),
+                        "type": "PROGRAMMING_LANGUAGE",
+                        "start": match.start(),
+                        "end": match.end(),
+                    }
+                )
 
         # Example: Extract ML/AI techniques
         ml_techniques = [
-            "Neural Network", "Deep Learning", "Machine Learning", "Natural Language Processing",
-            "Computer Vision", "Reinforcement Learning", "Transformer", "BERT", "GPT",
-            "CNN", "RNN", "LSTM", "GAN", "Decision Tree", "Random Forest", "SVM",
-            "K-means", "PCA", "t-SNE", "XGBoost"
+            "Neural Network",
+            "Deep Learning",
+            "Machine Learning",
+            "Natural Language Processing",
+            "Computer Vision",
+            "Reinforcement Learning",
+            "Transformer",
+            "BERT",
+            "GPT",
+            "CNN",
+            "RNN",
+            "LSTM",
+            "GAN",
+            "Decision Tree",
+            "Random Forest",
+            "SVM",
+            "K-means",
+            "PCA",
+            "t-SNE",
+            "XGBoost",
         ]
 
         # Look for ML/AI terms
         for technique in ml_techniques:
-            pattern = r'\b' + re.escape(technique) + r'\b'
+            pattern = r"\b" + re.escape(technique) + r"\b"
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                domain_entities.append({
-                    'text': match.group(0),
-                    'type': 'AI_ML_TERM',
-                    'start': match.start(),
-                    'end': match.end()
-                })
+                domain_entities.append(
+                    {
+                        "text": match.group(0),
+                        "type": "AI_ML_TERM",
+                        "start": match.start(),
+                        "end": match.end(),
+                    }
+                )
 
         return domain_entities
 
@@ -705,7 +824,9 @@ class GraphStore(TraversalMixin):
                     if coref_relations:
                         relations.extend(coref_relations)
                 except Exception as e:
-                    logging.warning(f"Coreference relation extraction not available: {e}")
+                    logging.warning(
+                        f"Coreference relation extraction not available: {e}"
+                    )
 
                 # 4. If no relations found with advanced methods, fall back to simpler approaches
                 if not relations:
@@ -717,8 +838,8 @@ class GraphStore(TraversalMixin):
                             entity2 = entities[i + 1]
 
                             # Get text between entities
-                            between_start = entity1['end']
-                            between_end = entity2['start']
+                            between_start = entity1["end"]
+                            between_end = entity2["start"]
 
                             if between_end > between_start:
                                 between_text = text[between_start:between_end].strip()
@@ -728,19 +849,36 @@ class GraphStore(TraversalMixin):
                                     # Clean up the predicate
                                     predicate = between_text.strip()
                                     # Remove common stopwords
-                                    for stopword in [" the ", " a ", " an ", " and ", " or ", " but ", " of "]:
+                                    for stopword in [
+                                        " the ",
+                                        " a ",
+                                        " an ",
+                                        " and ",
+                                        " or ",
+                                        " but ",
+                                        " of ",
+                                    ]:
                                         predicate = predicate.replace(stopword, " ")
                                     predicate = predicate.strip()
 
                                     if predicate:
-                                        relations.append((entity1['text'], predicate, entity2['text']))
+                                        relations.append(
+                                            (
+                                                entity1["text"],
+                                                predicate,
+                                                entity2["text"],
+                                            )
+                                        )
                                 else:
                                     # If no text between, use generic relation
-                                    relations.append((entity1['text'], "related_to", entity2['text']))
+                                    relations.append(
+                                        (entity1["text"], "related_to", entity2["text"])
+                                    )
 
             except Exception as e:
                 logging.error(f"Error extracting relations: {e}")
                 import traceback
+
                 logging.error(f"Traceback: {traceback.format_exc()}")
 
         return relations
@@ -800,44 +938,47 @@ class GraphStore(TraversalMixin):
             from allennlp.predictors.predictor import Predictor
 
             # Initialize SRL predictor if not already done
-            if not hasattr(self, 'srl_predictor'):
+            if not hasattr(self, "srl_predictor"):
                 self.srl_predictor = Predictor.from_path(
-                    "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz")
+                    "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz"
+                )
                 logging.info("SRL model loaded successfully")
 
             srl_output = self.srl_predictor.predict(sentence=text)
 
             # Extract relations from SRL output
             relations = []
-            for verb_data in srl_output.get('verbs', []):
-                predicate = verb_data['verb']
+            for verb_data in srl_output.get("verbs", []):
+                predicate = verb_data["verb"]
                 args = {}
 
                 # Extract arguments from tags
-                for tag, words in zip(verb_data['tags'], text.split()):
-                    if tag.startswith('B-ARG0'):
-                        args['ARG0'] = words
-                    elif tag.startswith('B-ARG1'):
-                        args['ARG1'] = words
-                    elif tag.startswith('B-ARG2'):
-                        args['ARG2'] = words
-                    elif tag.startswith('I-ARG0') and 'ARG0' in args:
-                        args['ARG0'] += ' ' + words
-                    elif tag.startswith('I-ARG1') and 'ARG1' in args:
-                        args['ARG1'] += ' ' + words
-                    elif tag.startswith('I-ARG2') and 'ARG2' in args:
-                        args['ARG2'] += ' ' + words
+                for tag, words in zip(verb_data["tags"], text.split()):
+                    if tag.startswith("B-ARG0"):
+                        args["ARG0"] = words
+                    elif tag.startswith("B-ARG1"):
+                        args["ARG1"] = words
+                    elif tag.startswith("B-ARG2"):
+                        args["ARG2"] = words
+                    elif tag.startswith("I-ARG0") and "ARG0" in args:
+                        args["ARG0"] += " " + words
+                    elif tag.startswith("I-ARG1") and "ARG1" in args:
+                        args["ARG1"] += " " + words
+                    elif tag.startswith("I-ARG2") and "ARG2" in args:
+                        args["ARG2"] += " " + words
 
                 # Create relations from arguments
-                if 'ARG0' in args and 'ARG1' in args:
-                    relations.append((args['ARG0'], predicate, args['ARG1']))
-                if 'ARG0' in args and 'ARG2' in args:
-                    relations.append((args['ARG0'], predicate + ' to', args['ARG2']))
+                if "ARG0" in args and "ARG1" in args:
+                    relations.append((args["ARG0"], predicate, args["ARG1"]))
+                if "ARG0" in args and "ARG2" in args:
+                    relations.append((args["ARG0"], predicate + " to", args["ARG2"]))
 
             return relations
 
         except ImportError:
-            logging.warning("AllenNLP SRL not available. Semantic role extraction is disabled.")
+            logging.warning(
+                "AllenNLP SRL not available. Semantic role extraction is disabled."
+            )
             return []
 
     def _extract_with_coreference(self, text: str) -> list[tuple[str, str, str]]:
@@ -854,7 +995,9 @@ class GraphStore(TraversalMixin):
         Returns:
             Empty list (coreference resolution is currently disabled)
         """
-        logging.debug("Coreference resolution is disabled (neuralcoref was removed as deprecated).")
+        logging.debug(
+            "Coreference resolution is disabled (neuralcoref was removed as deprecated)."
+        )
         return []
 
     def _get_span_text(self, token) -> str:
@@ -886,12 +1029,20 @@ class GraphStore(TraversalMixin):
                 rightmost = descendant
 
         # Return the span text
-        return token.doc[leftmost.i:rightmost.i + 1].text
+        return token.doc[leftmost.i : rightmost.i + 1].text
 
-    def add_entity(self, entity: str, entity_type: str = None, metadata: dict[str, Any] = None,
-                  provenance: str = None, confidence: float = 0.8,
-                  temporal_start: str = None, temporal_end: str = None,
-                  extraction_method: str = None, changed_by: str = None) -> int:
+    def add_entity(
+        self,
+        entity: str,
+        entity_type: str = None,
+        metadata: dict[str, Any] = None,
+        provenance: str = None,
+        confidence: float = 0.8,
+        temporal_start: str = None,
+        temporal_end: str = None,
+        extraction_method: str = None,
+        changed_by: str = None,
+    ) -> int:
         """
         Add an entity to the graph with enhanced metadata and versioning.
 
@@ -919,43 +1070,52 @@ class GraphStore(TraversalMixin):
 
         try:
             # Check if entity already exists
-            cursor.execute('SELECT id, version FROM graph_entities WHERE entity = ?', (entity,))
+            cursor.execute(
+                "SELECT id, version FROM graph_entities WHERE entity = ?", (entity,)
+            )
             existing = cursor.fetchone()
 
             if existing:
                 # Get the current entity data for version history
-                cursor.execute('''
+                cursor.execute(
+                    """
                     SELECT entity, entity_type, metadata, provenance, confidence,
                     temporal_start, temporal_end, extraction_method
                     FROM graph_entities WHERE id = ?
-                ''', (existing[0],))
+                """,
+                    (existing[0],),
+                )
                 current_data = cursor.fetchone()
 
                 # Store the current version in version history
                 new_version = existing[1] + 1
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO entity_versions
                     (entity_id, entity, entity_type, metadata, provenance, confidence,
                      temporal_start, temporal_end, extraction_method, version, timestamp, change_type, changed_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    existing[0],
-                    current_data[0],
-                    current_data[1],
-                    current_data[2],
-                    current_data[3],
-                    current_data[4],
-                    current_data[5],
-                    current_data[6],
-                    current_data[7],
-                    existing[1],
-                    timestamp,
-                    "UPDATE",
-                    changed_by
-                ))
+                """,
+                    (
+                        existing[0],
+                        current_data[0],
+                        current_data[1],
+                        current_data[2],
+                        current_data[3],
+                        current_data[4],
+                        current_data[5],
+                        current_data[6],
+                        current_data[7],
+                        existing[1],
+                        timestamp,
+                        "UPDATE",
+                        changed_by,
+                    ),
+                )
 
                 # Update the entity with new data
-                cursor.execute('''
+                cursor.execute(
+                    """
                     UPDATE graph_entities
                     SET entity_type = COALESCE(?, entity_type),
                         metadata = COALESCE(?, metadata),
@@ -967,79 +1127,87 @@ class GraphStore(TraversalMixin):
                         version = ?,
                         last_updated = ?
                     WHERE id = ?
-                ''', (
-                    entity_type,
-                    json.dumps(metadata) if metadata else None,
-                    provenance,
-                    confidence,
-                    temporal_start,
-                    temporal_end,
-                    extraction_method,
-                    new_version,
-                    timestamp,
-                    existing[0]
-                ))
+                """,
+                    (
+                        entity_type,
+                        json.dumps(metadata) if metadata else None,
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        new_version,
+                        timestamp,
+                        existing[0],
+                    ),
+                )
 
                 entity_id = existing[0]
             else:
                 # Insert new entity
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO graph_entities
                     (entity, entity_type, metadata, timestamp, provenance, confidence,
                      temporal_start, temporal_end, extraction_method, version, last_updated)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    entity,
-                    entity_type,
-                    json.dumps(metadata) if metadata else None,
-                    timestamp,
-                    provenance,
-                    confidence,
-                    temporal_start,
-                    temporal_end,
-                    extraction_method,
-                    1,  # Initial version
-                    timestamp
-                ))
+                """,
+                    (
+                        entity,
+                        entity_type,
+                        json.dumps(metadata) if metadata else None,
+                        timestamp,
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        1,  # Initial version
+                        timestamp,
+                    ),
+                )
 
                 entity_id = cursor.lastrowid
 
                 # Add to version history
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO entity_versions
                     (entity_id, entity, entity_type, metadata, provenance, confidence,
                      temporal_start, temporal_end, extraction_method, version, timestamp, change_type, changed_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    entity_id,
-                    entity,
-                    entity_type,
-                    json.dumps(metadata) if metadata else None,
-                    provenance,
-                    confidence,
-                    temporal_start,
-                    temporal_end,
-                    extraction_method,
-                    1,  # Initial version
-                    timestamp,
-                    "CREATE",
-                    changed_by
-                ))
+                """,
+                    (
+                        entity_id,
+                        entity,
+                        entity_type,
+                        json.dumps(metadata) if metadata else None,
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        1,  # Initial version
+                        timestamp,
+                        "CREATE",
+                        changed_by,
+                    ),
+                )
 
             conn.commit()
 
             # Add to NetworkX graph if enabled
             if NETWORKX_ENABLED and self.graph is not None:
                 node_attrs = {
-                    'name': entity,
-                    'entity_type': entity_type,
-                    'provenance': provenance,
-                    'confidence': confidence,
-                    'temporal_start': temporal_start,
-                    'temporal_end': temporal_end,
-                    'extraction_method': extraction_method,
-                    'version': 1 if existing is None else existing[1] + 1,
-                    'timestamp': timestamp
+                    "name": entity,
+                    "entity_type": entity_type,
+                    "provenance": provenance,
+                    "confidence": confidence,
+                    "temporal_start": temporal_start,
+                    "temporal_end": temporal_end,
+                    "extraction_method": extraction_method,
+                    "version": 1 if existing is None else existing[1] + 1,
+                    "timestamp": timestamp,
                 }
 
                 if metadata:
@@ -1058,7 +1226,9 @@ class GraphStore(TraversalMixin):
             if self.conn is None and conn:
                 conn.close()
 
-    def add_entity_alias(self, entity_id: int, alias: str, confidence: float = 0.8) -> bool:
+    def add_entity_alias(
+        self, entity_id: int, alias: str, confidence: float = 0.8
+    ) -> bool:
         """
         Add an alias to an existing entity for entity linking.
 
@@ -1081,15 +1251,17 @@ class GraphStore(TraversalMixin):
 
         try:
             # Get entity information
-            cursor.execute('SELECT entity, metadata FROM graph_entities WHERE id = ?', (entity_id,))
+            cursor.execute(
+                "SELECT entity, metadata FROM graph_entities WHERE id = ?", (entity_id,)
+            )
             result = cursor.fetchone()
 
             if not result:
                 logging.error(f"Entity with ID {entity_id} not found")
                 return False
 
-            canonical_name = result['entity']
-            metadata_str = result['metadata']
+            canonical_name = result["entity"]
+            metadata_str = result["metadata"]
 
             # Update metadata to include the new alias
             if metadata_str:
@@ -1097,32 +1269,29 @@ class GraphStore(TraversalMixin):
             else:
                 metadata = {}
 
-            if 'aliases' not in metadata:
-                metadata['aliases'] = []
+            if "aliases" not in metadata:
+                metadata["aliases"] = []
 
             # Add alias if not already present
-            if alias not in metadata['aliases']:
-                metadata['aliases'].append(alias)
-                metadata['alias_confidence'] = metadata.get('alias_confidence', {})
-                metadata['alias_confidence'][alias] = confidence
+            if alias not in metadata["aliases"]:
+                metadata["aliases"].append(alias)
+                metadata["alias_confidence"] = metadata.get("alias_confidence", {})
+                metadata["alias_confidence"][alias] = confidence
 
                 # Update database
                 cursor.execute(
-                    'UPDATE graph_entities SET metadata = ? WHERE id = ?',
-                    (json.dumps(metadata), entity_id)
+                    "UPDATE graph_entities SET metadata = ? WHERE id = ?",
+                    (json.dumps(metadata), entity_id),
                 )
 
                 # Update entity linking database
                 self.entity_db[canonical_name] = {
-                    'id': entity_id,
-                    'metadata': metadata,
-                    'aliases': metadata['aliases']
+                    "id": entity_id,
+                    "metadata": metadata,
+                    "aliases": metadata["aliases"],
                 }
 
-                self.entity_db[alias] = {
-                    'canonical': canonical_name,
-                    'id': entity_id
-                }
+                self.entity_db[alias] = {"canonical": canonical_name, "id": entity_id}
 
                 conn.commit()
                 return True
@@ -1138,11 +1307,20 @@ class GraphStore(TraversalMixin):
             if self.conn is None:
                 conn.close()
 
-    def add_relation(self, source_entity: str, relation_type: str, target_entity: str,
-                     weight: float = 1.0, metadata: dict[str, Any] = None,
-                     provenance: str = None, confidence: float = 0.5,
-                     temporal_start: str = None, temporal_end: str = None,
-                     extraction_method: str = None, changed_by: str = None) -> bool:
+    def add_relation(
+        self,
+        source_entity: str,
+        relation_type: str,
+        target_entity: str,
+        weight: float = 1.0,
+        metadata: dict[str, Any] = None,
+        provenance: str = None,
+        confidence: float = 0.5,
+        temporal_start: str = None,
+        temporal_end: str = None,
+        extraction_method: str = None,
+        changed_by: str = None,
+    ) -> bool:
         """
         Add a relation between two entities with enhanced metadata and versioning.
 
@@ -1172,20 +1350,26 @@ class GraphStore(TraversalMixin):
 
         try:
             # Verify relation type exists
-            cursor.execute('SELECT id, symmetric, transitive, inverse_relation FROM relation_types WHERE name = ?', (relation_type,))
+            cursor.execute(
+                "SELECT id, symmetric, transitive, inverse_relation FROM relation_types WHERE name = ?",
+                (relation_type,),
+            )
             relation_type_data = cursor.fetchone()
 
             if not relation_type_data:
                 # Add the relation type dynamically
                 logging.info(f"Adding new relation type: {relation_type}")
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO relation_types (name, parent_type, description, metadata)
                     VALUES (?, 'related_to', ?, ?)
-                ''', (
-                    relation_type,
-                    f"Dynamically added relation type: {relation_type}",
-                    json.dumps({"automatic": True, "added_at": timestamp})
-                ))
+                """,
+                    (
+                        relation_type,
+                        f"Dynamically added relation type: {relation_type}",
+                        json.dumps({"automatic": True, "added_at": timestamp}),
+                    ),
+                )
 
                 # Get symmetry and transitivity for new relation type
                 is_symmetric = False
@@ -1197,11 +1381,15 @@ class GraphStore(TraversalMixin):
                 inverse_relation = relation_type_data[3]
 
             # Get source entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (source_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (source_entity,)
+            )
             source = cursor.fetchone()
 
             # Get target entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (target_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (target_entity,)
+            )
             target = cursor.fetchone()
 
             # If either entity doesn't exist, create them
@@ -1211,7 +1399,7 @@ class GraphStore(TraversalMixin):
                     provenance=provenance,
                     confidence=confidence,
                     extraction_method=extraction_method,
-                    changed_by=changed_by
+                    changed_by=changed_by,
                 )
             else:
                 source_id = source[0]
@@ -1222,55 +1410,65 @@ class GraphStore(TraversalMixin):
                     provenance=provenance,
                     confidence=confidence,
                     extraction_method=extraction_method,
-                    changed_by=changed_by
+                    changed_by=changed_by,
                 )
             else:
                 target_id = target[0]
 
             # Check if relation already exists
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT id, version FROM graph_relationships
                 WHERE source_id = ? AND target_id = ? AND relation_type = ?
-            ''', (source_id, target_id, relation_type))
+            """,
+                (source_id, target_id, relation_type),
+            )
             existing = cursor.fetchone()
 
             if existing:
                 # Get the current relation data for version history
-                cursor.execute('''
+                cursor.execute(
+                    """
                     SELECT source_id, target_id, relation_type, weight, metadata,
                     provenance, confidence, temporal_start, temporal_end, extraction_method
                     FROM graph_relationships WHERE id = ?
-                ''', (existing[0],))
+                """,
+                    (existing[0],),
+                )
                 current_data = cursor.fetchone()
 
                 # Store the current version in version history
                 new_version = existing[1] + 1
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO relationship_versions
                     (relationship_id, source_id, target_id, relation_type, weight, metadata,
                      provenance, confidence, temporal_start, temporal_end, extraction_method,
                      version, timestamp, change_type, changed_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    existing[0],
-                    current_data[0],
-                    current_data[1],
-                    current_data[2],
-                    current_data[3],
-                    current_data[4],
-                    current_data[5],
-                    current_data[6],
-                    current_data[7],
-                    current_data[8],
-                    current_data[9],
-                    existing[1],
-                    timestamp,
-                    "UPDATE",
-                    changed_by
-                ))
+                """,
+                    (
+                        existing[0],
+                        current_data[0],
+                        current_data[1],
+                        current_data[2],
+                        current_data[3],
+                        current_data[4],
+                        current_data[5],
+                        current_data[6],
+                        current_data[7],
+                        current_data[8],
+                        current_data[9],
+                        existing[1],
+                        timestamp,
+                        "UPDATE",
+                        changed_by,
+                    ),
+                )
 
                 # Update existing relation
-                cursor.execute('''
+                cursor.execute(
+                    """
                     UPDATE graph_relationships
                     SET weight = COALESCE(?, weight),
                         metadata = COALESCE(?, metadata),
@@ -1282,178 +1480,208 @@ class GraphStore(TraversalMixin):
                         version = ?,
                         last_updated = ?
                     WHERE id = ?
-                ''', (
-                    weight,
-                    json.dumps(metadata) if metadata else None,
-                    provenance,
-                    confidence,
-                    temporal_start,
-                    temporal_end,
-                    extraction_method,
-                    new_version,
-                    timestamp,
-                    existing[0]
-                ))
+                """,
+                    (
+                        weight,
+                        json.dumps(metadata) if metadata else None,
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        new_version,
+                        timestamp,
+                        existing[0],
+                    ),
+                )
 
                 relation_id = existing[0]
             else:
                 # Insert new relation
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO graph_relationships
                     (source_id, target_id, relation_type, weight, metadata, timestamp,
                      provenance, confidence, temporal_start, temporal_end, extraction_method,
                      version, last_updated)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    source_id,
-                    target_id,
-                    relation_type,
-                    weight,
-                    json.dumps(metadata) if metadata else None,
-                    timestamp,
-                    provenance,
-                    confidence,
-                    temporal_start,
-                    temporal_end,
-                    extraction_method,
-                    1,  # Initial version
-                    timestamp
-                ))
+                """,
+                    (
+                        source_id,
+                        target_id,
+                        relation_type,
+                        weight,
+                        json.dumps(metadata) if metadata else None,
+                        timestamp,
+                        provenance,
+                        confidence,
+                        temporal_start,
+                        temporal_end,
+                        extraction_method,
+                        1,  # Initial version
+                        timestamp,
+                    ),
+                )
 
                 relation_id = cursor.lastrowid
 
                 # Add to version history
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO relationship_versions
                     (relationship_id, source_id, target_id, relation_type, weight, metadata,
                      provenance, confidence, temporal_start, temporal_end, extraction_method,
                      version, timestamp, change_type, changed_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    relation_id,
-                    source_id,
-                    target_id,
-                    relation_type,
-                    weight,
-                    json.dumps(metadata) if metadata else None,
-                    provenance,
-                    confidence,
-                    temporal_start,
-                    temporal_end,
-                    extraction_method,
-                    1,  # Initial version
-                    timestamp,
-                    "CREATE",
-                    changed_by
-                ))
-
-                # If relation is symmetric, add the reverse relation
-                if is_symmetric and source_id != target_id:
-                    cursor.execute('''
-                        INSERT INTO graph_relationships
-                        (source_id, target_id, relation_type, weight, metadata, timestamp,
-                         provenance, confidence, temporal_start, temporal_end, extraction_method,
-                         version, last_updated)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        target_id,
+                """,
+                    (
+                        relation_id,
                         source_id,
+                        target_id,
                         relation_type,
                         weight,
-                        json.dumps({**(metadata or {}), "symmetric_of": relation_id}),
-                        timestamp,
+                        json.dumps(metadata) if metadata else None,
                         provenance,
                         confidence,
                         temporal_start,
                         temporal_end,
                         extraction_method,
                         1,  # Initial version
-                        timestamp
-                    ))
+                        timestamp,
+                        "CREATE",
+                        changed_by,
+                    ),
+                )
+
+                # If relation is symmetric, add the reverse relation
+                if is_symmetric and source_id != target_id:
+                    cursor.execute(
+                        """
+                        INSERT INTO graph_relationships
+                        (source_id, target_id, relation_type, weight, metadata, timestamp,
+                         provenance, confidence, temporal_start, temporal_end, extraction_method,
+                         version, last_updated)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                        (
+                            target_id,
+                            source_id,
+                            relation_type,
+                            weight,
+                            json.dumps(
+                                {**(metadata or {}), "symmetric_of": relation_id}
+                            ),
+                            timestamp,
+                            provenance,
+                            confidence,
+                            temporal_start,
+                            temporal_end,
+                            extraction_method,
+                            1,  # Initial version
+                            timestamp,
+                        ),
+                    )
 
                     symmetric_id = cursor.lastrowid
 
                     # Add symmetric relation to version history
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         INSERT INTO relationship_versions
                         (relationship_id, source_id, target_id, relation_type, weight, metadata,
                          provenance, confidence, temporal_start, temporal_end, extraction_method,
                          version, timestamp, change_type, changed_by)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        symmetric_id,
-                        target_id,
-                        source_id,
-                        relation_type,
-                        weight,
-                        json.dumps({**(metadata or {}), "symmetric_of": relation_id}),
-                        provenance,
-                        confidence,
-                        temporal_start,
-                        temporal_end,
-                        extraction_method,
-                        1,  # Initial version
-                        timestamp,
-                        "CREATE_SYMMETRIC",
-                        changed_by
-                    ))
+                    """,
+                        (
+                            symmetric_id,
+                            target_id,
+                            source_id,
+                            relation_type,
+                            weight,
+                            json.dumps(
+                                {**(metadata or {}), "symmetric_of": relation_id}
+                            ),
+                            provenance,
+                            confidence,
+                            temporal_start,
+                            temporal_end,
+                            extraction_method,
+                            1,  # Initial version
+                            timestamp,
+                            "CREATE_SYMMETRIC",
+                            changed_by,
+                        ),
+                    )
 
                 # If inverse relation is defined, add the inverse relation
                 if inverse_relation and source_id != target_id:
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         INSERT INTO graph_relationships
                         (source_id, target_id, relation_type, weight, metadata, timestamp,
                          provenance, confidence, temporal_start, temporal_end, extraction_method,
                          version, last_updated)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        target_id,
-                        source_id,
-                        inverse_relation,
-                        weight,
-                        json.dumps({**(metadata or {}), "inverse_of": relation_id}),
-                        timestamp,
-                        provenance,
-                        confidence,
-                        temporal_start,
-                        temporal_end,
-                        extraction_method,
-                        1,  # Initial version
-                        timestamp
-                    ))
+                    """,
+                        (
+                            target_id,
+                            source_id,
+                            inverse_relation,
+                            weight,
+                            json.dumps({**(metadata or {}), "inverse_of": relation_id}),
+                            timestamp,
+                            provenance,
+                            confidence,
+                            temporal_start,
+                            temporal_end,
+                            extraction_method,
+                            1,  # Initial version
+                            timestamp,
+                        ),
+                    )
 
                     inverse_id = cursor.lastrowid
 
                     # Add inverse relation to version history
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         INSERT INTO relationship_versions
                         (relationship_id, source_id, target_id, relation_type, weight, metadata,
                          provenance, confidence, temporal_start, temporal_end, extraction_method,
                          version, timestamp, change_type, changed_by)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        inverse_id,
-                        target_id,
-                        source_id,
-                        inverse_relation,
-                        weight,
-                        json.dumps({**(metadata or {}), "inverse_of": relation_id}),
-                        provenance,
-                        confidence,
-                        temporal_start,
-                        temporal_end,
-                        extraction_method,
-                        1,  # Initial version
-                        timestamp,
-                        "CREATE_INVERSE",
-                        changed_by
-                    ))
+                    """,
+                        (
+                            inverse_id,
+                            target_id,
+                            source_id,
+                            inverse_relation,
+                            weight,
+                            json.dumps({**(metadata or {}), "inverse_of": relation_id}),
+                            provenance,
+                            confidence,
+                            temporal_start,
+                            temporal_end,
+                            extraction_method,
+                            1,  # Initial version
+                            timestamp,
+                            "CREATE_INVERSE",
+                            changed_by,
+                        ),
+                    )
 
                 # If relation is transitive, check for implied transitive relations
                 if is_transitive:
                     self._add_transitive_relations(
-                        source_id, target_id, relation_type,
-                        weight, provenance, confidence, extraction_method, changed_by
+                        source_id,
+                        target_id,
+                        relation_type,
+                        weight,
+                        provenance,
+                        confidence,
+                        extraction_method,
+                        changed_by,
                     )
 
             conn.commit()
@@ -1461,15 +1689,15 @@ class GraphStore(TraversalMixin):
             # Add to NetworkX graph if enabled
             if NETWORKX_ENABLED and self.graph is not None:
                 edge_attrs = {
-                    'relation': relation_type,
-                    'weight': weight,
-                    'provenance': provenance,
-                    'confidence': confidence,
-                    'temporal_start': temporal_start,
-                    'temporal_end': temporal_end,
-                    'extraction_method': extraction_method,
-                    'timestamp': timestamp,
-                    'version': 1 if existing is None else existing[1] + 1
+                    "relation": relation_type,
+                    "weight": weight,
+                    "provenance": provenance,
+                    "confidence": confidence,
+                    "temporal_start": temporal_start,
+                    "temporal_end": temporal_end,
+                    "extraction_method": extraction_method,
+                    "timestamp": timestamp,
+                    "version": 1 if existing is None else existing[1] + 1,
                 }
 
                 if metadata:
@@ -1479,23 +1707,29 @@ class GraphStore(TraversalMixin):
 
                 # Add symmetric and inverse edges to NetworkX if applicable
                 if is_symmetric and source_id != target_id:
-                    self.graph.add_edge(target_id, source_id, **{
-                        **edge_attrs,
-                        'symmetric_of': relation_id
-                    })
+                    self.graph.add_edge(
+                        target_id,
+                        source_id,
+                        **{**edge_attrs, "symmetric_of": relation_id},
+                    )
 
                 if inverse_relation and source_id != target_id:
-                    self.graph.add_edge(target_id, source_id, **{
-                        **edge_attrs,
-                        'relation': inverse_relation,
-                        'inverse_of': relation_id
-                    })
+                    self.graph.add_edge(
+                        target_id,
+                        source_id,
+                        **{
+                            **edge_attrs,
+                            "relation": inverse_relation,
+                            "inverse_of": relation_id,
+                        },
+                    )
 
             return True
 
         except Exception as e:
             logging.error(f"Error adding relation: {e}")
             import traceback
+
             logging.error(f"Traceback: {traceback.format_exc()}")
             conn.rollback()
             return False
@@ -1504,9 +1738,17 @@ class GraphStore(TraversalMixin):
             if self.conn is None:
                 conn.close()
 
-    def _add_transitive_relations(self, source_id: int, target_id: int, relation_type: str,
-                                weight: float, provenance: str, confidence: float,
-                                extraction_method: str, changed_by: str) -> None:
+    def _add_transitive_relations(
+        self,
+        source_id: int,
+        target_id: int,
+        relation_type: str,
+        weight: float,
+        provenance: str,
+        confidence: float,
+        extraction_method: str,
+        changed_by: str,
+    ) -> None:
         """
         Add implied transitive relations.
 
@@ -1531,17 +1773,23 @@ class GraphStore(TraversalMixin):
 
         try:
             # Find all entities that the source is related to with this relation
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT target_id FROM graph_relationships
                 WHERE source_id = ? AND relation_type = ?
-            ''', (source_id, relation_type))
+            """,
+                (source_id, relation_type),
+            )
             sources_targets = cursor.fetchall()
 
             # Find all entities that have this relation to the target
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT source_id FROM graph_relationships
                 WHERE target_id = ? AND relation_type = ?
-            ''', (target_id, relation_type))
+            """,
+                (target_id, relation_type),
+            )
             targets_sources = cursor.fetchall()
 
             # Add transitive relations: source -> target's sources
@@ -1549,136 +1797,164 @@ class GraphStore(TraversalMixin):
                 third_id = row[0]
                 if third_id != source_id:  # Avoid self-relations
                     # Check if this relation already exists
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         SELECT id FROM graph_relationships
                         WHERE source_id = ? AND target_id = ? AND relation_type = ?
-                    ''', (source_id, third_id, relation_type))
+                    """,
+                        (source_id, third_id, relation_type),
+                    )
                     if not cursor.fetchone():
                         # Add the transitive relation with reduced confidence
-                        new_confidence = confidence * 0.9  # Reduce confidence for transitive inference
+                        new_confidence = (
+                            confidence * 0.9
+                        )  # Reduce confidence for transitive inference
 
                         # Add the relation
                         transitive_metadata = {
                             "transitive": True,
                             "via_entity": target_id,
-                            "inference_type": "transitive_relation"
+                            "inference_type": "transitive_relation",
                         }
 
-                        cursor.execute('''
+                        cursor.execute(
+                            """
                             INSERT INTO graph_relationships
                             (source_id, target_id, relation_type, weight, metadata, timestamp,
                              provenance, confidence, extraction_method, version, last_updated)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (
-                            source_id,
-                            third_id,
-                            relation_type,
-                            weight * 0.8,  # Reduce weight for transitive relations
-                            json.dumps(transitive_metadata),
-                            timestamp,
-                            provenance,
-                            new_confidence,
-                            "transitive_inference",
-                            1,
-                            timestamp
-                        ))
+                        """,
+                            (
+                                source_id,
+                                third_id,
+                                relation_type,
+                                weight * 0.8,  # Reduce weight for transitive relations
+                                json.dumps(transitive_metadata),
+                                timestamp,
+                                provenance,
+                                new_confidence,
+                                "transitive_inference",
+                                1,
+                                timestamp,
+                            ),
+                        )
 
                         transitive_id = cursor.lastrowid
 
                         # Add to version history
-                        cursor.execute('''
+                        cursor.execute(
+                            """
                             INSERT INTO relationship_versions
                             (relationship_id, source_id, target_id, relation_type, weight, metadata,
                              provenance, confidence, extraction_method, version, timestamp, change_type, changed_by)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (
-                            transitive_id,
-                            source_id,
-                            third_id,
-                            relation_type,
-                            weight * 0.8,
-                            json.dumps(transitive_metadata),
-                            provenance,
-                            new_confidence,
-                            "transitive_inference",
-                            1,
-                            timestamp,
-                            "CREATE_TRANSITIVE",
-                            changed_by
-                        ))
+                        """,
+                            (
+                                transitive_id,
+                                source_id,
+                                third_id,
+                                relation_type,
+                                weight * 0.8,
+                                json.dumps(transitive_metadata),
+                                provenance,
+                                new_confidence,
+                                "transitive_inference",
+                                1,
+                                timestamp,
+                                "CREATE_TRANSITIVE",
+                                changed_by,
+                            ),
+                        )
 
             # Add transitive relations: source's sources -> target
             for row in sources_targets:
                 third_id = row[0]
                 if third_id != target_id:  # Avoid self-relations
                     # Check if this relation already exists
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         SELECT id FROM graph_relationships
                         WHERE source_id = ? AND target_id = ? AND relation_type = ?
-                    ''', (third_id, target_id, relation_type))
+                    """,
+                        (third_id, target_id, relation_type),
+                    )
                     if not cursor.fetchone():
                         # Add the transitive relation with reduced confidence
-                        new_confidence = confidence * 0.9  # Reduce confidence for transitive inference
+                        new_confidence = (
+                            confidence * 0.9
+                        )  # Reduce confidence for transitive inference
 
                         # Add the relation
                         transitive_metadata = {
                             "transitive": True,
                             "via_entity": source_id,
-                            "inference_type": "transitive_relation"
+                            "inference_type": "transitive_relation",
                         }
 
-                        cursor.execute('''
+                        cursor.execute(
+                            """
                             INSERT INTO graph_relationships
                             (source_id, target_id, relation_type, weight, metadata, timestamp,
                              provenance, confidence, extraction_method, version, last_updated)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (
-                            third_id,
-                            target_id,
-                            relation_type,
-                            weight * 0.8,  # Reduce weight for transitive relations
-                            json.dumps(transitive_metadata),
-                            timestamp,
-                            provenance,
-                            new_confidence,
-                            "transitive_inference",
-                            1,
-                            timestamp
-                        ))
+                        """,
+                            (
+                                third_id,
+                                target_id,
+                                relation_type,
+                                weight * 0.8,  # Reduce weight for transitive relations
+                                json.dumps(transitive_metadata),
+                                timestamp,
+                                provenance,
+                                new_confidence,
+                                "transitive_inference",
+                                1,
+                                timestamp,
+                            ),
+                        )
 
                         transitive_id = cursor.lastrowid
 
                         # Add to version history
-                        cursor.execute('''
+                        cursor.execute(
+                            """
                             INSERT INTO relationship_versions
                             (relationship_id, source_id, target_id, relation_type, weight, metadata,
                              provenance, confidence, extraction_method, version, timestamp, change_type, changed_by)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (
-                            transitive_id,
-                            third_id,
-                            target_id,
-                            relation_type,
-                            weight * 0.8,
-                            json.dumps(transitive_metadata),
-                            provenance,
-                            new_confidence,
-                            "transitive_inference",
-                            1,
-                            timestamp,
-                            "CREATE_TRANSITIVE",
-                            changed_by
-                        ))
+                        """,
+                            (
+                                transitive_id,
+                                third_id,
+                                target_id,
+                                relation_type,
+                                weight * 0.8,
+                                json.dumps(transitive_metadata),
+                                provenance,
+                                new_confidence,
+                                "transitive_inference",
+                                1,
+                                timestamp,
+                                "CREATE_TRANSITIVE",
+                                changed_by,
+                            ),
+                        )
 
         except Exception as e:
             logging.error(f"Error adding transitive relations: {e}")
             import traceback
+
             logging.error(f"Traceback: {traceback.format_exc()}")
             # Don't raise - this is a best-effort operation
 
-    def add_nary_relation(self, relation_type: str, participants: dict[str, str],
-                        metadata: dict[str, Any] = None, provenance: str = None,
-                        confidence: float = 0.5) -> int:
+    def add_nary_relation(
+        self,
+        relation_type: str,
+        participants: dict[str, str],
+        metadata: dict[str, Any] = None,
+        provenance: str = None,
+        confidence: float = 0.5,
+    ) -> int:
         """
         Add an n-ary relation involving multiple entities with different roles.
 
@@ -1706,6 +1982,7 @@ class GraphStore(TraversalMixin):
                 if not self.ontology.get_relation_type(relation_type):
                     # Add a basic relation type if needed
                     from cortexflow.ontology import RelationType
+
                     self.ontology.add_relation_type(
                         RelationType(
                             name=relation_type,
@@ -1713,53 +1990,56 @@ class GraphStore(TraversalMixin):
                             metadata={
                                 "n_ary": True,
                                 "automatic": True,
-                                "confidence": 0.7
-                            }
+                                "confidence": 0.7,
+                            },
                         )
                     )
-                    logging.info(f"Added n-ary relation type to ontology: {relation_type}")
+                    logging.info(
+                        f"Added n-ary relation type to ontology: {relation_type}"
+                    )
 
             # Insert the n-ary relation
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO nary_relationships
                 (relation_type, metadata, provenance, confidence, timestamp)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (
-                relation_type,
-                json.dumps(metadata) if metadata else None,
-                provenance,
-                confidence,
-                timestamp
-            ))
+            """,
+                (
+                    relation_type,
+                    json.dumps(metadata) if metadata else None,
+                    provenance,
+                    confidence,
+                    timestamp,
+                ),
+            )
 
             relation_id = cursor.lastrowid
 
             # Add all participants
             for role, entity_name in participants.items():
                 # Get or create the entity
-                cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity_name,))
+                cursor.execute(
+                    "SELECT id FROM graph_entities WHERE entity = ?", (entity_name,)
+                )
                 entity_row = cursor.fetchone()
 
                 if not entity_row:
                     entity_id = self.add_entity(
-                        entity=entity_name,
-                        provenance=provenance,
-                        confidence=confidence
+                        entity=entity_name, provenance=provenance, confidence=confidence
                     )
                 else:
                     entity_id = entity_row[0]
 
                 # Add the participant
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO nary_participants
                     (relationship_id, entity_id, role, timestamp)
                     VALUES (?, ?, ?, ?)
-                ''', (
-                    relation_id,
-                    entity_id,
-                    role,
-                    timestamp
-                ))
+                """,
+                    (relation_id, entity_id, role, timestamp),
+                )
 
             conn.commit()
 
@@ -1774,12 +2054,14 @@ class GraphStore(TraversalMixin):
                     provenance=provenance,
                     confidence=confidence,
                     timestamp=timestamp,
-                    **(metadata or {})
+                    **(metadata or {}),
                 )
 
                 # Connect all participants to the relation node
                 for role, entity_name in participants.items():
-                    cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity_name,))
+                    cursor.execute(
+                        "SELECT id FROM graph_entities WHERE entity = ?", (entity_name,)
+                    )
                     entity_row = cursor.fetchone()
                     if entity_row:
                         entity_id = entity_row[0]
@@ -1788,7 +2070,7 @@ class GraphStore(TraversalMixin):
                             relation_node_id,
                             role=role,
                             weight=1.0,
-                            timestamp=timestamp
+                            timestamp=timestamp,
                         )
 
             return relation_id
@@ -1822,11 +2104,14 @@ class GraphStore(TraversalMixin):
 
         try:
             # Get the relation details
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT relation_type, metadata, provenance, confidence, timestamp
                 FROM nary_relationships
                 WHERE id = ?
-            ''', (relation_id,))
+            """,
+                (relation_id,),
+            )
 
             relation_row = cursor.fetchone()
 
@@ -1837,29 +2122,32 @@ class GraphStore(TraversalMixin):
             relation = dict(relation_row)
 
             # Parse metadata JSON
-            if relation['metadata']:
-                relation['metadata'] = json.loads(relation['metadata'])
+            if relation["metadata"]:
+                relation["metadata"] = json.loads(relation["metadata"])
             else:
-                relation['metadata'] = {}
+                relation["metadata"] = {}
 
             # Get all participants
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT np.role, ge.entity, ge.entity_type, ge.id as entity_id
                 FROM nary_participants np
                 JOIN graph_entities ge ON np.entity_id = ge.id
                 WHERE np.relationship_id = ?
-            ''', (relation_id,))
+            """,
+                (relation_id,),
+            )
 
             participants = {}
             for row in cursor.fetchall():
-                participants[row['role']] = {
-                    'entity': row['entity'],
-                    'entity_type': row['entity_type'],
-                    'entity_id': row['entity_id']
+                participants[row["role"]] = {
+                    "entity": row["entity"],
+                    "entity_type": row["entity_type"],
+                    "entity_id": row["entity_id"],
                 }
 
-            relation['participants'] = participants
-            relation['id'] = relation_id
+            relation["participants"] = participants
+            relation["id"] = relation_id
 
             return relation
 
@@ -1871,10 +2159,13 @@ class GraphStore(TraversalMixin):
             if self.conn is None:
                 conn.close()
 
-    def query_nary_relations(self, relation_type: str = None,
-                          participant_entity: str = None,
-                          participant_role: str = None,
-                          limit: int = 100) -> list[dict[str, Any]]:
+    def query_nary_relations(
+        self,
+        relation_type: str = None,
+        participant_entity: str = None,
+        participant_role: str = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
         """
         Query n-ary relations with optional filters.
 
@@ -1899,17 +2190,17 @@ class GraphStore(TraversalMixin):
             params = []
 
             # Start with base query
-            query = '''
+            query = """
                 SELECT DISTINCT nr.id as relation_id
                 FROM nary_relationships nr
-            '''
+            """
 
             # Add join conditions if needed
             if participant_entity or participant_role:
-                query += '''
+                query += """
                     JOIN nary_participants np ON nr.id = np.relationship_id
                     JOIN graph_entities ge ON np.entity_id = ge.id
-                '''
+                """
 
             # Add WHERE clause
             where_clauses = []
@@ -1935,7 +2226,7 @@ class GraphStore(TraversalMixin):
 
             # Execute query to get relation IDs
             cursor.execute(query, params)
-            relation_ids = [row['relation_id'] for row in cursor.fetchall()]
+            relation_ids = [row["relation_id"] for row in cursor.fetchall()]
 
             # Get full details for each relation
             results = []
@@ -1973,12 +2264,15 @@ class GraphStore(TraversalMixin):
         cursor = conn.cursor()
 
         try:
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT entity, entity_type, metadata, provenance, confidence,
                        temporal_start, temporal_end, timestamp
                 FROM graph_entities
                 WHERE id = ?
-            ''', (entity_id,))
+            """,
+                (entity_id,),
+            )
 
             row = cursor.fetchone()
 
@@ -1988,12 +2282,12 @@ class GraphStore(TraversalMixin):
             result = dict(row)
 
             # Parse metadata JSON
-            if result['metadata']:
-                result['metadata'] = json.loads(result['metadata'])
+            if result["metadata"]:
+                result["metadata"] = json.loads(result["metadata"])
             else:
-                result['metadata'] = {}
+                result["metadata"] = {}
 
-            result['id'] = entity_id
+            result["id"] = entity_id
 
             return result
 
@@ -2024,12 +2318,15 @@ class GraphStore(TraversalMixin):
         cursor = conn.cursor()
 
         try:
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT source_id, target_id, relation_type, weight, metadata,
                        provenance, confidence, temporal_start, temporal_end, timestamp
                 FROM graph_relationships
                 WHERE id = ?
-            ''', (relation_id,))
+            """,
+                (relation_id,),
+            )
 
             row = cursor.fetchone()
 
@@ -2039,18 +2336,18 @@ class GraphStore(TraversalMixin):
             result = dict(row)
 
             # Parse metadata JSON
-            if result['metadata']:
-                result['metadata'] = json.loads(result['metadata'])
+            if result["metadata"]:
+                result["metadata"] = json.loads(result["metadata"])
             else:
-                result['metadata'] = {}
+                result["metadata"] = {}
 
             # Get source and target entity details
-            source = self.get_entity_metadata(result['source_id'])
-            target = self.get_entity_metadata(result['target_id'])
+            source = self.get_entity_metadata(result["source_id"])
+            target = self.get_entity_metadata(result["target_id"])
 
-            result['source'] = source
-            result['target'] = target
-            result['id'] = relation_id
+            result["source"] = source
+            result["target"] = target
+            result["id"] = relation_id
 
             return result
 
@@ -2090,7 +2387,7 @@ class GraphStore(TraversalMixin):
                     relation_type=pred,
                     target_entity=obj,
                     provenance=source,
-                    confidence=0.7  # Default confidence for extracted relations
+                    confidence=0.7,  # Default confidence for extracted relations
                 )
 
                 if success:
@@ -2101,15 +2398,15 @@ class GraphStore(TraversalMixin):
 
             # Add n-ary relations to graph
             for relation in nary_relations:
-                relation_type = relation.get('type', 'event')
-                participants = relation.get('participants', {})
+                relation_type = relation.get("type", "event")
+                participants = relation.get("participants", {})
 
                 if participants:
                     nary_id = self.add_nary_relation(
                         relation_type=relation_type,
                         participants=participants,
                         provenance=source,
-                        confidence=0.6  # Default confidence for n-ary relations
+                        confidence=0.6,  # Default confidence for n-ary relations
                     )
 
                     if nary_id > 0:
@@ -2163,28 +2460,42 @@ class GraphStore(TraversalMixin):
                     participants = {}
 
                     # Check for subject
-                    subjects = [token for token in verb.children if token.dep_ in ("nsubj", "nsubjpass")]
+                    subjects = [
+                        token
+                        for token in verb.children
+                        if token.dep_ in ("nsubj", "nsubjpass")
+                    ]
                     for subject in subjects:
                         # Extend to noun phrases
                         subj_span = self._get_span_text(subject)
                         participants["agent"] = subj_span
 
                     # Check for object
-                    objects = [token for token in verb.children if token.dep_ in ("dobj", "pobj")]
+                    objects = [
+                        token
+                        for token in verb.children
+                        if token.dep_ in ("dobj", "pobj")
+                    ]
                     for obj in objects:
                         # Extend to noun phrases
                         obj_span = self._get_span_text(obj)
                         participants["theme"] = obj_span
 
                     # Check for indirect object
-                    ind_objects = [token for token in verb.children if token.dep_ == "iobj"]
+                    ind_objects = [
+                        token for token in verb.children if token.dep_ == "iobj"
+                    ]
                     for ind_obj in ind_objects:
                         # Extend to noun phrases
                         ind_obj_span = self._get_span_text(ind_obj)
                         participants["recipient"] = ind_obj_span
 
                     # Check for time expressions
-                    time_preps = [token for token in verb.children if token.dep_ == "prep" and token.text in ("at", "on", "in")]
+                    time_preps = [
+                        token
+                        for token in verb.children
+                        if token.dep_ == "prep" and token.text in ("at", "on", "in")
+                    ]
                     for prep in time_preps:
                         for child in prep.children:
                             if child.dep_ == "pobj":
@@ -2192,7 +2503,12 @@ class GraphStore(TraversalMixin):
                                 participants["time"] = time_span
 
                     # Check for location
-                    loc_preps = [token for token in verb.children if token.dep_ == "prep" and token.text in ("at", "in", "on", "near", "by")]
+                    loc_preps = [
+                        token
+                        for token in verb.children
+                        if token.dep_ == "prep"
+                        and token.text in ("at", "in", "on", "near", "by")
+                    ]
                     for prep in loc_preps:
                         for child in prep.children:
                             if child.dep_ == "pobj":
@@ -2203,19 +2519,26 @@ class GraphStore(TraversalMixin):
 
                     # If we have at least two participants, add the event
                     if len(participants) >= 2:
-                        complex_events.append({
-                            "type": event_type,
-                            "participants": participants,
-                            "sentence": sent.text
-                        })
+                        complex_events.append(
+                            {
+                                "type": event_type,
+                                "participants": participants,
+                                "sentence": sent.text,
+                            }
+                        )
 
         except Exception as e:
             logging.error(f"Error extracting complex events: {e}")
 
         return complex_events
 
-    def get_entity_neighbors(self, entity: str, direction: str = "both",
-                           relation_type: str = None, limit: int = 10) -> list[dict[str, Any]]:
+    def get_entity_neighbors(
+        self,
+        entity: str,
+        direction: str = "both",
+        relation_type: str = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
         """
         Get neighbors of an entity in the graph.
 
@@ -2240,23 +2563,23 @@ class GraphStore(TraversalMixin):
 
         try:
             # Get entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (entity,))
+            cursor.execute("SELECT id FROM graph_entities WHERE entity = ?", (entity,))
             entity_row = cursor.fetchone()
 
             if not entity_row:
                 return []
 
-            entity_id = entity_row['id']
+            entity_id = entity_row["id"]
 
             # Get outgoing relations
             if direction in ["outgoing", "both"]:
-                query = '''
+                query = """
                     SELECT r.id, r.relation_type, r.weight, r.provenance, r.confidence,
                            e.id as target_id, e.entity, e.entity_type
                     FROM graph_relationships r
                     JOIN graph_entities e ON r.target_id = e.id
                     WHERE r.source_id = ?
-                '''
+                """
 
                 params = [entity_id]
 
@@ -2271,8 +2594,8 @@ class GraphStore(TraversalMixin):
 
                 for row in cursor.fetchall():
                     neighbor = dict(row)
-                    neighbor['direction'] = 'outgoing'
-                    neighbor['relation'] = neighbor['relation_type']
+                    neighbor["direction"] = "outgoing"
+                    neighbor["relation"] = neighbor["relation_type"]
                     neighbors.append(neighbor)
 
             # Get incoming relations
@@ -2280,13 +2603,13 @@ class GraphStore(TraversalMixin):
                 remaining_limit = limit - len(neighbors)
 
                 if remaining_limit > 0:
-                    query = '''
+                    query = """
                         SELECT r.id, r.relation_type, r.weight, r.provenance, r.confidence,
                                e.id as source_id, e.entity, e.entity_type
                         FROM graph_relationships r
                         JOIN graph_entities e ON r.source_id = e.id
                         WHERE r.target_id = ?
-                    '''
+                    """
 
                     params = [entity_id]
 
@@ -2301,12 +2624,16 @@ class GraphStore(TraversalMixin):
 
                     for row in cursor.fetchall():
                         neighbor = dict(row)
-                        neighbor['direction'] = 'incoming'
-                        neighbor['relation'] = neighbor['relation_type']
+                        neighbor["direction"] = "incoming"
+                        neighbor["relation"] = neighbor["relation_type"]
                         neighbors.append(neighbor)
 
             # Sort by weight and confidence
-            neighbors = sorted(neighbors, key=lambda x: (x.get('confidence', 0.0), x.get('weight', 0.0)), reverse=True)
+            neighbors = sorted(
+                neighbors,
+                key=lambda x: (x.get("confidence", 0.0), x.get("weight", 0.0)),
+                reverse=True,
+            )
 
             return neighbors[:limit]
 
@@ -2318,7 +2645,9 @@ class GraphStore(TraversalMixin):
             if self.conn is None:
                 conn.close()
 
-    def build_knowledge_subgraph(self, query: str, max_nodes: int = 20) -> dict[str, Any]:
+    def build_knowledge_subgraph(
+        self, query: str, max_nodes: int = 20
+    ) -> dict[str, Any]:
         """
         Build a knowledge subgraph relevant to a query.
 
@@ -2370,9 +2699,7 @@ class GraphStore(TraversalMixin):
             # For each entity in the query, get neighbors
             for entity_text in query_entities:
                 neighbors = self.get_entity_neighbors(
-                    entity=entity_text,
-                    direction="both",
-                    limit=5
+                    entity=entity_text, direction="both", limit=5
                 )
 
                 if not neighbors:
@@ -2381,18 +2708,20 @@ class GraphStore(TraversalMixin):
                 # Safely get source entity ID
                 source_id = None
                 for neighbor in neighbors:
-                    if 'source_id' in neighbor and neighbor['direction'] == 'outgoing':
-                        source_id = neighbor['source_id']
+                    if "source_id" in neighbor and neighbor["direction"] == "outgoing":
+                        source_id = neighbor["source_id"]
                         break
-                    elif 'target_id' in neighbor and neighbor['direction'] == 'incoming':
-                        source_id = neighbor['target_id']
+                    elif (
+                        "target_id" in neighbor and neighbor["direction"] == "incoming"
+                    ):
+                        source_id = neighbor["target_id"]
                         break
 
                 # If we can't find source ID, try a direct lookup
                 if source_id is None:
                     entity_info = self.get_entity_id(entity_text)
                     if entity_info:
-                        source_id = entity_info.get('id')
+                        source_id = entity_info.get("id")
 
                 # Add the entity to nodes if we have an ID and it's not already added
                 if source_id and source_id not in node_ids:
@@ -2404,8 +2733,8 @@ class GraphStore(TraversalMixin):
                         node = {
                             "id": source_id,
                             "label": entity_text,
-                            "type": entity_details.get('entity_type', 'unknown'),
-                            "confidence": entity_details.get('confidence', 0.5)
+                            "type": entity_details.get("entity_type", "unknown"),
+                            "confidence": entity_details.get("confidence", 0.5),
                         }
 
                         subgraph["nodes"].append(node)
@@ -2417,61 +2746,85 @@ class GraphStore(TraversalMixin):
                 for neighbor in neighbors:
                     try:
                         # Skip neighbors without required fields
-                        if 'entity' not in neighbor:
-                            logging.warning(f"Skipping neighbor without entity field: {neighbor}")
+                        if "entity" not in neighbor:
+                            logging.warning(
+                                f"Skipping neighbor without entity field: {neighbor}"
+                            )
                             continue
 
-                        neighbor_entity = neighbor['entity']
-                        relation = neighbor.get('relation', 'related_to')
+                        neighbor_entity = neighbor["entity"]
+                        relation = neighbor.get("relation", "related_to")
 
                         # Safely get neighbor ID
                         neighbor_id = None
-                        if neighbor['direction'] == 'outgoing' and 'target_id' in neighbor:
-                            neighbor_id = neighbor['target_id']
-                        elif neighbor['direction'] == 'incoming' and 'source_id' in neighbor:
-                            neighbor_id = neighbor['source_id']
+                        if (
+                            neighbor["direction"] == "outgoing"
+                            and "target_id" in neighbor
+                        ):
+                            neighbor_id = neighbor["target_id"]
+                        elif (
+                            neighbor["direction"] == "incoming"
+                            and "source_id" in neighbor
+                        ):
+                            neighbor_id = neighbor["source_id"]
 
                         # If we can't get neighbor ID, try direct lookup
                         if neighbor_id is None:
                             nb_info = self.get_entity_id(neighbor_entity)
                             if nb_info:
-                                neighbor_id = nb_info.get('id')
+                                neighbor_id = nb_info.get("id")
 
                         # Skip if we still don't have required IDs
                         if not source_id or not neighbor_id:
-                            logging.warning(f"Missing ID for {entity_text} or {neighbor_entity}")
+                            logging.warning(
+                                f"Missing ID for {entity_text} or {neighbor_entity}"
+                            )
                             continue
 
                         # Add neighbor node if new
                         if neighbor_id not in node_ids:
                             try:
                                 # Get entity details
-                                entity_details = self.get_entity_metadata(neighbor_id) or {}
+                                entity_details = (
+                                    self.get_entity_metadata(neighbor_id) or {}
+                                )
 
                                 # Create node
                                 node = {
                                     "id": neighbor_id,
                                     "label": neighbor_entity,
-                                    "type": entity_details.get('entity_type', 'unknown'),
-                                    "confidence": entity_details.get('confidence', 0.5)
+                                    "type": entity_details.get(
+                                        "entity_type", "unknown"
+                                    ),
+                                    "confidence": entity_details.get("confidence", 0.5),
                                 }
 
                                 subgraph["nodes"].append(node)
                                 node_ids.add(neighbor_id)
                             except Exception as e:
-                                logging.error(f"Error adding neighbor node {neighbor_id}: {e}")
+                                logging.error(
+                                    f"Error adding neighbor node {neighbor_id}: {e}"
+                                )
                                 continue
 
                         # Add edge
-                        edge_id = f"{source_id}_{neighbor_id}_{relation}" if neighbor['direction'] == 'outgoing' else f"{neighbor_id}_{source_id}_{relation}"
+                        edge_id = (
+                            f"{source_id}_{neighbor_id}_{relation}"
+                            if neighbor["direction"] == "outgoing"
+                            else f"{neighbor_id}_{source_id}_{relation}"
+                        )
 
                         if edge_id not in edge_ids:
                             edge = {
-                                "source": source_id if neighbor['direction'] == 'outgoing' else neighbor_id,
-                                "target": neighbor_id if neighbor['direction'] == 'outgoing' else source_id,
+                                "source": source_id
+                                if neighbor["direction"] == "outgoing"
+                                else neighbor_id,
+                                "target": neighbor_id
+                                if neighbor["direction"] == "outgoing"
+                                else source_id,
                                 "label": relation,
-                                "weight": neighbor.get('weight', 1.0),
-                                "confidence": neighbor.get('confidence', 0.5)
+                                "weight": neighbor.get("weight", 1.0),
+                                "confidence": neighbor.get("confidence", 0.5),
                             }
 
                             subgraph["edges"].append(edge)
@@ -2510,17 +2863,26 @@ class GraphStore(TraversalMixin):
             cursor = conn.cursor()
 
             # Try exact match first
-            cursor.execute('SELECT id, entity, entity_type FROM graph_entities WHERE entity = ?', (entity_text,))
+            cursor.execute(
+                "SELECT id, entity, entity_type FROM graph_entities WHERE entity = ?",
+                (entity_text,),
+            )
             entity_row = cursor.fetchone()
 
             if not entity_row:
                 # Try case-insensitive matching
-                cursor.execute('SELECT id, entity, entity_type FROM graph_entities WHERE LOWER(entity) = LOWER(?)', (entity_text,))
+                cursor.execute(
+                    "SELECT id, entity, entity_type FROM graph_entities WHERE LOWER(entity) = LOWER(?)",
+                    (entity_text,),
+                )
                 entity_row = cursor.fetchone()
 
             if not entity_row:
                 # Try fuzzy matching as last resort
-                cursor.execute('SELECT id, entity, entity_type FROM graph_entities WHERE entity LIKE ? LIMIT 1', (f"%{entity_text}%",))
+                cursor.execute(
+                    "SELECT id, entity, entity_type FROM graph_entities WHERE entity LIKE ? LIMIT 1",
+                    (f"%{entity_text}%",),
+                )
                 entity_row = cursor.fetchone()
 
             if self.conn is None:

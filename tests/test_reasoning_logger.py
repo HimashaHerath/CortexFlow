@@ -159,9 +159,7 @@ class TestDatabaseRetrieval:
         logger_with_db.log_reasoning_step(
             "inference", "step 1", entities=["E1"], relations=["R1"], confidence=0.9
         )
-        logger_with_db.log_reasoning_step(
-            "synthesis", "step 2", confidence=0.85
-        )
+        logger_with_db.log_reasoning_step("synthesis", "step 2", confidence=0.85)
         logger_with_db.log_path(["N1", "N2", "N3"], score=0.7, hop_count=2)
         logger_with_db.end_reasoning(success=True, metadata={"result": "ok"})
 

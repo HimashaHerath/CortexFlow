@@ -3,6 +3,7 @@ CortexFlow Dynamic Weighting module.
 
 This module provides dynamic memory allocation for CortexFlow.
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,7 +14,8 @@ from typing import Any
 
 from cortexflow.config import CortexFlowConfig
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
+
 
 class DynamicWeightingEngine:
     """
@@ -36,16 +38,16 @@ class DynamicWeightingEngine:
 
         # Default tier ratios (active:working:archive)
         self.default_ratios = {
-            "active": 0.25,    # 25% of total tokens
-            "working": 0.35,   # 35% of total tokens
-            "archive": 0.40    # 40% of total tokens
+            "active": 0.25,  # 25% of total tokens
+            "working": 0.35,  # 35% of total tokens
+            "archive": 0.40,  # 40% of total tokens
         }
 
         # Total token budget across all tiers
         self.total_token_budget = (
-            config.active_token_limit +
-            config.working_token_limit +
-            config.archive_token_limit
+            config.active_token_limit
+            + config.working_token_limit
+            + config.archive_token_limit
         )
 
         # Track recent queries for pattern analysis
@@ -53,12 +55,7 @@ class DynamicWeightingEngine:
         self.query_complexity_history = deque(maxlen=50)  # Store complexity scores
 
         # Track document type distributions
-        self.document_type_counts = {
-            "code": 0,
-            "text": 0,
-            "data": 0,
-            "mixed": 0
-        }
+        self.document_type_counts = {"code": 0, "text": 0, "data": 0, "mixed": 0}
 
         # Tier allocation history
         self.allocation_history = []
@@ -73,7 +70,7 @@ class DynamicWeightingEngine:
         self.current_tier_limits = {
             "active": config.active_token_limit,
             "working": config.working_token_limit,
-            "archive": config.archive_token_limit
+            "archive": config.archive_token_limit,
         }
 
         # Add pattern tracking
@@ -81,14 +78,16 @@ class DynamicWeightingEngine:
             "code_heavy": {"active": 0.35, "working": 0.35, "archive": 0.30},
             "data_heavy": {"active": 0.20, "working": 0.50, "archive": 0.30},
             "qa_conversation": {"active": 0.30, "working": 0.30, "archive": 0.40},
-            "complex_reasoning": {"active": 0.40, "working": 0.40, "archive": 0.20}
+            "complex_reasoning": {"active": 0.40, "working": 0.40, "archive": 0.20},
         }
 
         # Track detected patterns
         self.detected_patterns = {pattern: 0 for pattern in self.pattern_weights}
         self.conversation_type = "general"  # Default pattern
 
-        logger.info(f"DynamicWeightingEngine initialized with total token budget: {self.total_token_budget}")
+        logger.info(
+            f"DynamicWeightingEngine initialized with total token budget: {self.total_token_budget}"
+        )
 
     def analyze_query_complexity(self, query: str) -> float:
         """
@@ -111,7 +110,9 @@ class DynamicWeightingEngine:
 
         # 1. Length-based features
         features["length"] = min(len(query) / 500.0, 1.0)  # Normalize by 500 chars
-        features["word_count"] = min(len(query.split()) / 100.0, 1.0)  # Normalize by 100 words
+        features["word_count"] = min(
+            len(query.split()) / 100.0, 1.0
+        )  # Normalize by 100 words
 
         # 2. Question complexity
         features["is_question"] = 1.0 if "?" in query else 0.0
@@ -124,23 +125,41 @@ class DynamicWeightingEngine:
                 features["question_type"] = 0.9  # Why questions are complex
             elif "how" in lower_query:
                 features["question_type"] = 0.8  # How questions are relatively complex
-            elif "what is the relationship" in lower_query or "connection between" in lower_query:
+            elif (
+                "what is the relationship" in lower_query
+                or "connection between" in lower_query
+            ):
                 features["question_type"] = 0.9  # Relationship questions are complex
             elif "compare" in lower_query or "difference between" in lower_query:
                 features["question_type"] = 0.8  # Comparison questions are complex
             elif "define" in lower_query or "what is" in lower_query:
-                features["question_type"] = 0.5  # Definition questions are medium complexity
+                features["question_type"] = (
+                    0.5  # Definition questions are medium complexity
+                )
             else:
                 features["question_type"] = 0.6  # Other questions are medium complexity
 
         # 3. Count entities, numbers, and domain-specific terms
-        features["entity_count"] = min(len(re.findall(r'\b[A-Z][a-z]+\b', query)) / 5.0, 1.0)
-        features["number_count"] = min(len(re.findall(r'\b\d+(?:\.\d+)?\b', query)) / 5.0, 1.0)
+        features["entity_count"] = min(
+            len(re.findall(r"\b[A-Z][a-z]+\b", query)) / 5.0, 1.0
+        )
+        features["number_count"] = min(
+            len(re.findall(r"\b\d+(?:\.\d+)?\b", query)) / 5.0, 1.0
+        )
 
         # 4. Check for code-related queries
-        code_indicators = ["code", "function", "class", "method",
-                          "variable", "algorithm", "implement",
-                          "programming", "debug", "error"]
+        code_indicators = [
+            "code",
+            "function",
+            "class",
+            "method",
+            "variable",
+            "algorithm",
+            "implement",
+            "programming",
+            "debug",
+            "error",
+        ]
 
         features["code_related"] = 0.0
         for indicator in code_indicators:
@@ -162,7 +181,7 @@ class DynamicWeightingEngine:
             "entity_count": 0.1,
             "number_count": 0.05,
             "code_related": 0.15,
-            "multi_part": 0.1
+            "multi_part": 0.1,
         }
 
         complexity = sum(features[key] * weights[key] for key in weights)
@@ -173,7 +192,9 @@ class DynamicWeightingEngine:
         # Add to history
         self.query_complexity_history.append(complexity)
 
-        logger.debug(f"Query complexity score: {complexity:.2f} for query: {query[:50]}...")
+        logger.debug(
+            f"Query complexity score: {complexity:.2f} for query: {query[:50]}..."
+        )
         return complexity
 
     def analyze_document_type(self, content: str) -> str:
@@ -191,14 +212,46 @@ class DynamicWeightingEngine:
 
         # Simple heuristics to identify document type
         code_indicators = [
-            "def ", "class ", "function", "import ", "from ", "return ",
-            "var ", "const ", "let ", "function(", "{", "}", "=>", "->",
-            "public ", "private ", "protected ", "#include", "<div", "<script"
+            "def ",
+            "class ",
+            "function",
+            "import ",
+            "from ",
+            "return ",
+            "var ",
+            "const ",
+            "let ",
+            "function(",
+            "{",
+            "}",
+            "=>",
+            "->",
+            "public ",
+            "private ",
+            "protected ",
+            "#include",
+            "<div",
+            "<script",
         ]
 
         data_indicators = [
-            '":', '": ', '",', '{', '}', '[', ']', 'null', 'true', 'false',
-            "<table", "<row", "<column", "dataframe", "df.", "pd.", "np."
+            '":',
+            '": ',
+            '",',
+            "{",
+            "}",
+            "[",
+            "]",
+            "null",
+            "true",
+            "false",
+            "<table",
+            "<row",
+            "<column",
+            "dataframe",
+            "df.",
+            "pd.",
+            "np.",
         ]
 
         # Count indicators
@@ -206,11 +259,13 @@ class DynamicWeightingEngine:
         data_count = sum(1 for indicator in data_indicators if indicator in content)
 
         # Additional code detection: indentation patterns and code blocks
-        if re.search(r'```python|```java|```js|```c|```cpp|```html|```css', content):
+        if re.search(r"```python|```java|```js|```c|```cpp|```html|```css", content):
             code_count += 5
 
         # Additional data detection: CSV-like patterns, tabular data
-        if re.search(r'\b\w+,\w+,\w+,\w+\b', content) or re.search(r'\|\s*\w+\s*\|\s*\w+\s*\|', content):
+        if re.search(r"\b\w+,\w+,\w+,\w+\b", content) or re.search(
+            r"\|\s*\w+\s*\|\s*\w+\s*\|", content
+        ):
             data_count += 3
 
         # Make determination
@@ -228,7 +283,9 @@ class DynamicWeightingEngine:
 
         return doc_type
 
-    def calculate_optimal_weights(self, query_complexity: float, document_type: str) -> dict[str, float]:
+    def calculate_optimal_weights(
+        self, query_complexity: float, document_type: str
+    ) -> dict[str, float]:
         """
         Calculate optimal tier weights based on query complexity and document type.
 
@@ -272,7 +329,9 @@ class DynamicWeightingEngine:
 
         # 3. Adjust based on historical patterns
         if len(self.query_complexity_history) > 5:
-            avg_complexity = sum(self.query_complexity_history) / len(self.query_complexity_history)
+            avg_complexity = sum(self.query_complexity_history) / len(
+                self.query_complexity_history
+            )
             if avg_complexity > 0.6:  # Sustained high complexity
                 weights["active"] += 0.05
                 weights["working"] += 0.05
@@ -283,7 +342,7 @@ class DynamicWeightingEngine:
 
         # Normalize weights to sum to 1.0
         total_weight = sum(weights.values())
-        weights = {k: v/total_weight for k, v in weights.items()}
+        weights = {k: v / total_weight for k, v in weights.items()}
 
         return weights
 
@@ -296,9 +355,15 @@ class DynamicWeightingEngine:
         """
         # Calculate token allocations based on weights
         new_limits = {
-            "active": int(self.total_token_budget * self.current_tier_weights["active"]),
-            "working": int(self.total_token_budget * self.current_tier_weights["working"]),
-            "archive": int(self.total_token_budget * self.current_tier_weights["archive"])
+            "active": int(
+                self.total_token_budget * self.current_tier_weights["active"]
+            ),
+            "working": int(
+                self.total_token_budget * self.current_tier_weights["working"]
+            ),
+            "archive": int(
+                self.total_token_budget * self.current_tier_weights["archive"]
+            ),
         }
 
         # Ensure minimum sizes for each tier
@@ -318,18 +383,22 @@ class DynamicWeightingEngine:
         self.current_tier_limits = new_limits
 
         # Record allocation in history
-        self.allocation_history.append({
-            "timestamp": time.time(),
-            "allocations": new_limits.copy(),
-            "weights": self.current_tier_weights.copy()
-        })
+        self.allocation_history.append(
+            {
+                "timestamp": time.time(),
+                "allocations": new_limits.copy(),
+                "weights": self.current_tier_weights.copy(),
+            }
+        )
 
         # Trim history if it gets too long
         if len(self.allocation_history) > 100:
             self.allocation_history = self.allocation_history[-100:]
 
-        logger.info(f"Updated tier allocations: Active={new_limits['active']}, "
-                   f"Working={new_limits['working']}, Archive={new_limits['archive']}")
+        logger.info(
+            f"Updated tier allocations: Active={new_limits['active']}, "
+            f"Working={new_limits['working']}, Archive={new_limits['archive']}"
+        )
 
         return new_limits
 
@@ -350,7 +419,9 @@ class DynamicWeightingEngine:
         data_ratio = doc_types.get("data", 0) / total_docs if total_docs > 0 else 0
 
         # Calculate average complexity
-        avg_complexity = sum(self.query_complexity_history) / len(self.query_complexity_history)
+        avg_complexity = sum(self.query_complexity_history) / len(
+            self.query_complexity_history
+        )
 
         # Detect conversation patterns
         if code_ratio > 0.3:
@@ -377,7 +448,9 @@ class DynamicWeightingEngine:
                 # Blend current weights with pattern weights using learning rate
                 target = pattern_weights[tier]
                 current = self.current_tier_weights[tier]
-                self.current_tier_weights[tier] += self.learning_rate * 0.5 * (target - current)
+                self.current_tier_weights[tier] += (
+                    self.learning_rate * 0.5 * (target - current)
+                )
 
         # Log the detected pattern
         logger.info(f"Detected conversation pattern: {self.conversation_type}")
@@ -412,7 +485,10 @@ class DynamicWeightingEngine:
             self.current_tier_weights[tier] += self.learning_rate * (optimal - current)
 
         # After multiple queries, analyze patterns
-        if len(self.query_complexity_history) % 5 == 0 and len(self.query_complexity_history) >= 10:
+        if (
+            len(self.query_complexity_history) % 5 == 0
+            and len(self.query_complexity_history) >= 10
+        ):
             self.update_weights_from_history()
 
         # Update tier allocations based on current weights
@@ -429,9 +505,11 @@ class DynamicWeightingEngine:
             "current_weights": self.current_tier_weights,
             "current_limits": self.current_tier_limits,
             "document_type_distribution": self.document_type_counts,
-            "recent_query_complexity": list(self.query_complexity_history)[-5:] if self.query_complexity_history else [],
+            "recent_query_complexity": list(self.query_complexity_history)[-5:]
+            if self.query_complexity_history
+            else [],
             "total_token_budget": self.total_token_budget,
-            "allocation_history_count": len(self.allocation_history)
+            "allocation_history_count": len(self.allocation_history),
         }
 
     def reset_to_defaults(self):

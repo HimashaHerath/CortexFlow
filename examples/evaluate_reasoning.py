@@ -15,7 +15,7 @@ import sys
 from datetime import datetime
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from benchmark.evaluation_framework import EvaluationFramework
 from benchmark.test_generation import ReasoningTestGenerator
@@ -23,11 +23,11 @@ from cortexflow import CortexFlowConfig, CortexFlowManager
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 logger = logging.getLogger("evaluate_reasoning")
+
 
 def load_sample_knowledge(manager, sample_file=None):
     """
@@ -42,13 +42,15 @@ def load_sample_knowledge(manager, sample_file=None):
         with open(sample_file) as f:
             knowledge_items = json.load(f)
 
-        logger.info(f"Loading {len(knowledge_items)} knowledge items from {sample_file}")
+        logger.info(
+            f"Loading {len(knowledge_items)} knowledge items from {sample_file}"
+        )
 
         for item in knowledge_items:
             manager.knowledge_store.remember_explicit(
                 text=item.get("text", ""),
                 source=item.get("source", "sample_data"),
-                confidence=item.get("confidence", 0.9)
+                confidence=item.get("confidence", 0.9),
             )
 
         return
@@ -67,7 +69,7 @@ def load_sample_knowledge(manager, sample_file=None):
         "Silicon Valley is a region in California known for technology companies.",
         "JavaScript is a programming language commonly used for web development.",
         "React is a JavaScript library developed by Facebook.",
-        "Facebook was founded by Mark Zuckerberg in 2004."
+        "Facebook was founded by Mark Zuckerberg in 2004.",
     ]
 
     # Science domain
@@ -81,7 +83,7 @@ def load_sample_knowledge(manager, sample_file=None):
         "Marie Curie discovered the elements polonium and radium.",
         "The periodic table organizes chemical elements based on their properties.",
         "Charles Darwin proposed the theory of evolution by natural selection.",
-        "The human genome contains approximately 3 billion base pairs."
+        "The human genome contains approximately 3 billion base pairs.",
     ]
 
     # Business domain
@@ -95,7 +97,7 @@ def load_sample_knowledge(manager, sample_file=None):
         "Microsoft was founded by Bill Gates and Paul Allen.",
         "Apple was co-founded by Steve Jobs, Steve Wozniak, and Ronald Wayne.",
         "Warren Buffett is the CEO of Berkshire Hathaway.",
-        "The New York Stock Exchange is located on Wall Street in Manhattan."
+        "The New York Stock Exchange is located on Wall Street in Manhattan.",
     ]
 
     # Load all knowledge
@@ -103,12 +105,11 @@ def load_sample_knowledge(manager, sample_file=None):
 
     for text in all_knowledge:
         manager.knowledge_store.remember_explicit(
-            text=text,
-            source="sample_data",
-            confidence=0.9
+            text=text, source="sample_data", confidence=0.9
         )
 
     logger.info(f"Loaded {len(all_knowledge)} knowledge items")
+
 
 def run_simple_benchmark(manager, num_tests=5):
     """
@@ -123,17 +124,20 @@ def run_simple_benchmark(manager, num_tests=5):
     # Create test generator
     test_generator = ReasoningTestGenerator(
         graph_store=manager.knowledge_store.graph_store,
-        knowledge_store=manager.knowledge_store
+        knowledge_store=manager.knowledge_store,
     )
 
     # Generate a small test suite
     test_suite = test_generator.generate_test_suite(
-        num_multi_hop=num_tests,
-        num_counterfactual=2
+        num_multi_hop=num_tests, num_counterfactual=2
     )
 
-    logger.info(f"Generated {len(test_suite['tests'].get('multi_hop', []))} multi-hop tests")
-    logger.info(f"Generated {len(test_suite['tests'].get('counterfactual', []))} counterfactual tests")
+    logger.info(
+        f"Generated {len(test_suite['tests'].get('multi_hop', []))} multi-hop tests"
+    )
+    logger.info(
+        f"Generated {len(test_suite['tests'].get('counterfactual', []))} counterfactual tests"
+    )
 
     # Display a few sample queries
     logger.info("Sample test queries:")
@@ -163,6 +167,7 @@ def run_simple_benchmark(manager, num_tests=5):
         if "answer" in result:
             logger.info(f"Answer: {result['answer']}")
 
+
 def run_comprehensive_evaluation(manager, results_dir="evaluation_results"):
     """
     Run a comprehensive evaluation using the evaluation framework.
@@ -177,7 +182,7 @@ def run_comprehensive_evaluation(manager, results_dir="evaluation_results"):
     framework = EvaluationFramework(
         manager=manager,
         results_dir=results_dir,
-        reasoning_log_db=os.path.join(results_dir, "reasoning_logs.db")
+        reasoning_log_db=os.path.join(results_dir, "reasoning_logs.db"),
     )
 
     # Run multi-hop benchmarks with a small number of tests
@@ -192,9 +197,13 @@ def run_comprehensive_evaluation(manager, results_dir="evaluation_results"):
 
             for query_type, metrics in benchmark_results["aggregated"].items():
                 if query_type == "overall":
-                    logger.info(f"  Overall composite score: {metrics.get('composite_score', 0):.3f}")
+                    logger.info(
+                        f"  Overall composite score: {metrics.get('composite_score', 0):.3f}"
+                    )
                 else:
-                    logger.info(f"  {query_type} composite score: {metrics.get('composite_score', 0):.3f}")
+                    logger.info(
+                        f"  {query_type} composite score: {metrics.get('composite_score', 0):.3f}"
+                    )
     except Exception as e:
         logger.error(f"Error running multi-hop benchmarks: {e}")
 
@@ -202,14 +211,20 @@ def run_comprehensive_evaluation(manager, results_dir="evaluation_results"):
     logger.info("\nEvaluating knowledge consistency")
     consistency_results = None
     try:
-        consistency_results = framework.evaluate_knowledge_consistency(time_window_days=7)
+        consistency_results = framework.evaluate_knowledge_consistency(
+            time_window_days=7
+        )
 
         if consistency_results and "consistency_metrics" in consistency_results:
             metrics = consistency_results["consistency_metrics"]
             logger.info("Consistency metrics summary:")
-            logger.info(f"  Consistency score: {metrics.get('consistency_score', 0):.3f}")
+            logger.info(
+                f"  Consistency score: {metrics.get('consistency_score', 0):.3f}"
+            )
             logger.info(f"  Stability score: {metrics.get('stability_score', 0):.3f}")
-            logger.info(f"  Contradiction rate: {metrics.get('contradiction_rate', 0):.3f}")
+            logger.info(
+                f"  Contradiction rate: {metrics.get('contradiction_rate', 0):.3f}"
+            )
     except Exception as e:
         logger.error(f"Error evaluating knowledge consistency: {e}")
 
@@ -222,7 +237,9 @@ def run_comprehensive_evaluation(manager, results_dir="evaluation_results"):
         if reasoning_analysis and "summary" in reasoning_analysis:
             summary = reasoning_analysis["summary"]
             logger.info("Reasoning path analysis summary:")
-            logger.info(f"  Average path length: {summary.get('avg_path_length', 0):.2f}")
+            logger.info(
+                f"  Average path length: {summary.get('avg_path_length', 0):.2f}"
+            )
             logger.info(f"  Success rate: {summary.get('success_rate', 0):.2f}")
 
             if "common_entities" in summary:
@@ -233,14 +250,29 @@ def run_comprehensive_evaluation(manager, results_dir="evaluation_results"):
 
     logger.info(f"\nEvaluation complete. Results stored in: {results_dir}")
 
+
 def main():
     """Main function to demonstrate the evaluation framework."""
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Demonstrate CortexFlow Evaluation Framework')
-    parser.add_argument('--db_path', type=str, default='cortexflow_eval.db', help='Path to knowledge database')
-    parser.add_argument('--sample_file', type=str, help='Path to sample knowledge file')
-    parser.add_argument('--results_dir', type=str, default='evaluation_results', help='Directory for results')
-    parser.add_argument('--simple', action='store_true', help='Run simple benchmark only')
+    parser = argparse.ArgumentParser(
+        description="Demonstrate CortexFlow Evaluation Framework"
+    )
+    parser.add_argument(
+        "--db_path",
+        type=str,
+        default="cortexflow_eval.db",
+        help="Path to knowledge database",
+    )
+    parser.add_argument("--sample_file", type=str, help="Path to sample knowledge file")
+    parser.add_argument(
+        "--results_dir",
+        type=str,
+        default="evaluation_results",
+        help="Directory for results",
+    )
+    parser.add_argument(
+        "--simple", action="store_true", help="Run simple benchmark only"
+    )
 
     args = parser.parse_args()
 
@@ -259,7 +291,7 @@ def main():
         use_graph_rag=True,
         enable_multi_hop_queries=True,
         max_graph_hops=3,
-        use_uncertainty_handling=True
+        use_uncertainty_handling=True,
     )
 
     manager = CortexFlowManager(config)
@@ -284,23 +316,19 @@ def main():
         score = 0.0
 
         for result in results:
-            if result.get('type') == 'graph_path':
-                path_text = result.get('text', '')
+            if result.get("type") == "graph_path":
+                path_text = result.get("text", "")
                 if path_text:
                     # Parse the path from text (assuming format like "A → B → C")
-                    path = [p.strip() for p in path_text.replace('→', '|').split('|')]
-                    score = result.get('score', 0.0)
+                    path = [p.strip() for p in path_text.replace("→", "|").split("|")]
+                    score = result.get("score", 0.0)
 
             # Collect entities
-            if 'entities' in result:
-                entities.extend(result.get('entities', []))
+            if "entities" in result:
+                entities.extend(result.get("entities", []))
 
         # Return formatted result
-        return {
-            "path": path,
-            "entities": list(set(entities)),
-            "score": score
-        }
+        return {"path": path, "entities": list(set(entities)), "score": score}
 
     # Add query method as a fallback
     def query(self, query):
@@ -323,12 +351,12 @@ def main():
         snapshot = {
             "timestamp": datetime.now().timestamp(),
             "entities": [],
-            "relations": []
+            "relations": [],
         }
 
         # Try to get entities and relations from database
         try:
-            if hasattr(self, 'conn') and self.conn is not None:
+            if hasattr(self, "conn") and self.conn is not None:
                 conn = self.conn
             else:
                 conn = sqlite3.connect(self.db_path)
@@ -346,7 +374,7 @@ def main():
             relations = [dict(row) for row in cursor.fetchall()]
             snapshot["relations"] = relations
 
-            if not hasattr(self, 'conn') or self.conn is None:
+            if not hasattr(self, "conn") or self.conn is None:
                 conn.close()
         except Exception as e:
             print(f"Error getting snapshots: {e}")
@@ -366,6 +394,7 @@ def main():
 
     # Monkey patch the methods into the KnowledgeStore class
     from cortexflow.knowledge import KnowledgeStore
+
     KnowledgeStore.get_snapshots = get_snapshots
     KnowledgeStore.take_snapshot = take_snapshot
 
@@ -387,7 +416,9 @@ def main():
         UncertaintyHandler.get_belief_revision_history = get_belief_revision_history
     except ImportError:
         # UncertaintyHandler doesn't exist or cannot be imported
-        logger.warning("UncertaintyHandler not found, belief revision history will be empty")
+        logger.warning(
+            "UncertaintyHandler not found, belief revision history will be empty"
+        )
 
     # Load sample knowledge
     load_sample_knowledge(manager, args.sample_file)
@@ -397,6 +428,7 @@ def main():
         run_simple_benchmark(manager)
     else:
         run_comprehensive_evaluation(manager, args.results_dir)
+
 
 if __name__ == "__main__":
     main()

@@ -5,6 +5,7 @@ Provides ``AsyncCortexFlowManager`` which wraps the synchronous
 ``CortexFlowManager`` using ``asyncio.to_thread()`` for CPU/IO-bound
 operations, while leveraging native async for LLM calls where supported.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -53,11 +54,14 @@ class AsyncCortexFlowManager:
     # Memory
     # ------------------------------------------------------------------
 
-    async def add_message(self, role: str, content: str,
-                          metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def add_message(
+        self, role: str, content: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         return await asyncio.to_thread(self._sync.add_message, role, content, metadata)
 
-    async def get_conversation_context(self, max_tokens: int | None = None) -> dict[str, Any]:
+    async def get_conversation_context(
+        self, max_tokens: int | None = None
+    ) -> dict[str, Any]:
         return await asyncio.to_thread(self._sync.get_conversation_context, max_tokens)
 
     async def clear_memory(self) -> None:
@@ -67,8 +71,9 @@ class AsyncCortexFlowManager:
     # Response generation
     # ------------------------------------------------------------------
 
-    async def generate_response(self, prompt: str | None = None,
-                                model: str | None = None) -> str:
+    async def generate_response(
+        self, prompt: str | None = None, model: str | None = None
+    ) -> str:
         """Generate a response, preferring native async LLM call."""
         llm = self._sync.llm_client
         if hasattr(llm, "agenerate") and prompt is not None:
@@ -80,8 +85,9 @@ class AsyncCortexFlowManager:
         # Full orchestration path (sync, off-loaded to thread)
         return await asyncio.to_thread(self._sync.generate_response, prompt, model)
 
-    async def generate_response_stream(self, prompt: str | None = None,
-                                       model: str | None = None) -> AsyncIterator[str]:
+    async def generate_response_stream(
+        self, prompt: str | None = None, model: str | None = None
+    ) -> AsyncIterator[str]:
         """Yield response chunks asynchronously."""
         # Off-load the sync iterator to a background thread and bridge
         # via an asyncio.Queue.
@@ -109,9 +115,12 @@ class AsyncCortexFlowManager:
     # Knowledge
     # ------------------------------------------------------------------
 
-    async def add_knowledge(self, text: str, source: str | None = None,
-                            confidence: float | None = None) -> list[int]:
-        return await asyncio.to_thread(self._sync.add_knowledge, text, source, confidence)
+    async def add_knowledge(
+        self, text: str, source: str | None = None, confidence: float | None = None
+    ) -> list[int]:
+        return await asyncio.to_thread(
+            self._sync.add_knowledge, text, source, confidence
+        )
 
     async def get_knowledge(self, query: str) -> list[dict[str, Any]]:
         return await asyncio.to_thread(self._sync.get_knowledge, query)
@@ -126,9 +135,15 @@ class AsyncCortexFlowManager:
     # Session management (pass-through when sessions enabled)
     # ------------------------------------------------------------------
 
-    async def create_session(self, user_id: str, persona_id: str | None = None,
-                             metadata: dict[str, Any] | None = None):
-        return await asyncio.to_thread(self._sync.create_session, user_id, persona_id, metadata)
+    async def create_session(
+        self,
+        user_id: str,
+        persona_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ):
+        return await asyncio.to_thread(
+            self._sync.create_session, user_id, persona_id, metadata
+        )
 
     async def switch_session(self, session_id: str):
         return await asyncio.to_thread(self._sync.switch_session, session_id)

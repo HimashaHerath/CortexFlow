@@ -3,12 +3,12 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath('../..'))
+sys.path.insert(0, os.path.abspath("../.."))
 
 # Project information
-project = 'CortexFlow'
-copyright = '2025-2026, CortexFlow Team'
-author = 'CortexFlow Team'
+project = "CortexFlow"
+copyright = "2025-2026, CortexFlow Team"
+author = "CortexFlow Team"
 
 # Import project version
 from cortexflow.version import __version__  # noqa: E402
@@ -17,26 +17,26 @@ release = __version__
 
 # Extensions
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.intersphinx',
-    'myst_parser',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.intersphinx",
+    "myst_parser",
 ]
 
 # Add mappings for intersphinx
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'numpy': ('https://numpy.org/doc/stable/', None),
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
 }
 
 # Templates
-templates_path = ['_templates']
+templates_path = ["_templates"]
 exclude_patterns = []
 
 # Theme
-html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
+html_theme = "sphinx_rtd_theme"
+html_static_path = ["_static"]
 
 # Logo (commented out — files do not exist yet)
 # html_logo = '_static/logo.png'
@@ -44,11 +44,11 @@ html_static_path = ['_static']
 
 # Custom sidebar templates
 html_sidebars = {
-    '**': [
-        'globaltoc.html',
-        'relations.html',
-        'sourcelink.html',
-        'searchbox.html',
+    "**": [
+        "globaltoc.html",
+        "relations.html",
+        "sourcelink.html",
+        "searchbox.html",
     ]
 }
 

@@ -13,6 +13,7 @@ from cortexflow.dynamic_weighting import DynamicWeightingEngine
 # Add import for GraphStore
 try:
     from cortexflow.graph_store import GraphStore
+
     HAS_GRAPH_STORE = True
 except ImportError:
     HAS_GRAPH_STORE = False
@@ -20,23 +21,27 @@ except ImportError:
 # Check if spaCy model is available (needed for entity/relation extraction tests)
 try:
     import spacy
+
     spacy.load("en_core_web_sm")
     HAS_SPACY_MODEL = True
 except Exception:
     HAS_SPACY_MODEL = False
+
 
 class TestDynamicWeightingEngine:
     """Tests for the DynamicWeightingEngine class"""
 
     def test_init(self):
         """Test initialization of DynamicWeightingEngine"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=1000,
-            working_token_limit=2000,
-            archive_token_limit=3000,
-            use_dynamic_weighting=True,
-            dynamic_weighting_learning_rate=0.1
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=1000,
+                working_token_limit=2000,
+                archive_token_limit=3000,
+                use_dynamic_weighting=True,
+                dynamic_weighting_learning_rate=0.1,
+            )
+        )
 
         engine = DynamicWeightingEngine(config)
 
@@ -50,18 +55,22 @@ class TestDynamicWeightingEngine:
 
     def test_analyze_query_complexity(self):
         """Test query complexity analysis"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=1000,
-            working_token_limit=2000,
-            archive_token_limit=3000
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=1000,
+                working_token_limit=2000,
+                archive_token_limit=3000,
+            )
+        )
 
         engine = DynamicWeightingEngine(config)
 
         # Test various query types
         simple_query = "What time is it?"
         medium_query = "Can you explain how photosynthesis works?"
-        complex_query = "What is the relationship between quantum mechanics and general relativity?"
+        complex_query = (
+            "What is the relationship between quantum mechanics and general relativity?"
+        )
         code_query = "Write a Python function to implement quicksort algorithm with detailed comments."
         multi_part_query = "What is the capital of France? Also, what's the population? And when was the Eiffel Tower built?"
 
@@ -87,11 +96,13 @@ class TestDynamicWeightingEngine:
 
     def test_analyze_document_type(self):
         """Test document type analysis"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=1000,
-            working_token_limit=2000,
-            archive_token_limit=3000
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=1000,
+                working_token_limit=2000,
+                archive_token_limit=3000,
+            )
+        )
 
         engine = DynamicWeightingEngine(config)
 
@@ -170,15 +181,19 @@ class TestDynamicWeightingEngine:
 
         # Empty content edge case
         assert engine.analyze_document_type("") == "text"  # Default is text
-        assert engine.analyze_document_type(None) == "text"  # None should default to text
+        assert (
+            engine.analyze_document_type(None) == "text"
+        )  # None should default to text
 
     def test_calculate_optimal_weights(self):
         """Test optimal weight calculation"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=1000,
-            working_token_limit=2000,
-            archive_token_limit=3000
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=1000,
+                working_token_limit=2000,
+                archive_token_limit=3000,
+            )
+        )
 
         engine = DynamicWeightingEngine(config)
 
@@ -208,11 +223,13 @@ class TestDynamicWeightingEngine:
 
     def test_update_tier_allocations(self):
         """Test updating tier allocations"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=1000,
-            working_token_limit=2000,
-            archive_token_limit=3000
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=1000,
+                working_token_limit=2000,
+                archive_token_limit=3000,
+            )
+        )
 
         engine = DynamicWeightingEngine(config)
 
@@ -224,9 +241,9 @@ class TestDynamicWeightingEngine:
 
         # Modify weights and check new allocations
         engine.current_tier_weights = {
-            "active": 0.4,    # Increased
-            "working": 0.4,   # Increased
-            "archive": 0.2    # Decreased
+            "active": 0.4,  # Increased
+            "working": 0.4,  # Increased
+            "archive": 0.2,  # Decreased
         }
 
         new_limits = engine.update_tier_allocations()
@@ -236,9 +253,9 @@ class TestDynamicWeightingEngine:
 
         # Test minimum tier size enforcement
         engine.current_tier_weights = {
-            "active": 0.01,   # Very small
+            "active": 0.01,  # Very small
             "working": 0.01,  # Very small
-            "archive": 0.98   # Almost everything
+            "archive": 0.98,  # Almost everything
         }
 
         min_limits = engine.update_tier_allocations()
@@ -251,12 +268,14 @@ class TestDynamicWeightingEngine:
 
     def test_process_query(self):
         """Test processing a query and updating allocations"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=1000,
-            working_token_limit=2000,
-            archive_token_limit=3000,
-            dynamic_weighting_learning_rate=0.5  # High learning rate for testing
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=1000,
+                working_token_limit=2000,
+                archive_token_limit=3000,
+                dynamic_weighting_learning_rate=0.5,  # High learning rate for testing
+            )
+        )
 
         engine = DynamicWeightingEngine(config)
 
@@ -282,7 +301,7 @@ class TestDynamicWeightingEngine:
 
         engine.process_query(
             "Explain how quantum computing differs from classical computing with detailed examples.",
-            complex_context
+            complex_context,
         )
 
         # Check that weights were updated in some way
@@ -290,11 +309,13 @@ class TestDynamicWeightingEngine:
 
     def test_get_stats(self):
         """Test getting statistics"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=1000,
-            working_token_limit=2000,
-            archive_token_limit=3000
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=1000,
+                working_token_limit=2000,
+                archive_token_limit=3000,
+            )
+        )
 
         engine = DynamicWeightingEngine(config)
 
@@ -314,12 +335,14 @@ class TestDynamicWeightingEngine:
 
     def test_reset_to_defaults(self):
         """Test resetting weights to defaults"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=1000,
-            working_token_limit=2000,
-            archive_token_limit=3000,
-            dynamic_weighting_learning_rate=0.5  # High learning rate for testing
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=1000,
+                working_token_limit=2000,
+                archive_token_limit=3000,
+                dynamic_weighting_learning_rate=0.5,  # High learning rate for testing
+            )
+        )
 
         engine = DynamicWeightingEngine(config)
 
@@ -344,18 +367,14 @@ def mock_engine():
     engine.process_query.return_value = {
         "active": 1500,
         "working": 2500,
-        "archive": 2000
+        "archive": 2000,
     }
     engine.get_stats.return_value = {
         "current_weights": {"active": 0.25, "working": 0.35, "archive": 0.4},
         "current_limits": {"active": 1500, "working": 2500, "archive": 2000},
-        "enabled": True
+        "enabled": True,
     }
-    engine.current_tier_limits = {
-        "active": 1500,
-        "working": 2500,
-        "archive": 2000
-    }
+    engine.current_tier_limits = {"active": 1500, "working": 2500, "archive": 2000}
     return engine
 
 
@@ -367,20 +386,26 @@ def test_manager_integration(mock_engine_class, mock_engine):
     mock_engine_class.return_value = mock_engine
 
     # Create configuration
-    CortexFlowConfig(memory=MemoryConfig(
-        active_token_limit=1000,
-        working_token_limit=2000,
-        archive_token_limit=3000,
-        use_dynamic_weighting=True
-    ))
+    CortexFlowConfig(
+        memory=MemoryConfig(
+            active_token_limit=1000,
+            working_token_limit=2000,
+            archive_token_limit=3000,
+            use_dynamic_weighting=True,
+        )
+    )
 
     # Skip this test for now as it needs more investigation into how manager integrates with engine
-    pytest.skip("Integration test needs further investigation of manager implementation")
+    pytest.skip(
+        "Integration test needs further investigation of manager implementation"
+    )
 
 
 @pytest.mark.timeout(180)
 @pytest.mark.skipif(not HAS_GRAPH_STORE, reason="GraphStore not available")
-@pytest.mark.skipif(not HAS_SPACY_MODEL, reason="spaCy en_core_web_sm model not installed")
+@pytest.mark.skipif(
+    not HAS_SPACY_MODEL, reason="spaCy en_core_web_sm model not installed"
+)
 class TestEntityRelationExtraction:
     """Test the enhanced entity and relation extraction capabilities"""
 
@@ -388,31 +413,35 @@ class TestEntityRelationExtraction:
         """Set up test environment for entity and relation extraction"""
         import os
         import tempfile
+
         self._tmp_dir = tempfile.mkdtemp()
         db_path = os.path.join(self._tmp_dir, "test_graph.db")
         config = CortexFlowConfig(
             knowledge_store=KnowledgeStoreConfig(knowledge_store_path=db_path),
-            graph_rag=GraphRagConfig(use_graph_rag=True)
+            graph_rag=GraphRagConfig(use_graph_rag=True),
         )
         self.graph_store = GraphStore(config)
 
     def teardown_method(self):
         """Clean up temp files."""
         import shutil
-        if hasattr(self, 'graph_store') and self.graph_store:
+
+        if hasattr(self, "graph_store") and self.graph_store:
             try:
                 self.graph_store.close()
             except Exception:
                 pass
-        if hasattr(self, '_tmp_dir'):
+        if hasattr(self, "_tmp_dir"):
             shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
     def test_entity_extraction(self):
         """Test the enhanced entity extraction capabilities"""
         # Test text with various entity types
-        text = "Apple Inc. was founded by Steve Jobs in California in 1976. " \
-               "The company released the iPhone in 2007, which runs on iOS. " \
-               "Tim Cook is the current CEO and the stock price was $150.23 on May 15, 2023."
+        text = (
+            "Apple Inc. was founded by Steve Jobs in California in 1976. "
+            "The company released the iPhone in 2007, which runs on iOS. "
+            "Tim Cook is the current CEO and the stock price was $150.23 on May 15, 2023."
+        )
 
         entities = self.graph_store.extract_entities(text)
 
@@ -430,22 +459,30 @@ class TestEntityRelationExtraction:
         assert "Tim Cook" in entity_texts, "Failed to extract 'Tim Cook'"
 
         # Check for numeric entities (NER models may or may not extract these)
-        assert any("1976" in entity or "2007" in entity or "2023" in entity
-                   for entity in entity_texts.keys()), \
-            "Failed to extract any date/year entity"
+        assert any(
+            "1976" in entity or "2007" in entity or "2023" in entity
+            for entity in entity_texts.keys()
+        ), "Failed to extract any date/year entity"
 
         # Check specific entity types
-        assert entity_texts.get("Steve Jobs") in ["PERSON", "PROPER_NOUN"], \
+        assert entity_texts.get("Steve Jobs") in ["PERSON", "PROPER_NOUN"], (
             f"Steve Jobs should be a PERSON or PROPER_NOUN, got {entity_texts.get('Steve Jobs')}"
-        assert entity_texts.get("California") in ["GPE", "LOC", "LOCATION", "PROPER_NOUN"], \
-            f"California should be a location, got {entity_texts.get('California')}"
+        )
+        assert entity_texts.get("California") in [
+            "GPE",
+            "LOC",
+            "LOCATION",
+            "PROPER_NOUN",
+        ], f"California should be a location, got {entity_texts.get('California')}"
 
     def test_domain_specific_entity_extraction(self):
         """Test extraction of domain-specific entities"""
         # Tech domain text
-        text = "Python has become very popular for machine learning applications. " \
-               "Many developers use TensorFlow and PyTorch for deep learning " \
-               "projects, especially when working with CNNs or RNNs."
+        text = (
+            "Python has become very popular for machine learning applications. "
+            "Many developers use TensorFlow and PyTorch for deep learning "
+            "projects, especially when working with CNNs or RNNs."
+        )
 
         entities = self.graph_store.extract_entities(text)
 
@@ -454,24 +491,35 @@ class TestEntityRelationExtraction:
 
         # Check for programming language detection (NER models may classify as various types)
         assert "Python" in entity_texts, "Failed to detect Python as an entity"
-        assert entity_texts.get("Python") in ["PROGRAMMING_LANGUAGE", "PRODUCT", "ORG", "MISC", "NORP"], \
-            f"Python should be recognized as an entity, got {entity_texts.get('Python')}"
+        assert entity_texts.get("Python") in [
+            "PROGRAMMING_LANGUAGE",
+            "PRODUCT",
+            "ORG",
+            "MISC",
+            "NORP",
+        ], f"Python should be recognized as an entity, got {entity_texts.get('Python')}"
 
         # Check that at least some tech-related entities were extracted
         # NER models vary in what they detect; verify the list is non-empty
-        assert len(entity_texts) > 0, "Should extract at least some entities from tech text"
+        assert len(entity_texts) > 0, (
+            "Should extract at least some entities from tech text"
+        )
 
     def test_relation_extraction(self):
         """Test the enhanced relation extraction capabilities"""
         # Test text with clear subject-verb-object relationships
-        text = "Steve Jobs founded Apple in California. Microsoft develops Windows. " \
-               "The researchers published their findings in Nature. " \
-               "Google acquired YouTube for $1.65 billion in 2006."
+        text = (
+            "Steve Jobs founded Apple in California. Microsoft develops Windows. "
+            "The researchers published their findings in Nature. "
+            "Google acquired YouTube for $1.65 billion in 2006."
+        )
 
         relations = self.graph_store.extract_relations(text)
 
         # Check that we extracted some relations (count depends on NLP model)
-        assert len(relations) >= 1, f"Expected at least 1 relation, got {len(relations)}"
+        assert len(relations) >= 1, (
+            f"Expected at least 1 relation, got {len(relations)}"
+        )
 
         # Check relation format — each should be a triple
         for rel in relations:
@@ -487,7 +535,7 @@ class TestEntityRelationExtraction:
         # Use a fresh in-memory GraphStore to avoid SQLite file locking issues
         config = CortexFlowConfig(
             knowledge_store=KnowledgeStoreConfig(knowledge_store_path=":memory:"),
-            graph_rag=GraphRagConfig(use_graph_rag=True)
+            graph_rag=GraphRagConfig(use_graph_rag=True),
         )
         gs = GraphStore(config)
         try:

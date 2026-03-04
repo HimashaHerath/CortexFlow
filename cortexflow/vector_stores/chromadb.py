@@ -7,6 +7,7 @@ Requires the ``chromadb`` package::
 If the package is not installed, importing this module will succeed but
 instantiating :class:`ChromaDBBackend` will raise :exc:`ImportError`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,7 +52,9 @@ class ChromaDBBackend(VectorStoreBackend):
 
         # Read config
         vs_cfg = getattr(config, "vector_store", None)
-        collection_name = getattr(vs_cfg, "collection_name", "cortexflow") if vs_cfg else "cortexflow"
+        collection_name = (
+            getattr(vs_cfg, "collection_name", "cortexflow") if vs_cfg else "cortexflow"
+        )
         host = getattr(vs_cfg, "chromadb_host", None) if vs_cfg else None
         port = getattr(vs_cfg, "chromadb_port", None) if vs_cfg else None
         path = getattr(vs_cfg, "chromadb_path", None) if vs_cfg else None

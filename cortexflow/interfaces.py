@@ -24,7 +24,9 @@ class ContextProvider(ABC):
     """Base interface for context providers."""
 
     @abstractmethod
-    def add_message(self, role: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    def add_message(
+        self, role: str, content: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Add a message to the context."""
         pass
 
@@ -62,7 +64,9 @@ class KnowledgeStoreInterface(ABC):
     """Interface for knowledge stores."""
 
     @abstractmethod
-    def add_knowledge(self, text: str, source: str | None = None, confidence: float = 0.95) -> list[int]:
+    def add_knowledge(
+        self, text: str, source: str | None = None, confidence: float = 0.95
+    ) -> list[int]:
         """Store knowledge in the system.
 
         Args:
@@ -90,7 +94,9 @@ class LLMProviderInterface(ABC):
     """Interface for LLM providers."""
 
     @abstractmethod
-    def generate(self, messages: list[dict[str, str]], model: str = None, **kwargs) -> str:
+    def generate(
+        self, messages: list[dict[str, str]], model: str = None, **kwargs
+    ) -> str:
         """Generate a response from a list of role/content messages."""
         pass
 
@@ -100,15 +106,21 @@ class LLMProviderInterface(ABC):
         pass
 
     @abstractmethod
-    def generate_stream(self, messages: list[dict[str, str]], model: str = None, **kwargs) -> Iterator[str]:
+    def generate_stream(
+        self, messages: list[dict[str, str]], model: str = None, **kwargs
+    ) -> Iterator[str]:
         """Stream a response from a list of role/content messages."""
         pass
 
-    async def agenerate(self, messages: list[dict[str, str]], model: str = None, **kwargs) -> str:
+    async def agenerate(
+        self, messages: list[dict[str, str]], model: str = None, **kwargs
+    ) -> str:
         """Async generate a response. Default delegates to sync."""
         return self.generate(messages, model=model, **kwargs)
 
-    async def agenerate_from_prompt(self, prompt: str, model: str = None, **kwargs) -> str:
+    async def agenerate_from_prompt(
+        self, prompt: str, model: str = None, **kwargs
+    ) -> str:
         """Async generate from prompt. Default delegates to sync."""
         return self.generate_from_prompt(prompt, model=model, **kwargs)
 
@@ -129,8 +141,9 @@ class AsyncContextProvider(ABC):
     """Async variant of ContextProvider."""
 
     @abstractmethod
-    async def add_message(self, role: str, content: str,
-                          metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def add_message(
+        self, role: str, content: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         pass
 
     @abstractmethod
@@ -146,8 +159,9 @@ class AsyncKnowledgeStoreInterface(ABC):
     """Async variant of KnowledgeStoreInterface."""
 
     @abstractmethod
-    async def add_knowledge(self, text: str, source: str | None = None,
-                            confidence: float = 0.95) -> list[int]:
+    async def add_knowledge(
+        self, text: str, source: str | None = None, confidence: float = 0.95
+    ) -> list[int]:
         pass
 
     @abstractmethod

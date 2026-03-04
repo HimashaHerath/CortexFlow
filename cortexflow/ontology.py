@@ -8,6 +8,7 @@ based on new information. It supports:
 - Properties and constraints for entity types
 - Dynamic schema evolution
 """
+
 from __future__ import annotations
 
 import json
@@ -20,8 +21,14 @@ from typing import Any
 class OntologyClass:
     """Represents a class in the ontology with inheritance capabilities."""
 
-    def __init__(self, name: str, parent_classes: list[str] = None, properties: dict[str, Any] = None,
-                 constraints: dict[str, Any] = None, metadata: dict[str, Any] = None):
+    def __init__(
+        self,
+        name: str,
+        parent_classes: list[str] = None,
+        properties: dict[str, Any] = None,
+        constraints: dict[str, Any] = None,
+        metadata: dict[str, Any] = None,
+    ):
         """
         Initialize an ontology class.
 
@@ -50,7 +57,7 @@ class OntologyClass:
             "constraints": self.constraints,
             "metadata": self.metadata,
             "creation_time": self.creation_time,
-            "last_modified_time": self.last_modified_time
+            "last_modified_time": self.last_modified_time,
         }
 
     @classmethod
@@ -61,18 +68,28 @@ class OntologyClass:
             parent_classes=data.get("parent_classes", []),
             properties=data.get("properties", {}),
             constraints=data.get("constraints", {}),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
         instance.creation_time = data.get("creation_time", time.time())
-        instance.last_modified_time = data.get("last_modified_time", instance.creation_time)
+        instance.last_modified_time = data.get(
+            "last_modified_time", instance.creation_time
+        )
         return instance
+
 
 class RelationType:
     """Represents a type of relationship in the ontology with inheritance capabilities."""
 
-    def __init__(self, name: str, parent_types: list[str] = None, source_classes: list[str] = None,
-                 target_classes: list[str] = None, cardinality: str = "many-to-many",
-                 properties: dict[str, Any] = None, metadata: dict[str, Any] = None):
+    def __init__(
+        self,
+        name: str,
+        parent_types: list[str] = None,
+        source_classes: list[str] = None,
+        target_classes: list[str] = None,
+        cardinality: str = "many-to-many",
+        properties: dict[str, Any] = None,
+        metadata: dict[str, Any] = None,
+    ):
         """
         Initialize a relationship type.
 
@@ -107,7 +124,7 @@ class RelationType:
             "properties": self.properties,
             "metadata": self.metadata,
             "creation_time": self.creation_time,
-            "last_modified_time": self.last_modified_time
+            "last_modified_time": self.last_modified_time,
         }
 
     @classmethod
@@ -120,11 +137,14 @@ class RelationType:
             target_classes=data.get("target_classes", []),
             cardinality=data.get("cardinality", "many-to-many"),
             properties=data.get("properties", {}),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
         instance.creation_time = data.get("creation_time", time.time())
-        instance.last_modified_time = data.get("last_modified_time", instance.creation_time)
+        instance.last_modified_time = data.get(
+            "last_modified_time", instance.creation_time
+        )
         return instance
+
 
 class Ontology:
     """Manages the knowledge graph ontology with schema evolution capabilities."""
@@ -139,8 +159,12 @@ class Ontology:
         self.db_path = db_path
         self.classes: dict[str, OntologyClass] = {}
         self.relation_types: dict[str, RelationType] = {}
-        self.class_hierarchy: dict[str, list[str]] = {}  # Maps class name to subclass names
-        self.relation_hierarchy: dict[str, list[str]] = {}  # Maps relation type to subtype names
+        self.class_hierarchy: dict[
+            str, list[str]
+        ] = {}  # Maps class name to subclass names
+        self.relation_hierarchy: dict[
+            str, list[str]
+        ] = {}  # Maps relation type to subtype names
 
         # Initialize database tables for ontology
         self._init_db()
@@ -161,24 +185,24 @@ class Ontology:
 
         try:
             # Create ontology_classes table
-            cursor.execute('''
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ontology_classes (
                     name TEXT PRIMARY KEY,
                     data TEXT NOT NULL,
                     creation_time REAL,
                     last_modified_time REAL
                 )
-            ''')
+            """)
 
             # Create ontology_relation_types table
-            cursor.execute('''
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ontology_relation_types (
                     name TEXT PRIMARY KEY,
                     data TEXT NOT NULL,
                     creation_time REAL,
                     last_modified_time REAL
                 )
-            ''')
+            """)
 
             conn.commit()
 
@@ -195,13 +219,13 @@ class Ontology:
 
         try:
             # Load classes
-            cursor.execute('SELECT name, data FROM ontology_classes')
+            cursor.execute("SELECT name, data FROM ontology_classes")
             for row in cursor.fetchall():
                 class_data = json.loads(row[1])
                 self.classes[row[0]] = OntologyClass.from_dict(class_data)
 
             # Load relation types
-            cursor.execute('SELECT name, data FROM ontology_relation_types')
+            cursor.execute("SELECT name, data FROM ontology_relation_types")
             for row in cursor.fetchall():
                 relation_data = json.loads(row[1])
                 self.relation_types[row[0]] = RelationType.from_dict(relation_data)
@@ -221,29 +245,62 @@ class Ontology:
         # Add basic entity classes
         basic_classes = [
             OntologyClass(name="Thing", properties={"name": "string"}),
-            OntologyClass(name="Person", parent_classes=["Thing"],
-                        properties={"age": "integer", "occupation": "string"}),
-            OntologyClass(name="Organization", parent_classes=["Thing"],
-                        properties={"founded": "date", "industry": "string"}),
-            OntologyClass(name="Location", parent_classes=["Thing"],
-                        properties={"latitude": "float", "longitude": "float"}),
-            OntologyClass(name="Concept", parent_classes=["Thing"],
-                        properties={"definition": "string"}),
-            OntologyClass(name="Event", parent_classes=["Thing"],
-                        properties={"start_time": "datetime", "end_time": "datetime"})
+            OntologyClass(
+                name="Person",
+                parent_classes=["Thing"],
+                properties={"age": "integer", "occupation": "string"},
+            ),
+            OntologyClass(
+                name="Organization",
+                parent_classes=["Thing"],
+                properties={"founded": "date", "industry": "string"},
+            ),
+            OntologyClass(
+                name="Location",
+                parent_classes=["Thing"],
+                properties={"latitude": "float", "longitude": "float"},
+            ),
+            OntologyClass(
+                name="Concept",
+                parent_classes=["Thing"],
+                properties={"definition": "string"},
+            ),
+            OntologyClass(
+                name="Event",
+                parent_classes=["Thing"],
+                properties={"start_time": "datetime", "end_time": "datetime"},
+            ),
         ]
 
         # Add basic relation types
         basic_relation_types = [
-            RelationType(name="related_to", source_classes=["Thing"], target_classes=["Thing"]),
-            RelationType(name="located_in", parent_types=["related_to"],
-                        source_classes=["Thing"], target_classes=["Location"]),
-            RelationType(name="works_for", parent_types=["related_to"],
-                        source_classes=["Person"], target_classes=["Organization"]),
-            RelationType(name="knows", parent_types=["related_to"],
-                        source_classes=["Person"], target_classes=["Person"]),
-            RelationType(name="part_of", parent_types=["related_to"],
-                        source_classes=["Thing"], target_classes=["Thing"])
+            RelationType(
+                name="related_to", source_classes=["Thing"], target_classes=["Thing"]
+            ),
+            RelationType(
+                name="located_in",
+                parent_types=["related_to"],
+                source_classes=["Thing"],
+                target_classes=["Location"],
+            ),
+            RelationType(
+                name="works_for",
+                parent_types=["related_to"],
+                source_classes=["Person"],
+                target_classes=["Organization"],
+            ),
+            RelationType(
+                name="knows",
+                parent_types=["related_to"],
+                source_classes=["Person"],
+                target_classes=["Person"],
+            ),
+            RelationType(
+                name="part_of",
+                parent_types=["related_to"],
+                source_classes=["Thing"],
+                target_classes=["Thing"],
+            ),
         ]
 
         # Add all basic classes
@@ -258,7 +315,9 @@ class Ontology:
         """Build the hierarchy maps for classes and relation types."""
         # Reset hierarchy maps
         self.class_hierarchy = {cls_name: [] for cls_name in self.classes.keys()}
-        self.relation_hierarchy = {rel_name: [] for rel_name in self.relation_types.keys()}
+        self.relation_hierarchy = {
+            rel_name: [] for rel_name in self.relation_types.keys()
+        }
 
         # Build class hierarchy
         for cls_name, cls in self.classes.items():
@@ -289,15 +348,18 @@ class Ontology:
 
         try:
             # Add class to database
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO ontology_classes (name, data, creation_time, last_modified_time)
                 VALUES (?, ?, ?, ?)
-            ''', (
-                cls.name,
-                json.dumps(cls.to_dict()),
-                cls.creation_time,
-                cls.last_modified_time
-            ))
+            """,
+                (
+                    cls.name,
+                    json.dumps(cls.to_dict()),
+                    cls.creation_time,
+                    cls.last_modified_time,
+                ),
+            )
 
             conn.commit()
 
@@ -332,15 +394,18 @@ class Ontology:
 
         try:
             # Add relation type to database
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO ontology_relation_types (name, data, creation_time, last_modified_time)
                 VALUES (?, ?, ?, ?)
-            ''', (
-                rel_type.name,
-                json.dumps(rel_type.to_dict()),
-                rel_type.creation_time,
-                rel_type.last_modified_time
-            ))
+            """,
+                (
+                    rel_type.name,
+                    json.dumps(rel_type.to_dict()),
+                    rel_type.creation_time,
+                    rel_type.last_modified_time,
+                ),
+            )
 
             conn.commit()
 
@@ -368,7 +433,9 @@ class Ontology:
         """Get a relation type by name."""
         return self.relation_types.get(name)
 
-    def get_all_subclasses(self, class_name: str, include_indirect: bool = True) -> list[str]:
+    def get_all_subclasses(
+        self, class_name: str, include_indirect: bool = True
+    ) -> list[str]:
         """
         Get all subclasses of a given class.
 
@@ -393,7 +460,9 @@ class Ontology:
 
         return list(set(all_subclasses))  # Remove duplicates
 
-    def get_all_subtypes(self, relation_type: str, include_indirect: bool = True) -> list[str]:
+    def get_all_subtypes(
+        self, relation_type: str, include_indirect: bool = True
+    ) -> list[str]:
         """
         Get all subtypes of a given relation type.
 
@@ -437,7 +506,9 @@ class Ontology:
 
         # Check direct parent classes
         for parent in self.classes[class_name].parent_classes:
-            if parent == potential_parent or self.is_subclass_of(parent, potential_parent):
+            if parent == potential_parent or self.is_subclass_of(
+                parent, potential_parent
+            ):
                 return True
 
         return False
@@ -461,14 +532,21 @@ class Ontology:
 
         # Check direct parent types
         for parent in self.relation_types[relation_type].parent_types:
-            if parent == potential_parent or self.is_subtype_of(parent, potential_parent):
+            if parent == potential_parent or self.is_subtype_of(
+                parent, potential_parent
+            ):
                 return True
 
         return False
 
-    def update_class(self, name: str, properties: dict[str, Any] = None,
-                   parent_classes: list[str] = None, constraints: dict[str, Any] = None,
-                   metadata: dict[str, Any] = None) -> bool:
+    def update_class(
+        self,
+        name: str,
+        properties: dict[str, Any] = None,
+        parent_classes: list[str] = None,
+        constraints: dict[str, Any] = None,
+        metadata: dict[str, Any] = None,
+    ) -> bool:
         """
         Update an existing class in the ontology.
 
@@ -507,15 +585,14 @@ class Ontology:
         cursor = conn.cursor()
 
         try:
-            cursor.execute('''
+            cursor.execute(
+                """
                 UPDATE ontology_classes
                 SET data = ?, last_modified_time = ?
                 WHERE name = ?
-            ''', (
-                json.dumps(cls.to_dict()),
-                cls.last_modified_time,
-                name
-            ))
+            """,
+                (json.dumps(cls.to_dict()), cls.last_modified_time, name),
+            )
 
             conn.commit()
 
@@ -532,10 +609,16 @@ class Ontology:
         finally:
             conn.close()
 
-    def update_relation_type(self, name: str, parent_types: list[str] = None,
-                           source_classes: list[str] = None, target_classes: list[str] = None,
-                           cardinality: str = None, properties: dict[str, Any] = None,
-                           metadata: dict[str, Any] = None) -> bool:
+    def update_relation_type(
+        self,
+        name: str,
+        parent_types: list[str] = None,
+        source_classes: list[str] = None,
+        target_classes: list[str] = None,
+        cardinality: str = None,
+        properties: dict[str, Any] = None,
+        metadata: dict[str, Any] = None,
+    ) -> bool:
         """
         Update an existing relation type in the ontology.
 
@@ -582,15 +665,14 @@ class Ontology:
         cursor = conn.cursor()
 
         try:
-            cursor.execute('''
+            cursor.execute(
+                """
                 UPDATE ontology_relation_types
                 SET data = ?, last_modified_time = ?
                 WHERE name = ?
-            ''', (
-                json.dumps(rel_type.to_dict()),
-                rel_type.last_modified_time,
-                name
-            ))
+            """,
+                (json.dumps(rel_type.to_dict()), rel_type.last_modified_time, name),
+            )
 
             conn.commit()
 
@@ -607,8 +689,9 @@ class Ontology:
         finally:
             conn.close()
 
-    def suggest_new_class(self, entity_name: str, entity_type: str,
-                        entity_properties: dict[str, Any]) -> OntologyClass | None:
+    def suggest_new_class(
+        self, entity_name: str, entity_type: str, entity_properties: dict[str, Any]
+    ) -> OntologyClass | None:
         """
         Suggest a new class in the ontology based on entity patterns.
         This enables automatic ontology evolution.
@@ -643,14 +726,15 @@ class Ontology:
             metadata={
                 "suggested_from": entity_name,
                 "automatic": True,
-                "confidence": 0.7
-            }
+                "confidence": 0.7,
+            },
         )
 
         return suggested_class
 
-    def suggest_new_relation_type(self, source_entity: str, relation: str,
-                                target_entity: str) -> RelationType | None:
+    def suggest_new_relation_type(
+        self, source_entity: str, relation: str, target_entity: str
+    ) -> RelationType | None:
         """
         Suggest a new relation type in the ontology based on observed patterns.
         This enables automatic ontology evolution.
@@ -683,8 +767,8 @@ class Ontology:
             metadata={
                 "suggested_from": f"{source_entity} {relation} {target_entity}",
                 "automatic": True,
-                "confidence": 0.7
-            }
+                "confidence": 0.7,
+            },
         )
 
         return suggested_relation
@@ -706,7 +790,7 @@ class Ontology:
         cursor = conn.cursor()
 
         try:
-            cursor.execute('DELETE FROM ontology_classes WHERE name = ?', (name,))
+            cursor.execute("DELETE FROM ontology_classes WHERE name = ?", (name,))
             conn.commit()
 
             # Remove from in-memory storage
@@ -742,7 +826,9 @@ class Ontology:
         cursor = conn.cursor()
 
         try:
-            cursor.execute('DELETE FROM ontology_relation_types WHERE name = ?', (name,))
+            cursor.execute(
+                "DELETE FROM ontology_relation_types WHERE name = ?", (name,)
+            )
             conn.commit()
 
             # Remove from in-memory storage
@@ -764,7 +850,7 @@ class Ontology:
     def close(self):
         """Close any open database connections and clean up resources."""
         try:
-            if hasattr(self, 'conn') and self.conn is not None:
+            if hasattr(self, "conn") and self.conn is not None:
                 self.conn.close()
                 self.conn = None
             logging.info("Ontology resources cleaned up")

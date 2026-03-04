@@ -15,10 +15,18 @@ def test_chain_of_agents():
     """Test the Chain of Agents functionality."""
     parser = argparse.ArgumentParser(description="Test CortexFlow Chain of Agents")
     parser.add_argument("--model", default="llama3", help="Ollama model to use")
-    parser.add_argument("--host", default="http://localhost:11434", help="Ollama API host")
-    parser.add_argument("--active-tokens", type=int, default=1000, help="Active tier token limit")
-    parser.add_argument("--working-tokens", type=int, default=2000, help="Working tier token limit")
-    parser.add_argument("--archive-tokens", type=int, default=3000, help="Archive tier token limit")
+    parser.add_argument(
+        "--host", default="http://localhost:11434", help="Ollama API host"
+    )
+    parser.add_argument(
+        "--active-tokens", type=int, default=1000, help="Active tier token limit"
+    )
+    parser.add_argument(
+        "--working-tokens", type=int, default=2000, help="Working tier token limit"
+    )
+    parser.add_argument(
+        "--archive-tokens", type=int, default=3000, help="Archive tier token limit"
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     args = parser.parse_args()
 
@@ -34,16 +42,19 @@ def test_chain_of_agents():
         default_model=args.model,
         use_graph_rag=True,  # Enable graph RAG
         use_chain_of_agents=True,  # Enable Chain of Agents
-        verbose_logging=args.verbose
+        verbose_logging=args.verbose,
     )
 
     # Check if required packages are installed
     try:
         import networkx  # noqa: E402, F401
         import spacy  # noqa: E402, F401
+
         graph_packages_available = True
     except ImportError:
-        print("Note: networkx or spacy not installed. Some graph functionality will be limited.")
+        print(
+            "Note: networkx or spacy not installed. Some graph functionality will be limited."
+        )
         graph_packages_available = False
 
     context_manager = CortexFlowManager(config)
@@ -52,7 +63,7 @@ def test_chain_of_agents():
         # Set up system message
         context_manager.add_message(
             "system",
-            "You are a helpful AI assistant with advanced reasoning capabilities."
+            "You are a helpful AI assistant with advanced reasoning capabilities.",
         )
 
         # Add some knowledge to the system
@@ -67,7 +78,7 @@ def test_chain_of_agents():
             "Japan consists of four main islands: Honshu, Hokkaido, Kyushu, and Shikoku.",
             "The current emperor of Japan is Emperor Naruhito, who ascended to the throne in 2019.",
             "Baseball is one of the most popular sports in Japan.",
-            "Mario, Pokemon, and Nintendo are all Japanese creations."
+            "Mario, Pokemon, and Nintendo are all Japanese creations.",
         ]
 
         for fact in facts:
@@ -118,6 +129,7 @@ def test_chain_of_agents():
         # Clean up
         context_manager.close()
         print("\nChain of Agents test completed")
+
 
 if __name__ == "__main__":
     test_chain_of_agents()

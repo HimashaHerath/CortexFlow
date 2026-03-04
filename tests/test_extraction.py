@@ -21,15 +21,18 @@ logger = logging.getLogger(__name__)
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def graph_store():
     """Create a GraphStore with a temp DB for testing."""
     tmpdir = tempfile.mkdtemp()
     db_path = os.path.join(tmpdir, "test_extraction.db")
-    config = CortexFlowConfig.from_dict({
-        "knowledge_store_path": db_path,
-        "use_graph_rag": True,
-    })
+    config = CortexFlowConfig.from_dict(
+        {
+            "knowledge_store_path": db_path,
+            "use_graph_rag": True,
+        }
+    )
     gs = GraphStore(config)
     yield gs
     try:
@@ -46,6 +49,7 @@ def graph_store():
 # ---------------------------------------------------------------------------
 # Entity extraction
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.timeout(180)
 class TestEntityExtraction:
@@ -92,6 +96,7 @@ class TestEntityExtraction:
 # Domain-specific extraction
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.timeout(180)
 class TestDomainSpecificExtraction:
     """Test domain-specific entity extraction."""
@@ -119,6 +124,7 @@ class TestDomainSpecificExtraction:
 # ---------------------------------------------------------------------------
 # Relation extraction
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.timeout(180)
 class TestRelationExtraction:
@@ -153,10 +159,11 @@ class TestRelationExtraction:
         if relations:
             # Check at least one relation has non-empty components
             has_valid = any(
-                len(r[0]) > 0 and len(r[1]) > 0 and len(r[2]) > 0
-                for r in relations
+                len(r[0]) > 0 and len(r[1]) > 0 and len(r[2]) > 0 for r in relations
             )
-            assert has_valid, f"Should have valid subject-verb-object triples, got: {relations}"
+            assert has_valid, (
+                f"Should have valid subject-verb-object triples, got: {relations}"
+            )
 
     def test_empty_text_returns_empty_or_no_crash(self, graph_store):
         relations = graph_store.extract_relations("")
@@ -166,6 +173,7 @@ class TestRelationExtraction:
 # ---------------------------------------------------------------------------
 # Coreference resolution (optional, depends on neuralcoref)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.timeout(180)
 class TestCoreferenceResolution:
@@ -190,6 +198,7 @@ class TestCoreferenceResolution:
 # ---------------------------------------------------------------------------
 # Semantic role labeling (optional, depends on allennlp)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.timeout(180)
 class TestSemanticRoleLabeling:

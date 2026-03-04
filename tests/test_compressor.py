@@ -49,6 +49,7 @@ def _make_segment(content, importance=5.0, segment_type="user"):
 # TruncationCompressor
 # ---------------------------------------------------------------------------
 
+
 class TestTruncationCompressor:
     """Test the simple truncation compressor."""
 
@@ -88,6 +89,7 @@ class TestTruncationCompressor:
 # ---------------------------------------------------------------------------
 # ExtractiveSummarizer
 # ---------------------------------------------------------------------------
+
 
 class TestExtractiveSummarizer:
     """Test keyword-based extractive summarization."""
@@ -134,6 +136,7 @@ class TestExtractiveSummarizer:
 # ---------------------------------------------------------------------------
 # ContextCompressor
 # ---------------------------------------------------------------------------
+
 
 class TestContextCompressor:
     """Test the main ContextCompressor that orchestrates strategies."""

@@ -29,18 +29,20 @@ class TestInferenceEngine(unittest.TestCase):
         self.db_fd, self.db_path = tempfile.mkstemp()
 
         # Configure with test settings, disable features not needed for testing
-        self.config = CortexFlowConfig.from_dict({
-            "knowledge_store_path": self.db_path,
-            "use_graph_rag": False,
-            "use_inference_engine": True,
-            "max_inference_depth": 5,
-            "max_forward_chain_iterations": 3,
-            "use_ml_classifier": False,     # Disable ML classifier for tests
-            "use_reranking": False,         # Disable reranking for tests
-            "use_chain_of_agents": False,   # Disable chain of agents for tests
-            "use_self_reflection": False,   # Disable self-reflection for tests
-            "use_dynamic_weighting": False, # Disable dynamic weighting for tests
-        })
+        self.config = CortexFlowConfig.from_dict(
+            {
+                "knowledge_store_path": self.db_path,
+                "use_graph_rag": False,
+                "use_inference_engine": True,
+                "max_inference_depth": 5,
+                "max_forward_chain_iterations": 3,
+                "use_ml_classifier": False,  # Disable ML classifier for tests
+                "use_reranking": False,  # Disable reranking for tests
+                "use_chain_of_agents": False,  # Disable chain of agents for tests
+                "use_self_reflection": False,  # Disable self-reflection for tests
+                "use_dynamic_weighting": False,  # Disable dynamic weighting for tests
+            }
+        )
 
         # Create a mock rank_bm25 module if needed
         self._patch_bm25()
@@ -77,12 +79,12 @@ class TestInferenceEngine(unittest.TestCase):
             mock_bm25.get_scores.return_value = [0.5, 0.7, 0.3]
 
             # Create a mock module
-            mock_module = type('MockRankBM25', (), {
-                'BM25Okapi': lambda corpus: mock_bm25
-            })
+            mock_module = type(
+                "MockRankBM25", (), {"BM25Okapi": lambda corpus: mock_bm25}
+            )
 
             # Add the mock to sys.modules
-            sys.modules['rank_bm25'] = mock_module
+            sys.modules["rank_bm25"] = mock_module
 
     def _setup_mock_graph_and_inference(self):
         """Set up mock objects for graph store and inference engine."""
@@ -104,12 +106,14 @@ class TestInferenceEngine(unittest.TestCase):
             "fur": {"type": "feature", "id": 7},
             "feathers": {"type": "feature", "id": 8},
             "warm_blooded": {"type": "trait", "id": 9},
-            "vertebrate": {"type": "category", "id": 10}
+            "vertebrate": {"type": "category", "id": 10},
         }
 
         # Add nodes to graph
         for entity_name, entity_data in entities.items():
-            graph.add_node(entity_data["id"], name=entity_name, type=entity_data["type"])
+            graph.add_node(
+                entity_data["id"], name=entity_name, type=entity_data["type"]
+            )
 
         # Define relationships
         relationships = [
@@ -119,9 +123,24 @@ class TestInferenceEngine(unittest.TestCase):
             {"source": "cat", "relation": "is_a", "target": "mammal", "id": 4},
             {"source": "eagle", "relation": "is_a", "target": "bird", "id": 5},
             {"source": "mammal", "relation": "has_property", "target": "fur", "id": 6},
-            {"source": "bird", "relation": "has_property", "target": "feathers", "id": 7},
-            {"source": "mammal", "relation": "has_property", "target": "warm_blooded", "id": 8},
-            {"source": "bird", "relation": "has_property", "target": "warm_blooded", "id": 9}
+            {
+                "source": "bird",
+                "relation": "has_property",
+                "target": "feathers",
+                "id": 7,
+            },
+            {
+                "source": "mammal",
+                "relation": "has_property",
+                "target": "warm_blooded",
+                "id": 8,
+            },
+            {
+                "source": "bird",
+                "relation": "has_property",
+                "target": "warm_blooded",
+                "id": 9,
+            },
         ]
 
         # Add edges to graph
@@ -135,7 +154,9 @@ class TestInferenceEngine(unittest.TestCase):
         graph_store.graph = graph
 
         # Mock the query_relations method
-        def mock_query_relations(source_entity=None, relation_type=None, target_entity=None, limit=100):
+        def mock_query_relations(
+            source_entity=None, relation_type=None, target_entity=None, limit=100
+        ):
             results = []
             for rel in relationships:
                 match = True
@@ -146,13 +167,15 @@ class TestInferenceEngine(unittest.TestCase):
                 if target_entity and rel["target"] != target_entity:
                     match = False
                 if match:
-                    results.append({
-                        "source_entity": rel["source"],
-                        "relation_type": rel["relation"],
-                        "target_entity": rel["target"],
-                        "id": rel["id"],
-                        "confidence": 1.0
-                    })
+                    results.append(
+                        {
+                            "source_entity": rel["source"],
+                            "relation_type": rel["relation"],
+                            "target_entity": rel["target"],
+                            "id": rel["id"],
+                            "confidence": 1.0,
+                        }
+                    )
             return results[:limit]
 
         graph_store.query_relations = mock_query_relations
@@ -167,22 +190,27 @@ class TestInferenceEngine(unittest.TestCase):
             target = fact.get("target", "")
 
             # Skip if any component is a variable
-            if any(isinstance(v, str) and v.startswith("?") for v in [source, relation, target]):
+            if any(
+                isinstance(v, str) and v.startswith("?")
+                for v in [source, relation, target]
+            ):
                 return False
 
             # Specially handle test case facts
-            if (source == "dog" and relation == "is_a" and target == "animal"):
+            if source == "dog" and relation == "is_a" and target == "animal":
                 return True
-            if (source == "eagle" and relation == "is_a" and target == "animal"):
+            if source == "eagle" and relation == "is_a" and target == "animal":
                 return True
-            if (source == "cat" and relation == "has_property" and target == "fur"):
+            if source == "cat" and relation == "has_property" and target == "fur":
                 return True
 
             # Check for the fact in our relationships list
             for rel in relationships:
-                if (rel["source"] == source and
-                    rel["relation"] == relation and
-                    rel["target"] == target):
+                if (
+                    rel["source"] == source
+                    and rel["relation"] == relation
+                    and rel["target"] == target
+                ):
                     return True
             return False
 
@@ -202,8 +230,11 @@ class TestInferenceEngine(unittest.TestCase):
                         {"type": "query", "content": "Is 'dog' of type 'animal'?"},
                         {"type": "find", "content": "Found fact: 'dog' is_a 'mammal'"},
                         {"type": "rule", "content": "Applying rule transitivity_is_a"},
-                        {"type": "find", "content": "Found fact: 'mammal' is_a 'animal'"},
-                        {"type": "result", "content": "Therefore: 'dog' is_a 'animal'"}
+                        {
+                            "type": "find",
+                            "content": "Found fact: 'mammal' is_a 'animal'",
+                        },
+                        {"type": "result", "content": "Therefore: 'dog' is_a 'animal'"},
                     ]
 
                 # Cat has fur (via property inheritance)
@@ -211,9 +242,18 @@ class TestInferenceEngine(unittest.TestCase):
                     return True, [
                         {"type": "query", "content": "Does 'cat' have property 'fur'?"},
                         {"type": "find", "content": "Found fact: 'cat' is_a 'mammal'"},
-                        {"type": "rule", "content": "Applying rule property_inheritance"},
-                        {"type": "find", "content": "Found fact: 'mammal' has_property 'fur'"},
-                        {"type": "result", "content": "Therefore: 'cat' has_property 'fur'"}
+                        {
+                            "type": "rule",
+                            "content": "Applying rule property_inheritance",
+                        },
+                        {
+                            "type": "find",
+                            "content": "Found fact: 'mammal' has_property 'fur'",
+                        },
+                        {
+                            "type": "result",
+                            "content": "Therefore: 'cat' has_property 'fur'",
+                        },
                     ]
 
                 # Eagle is an animal (via transitive relation)
@@ -223,7 +263,10 @@ class TestInferenceEngine(unittest.TestCase):
                         {"type": "find", "content": "Found fact: 'eagle' is_a 'bird'"},
                         {"type": "rule", "content": "Applying rule transitivity_is_a"},
                         {"type": "find", "content": "Found fact: 'bird' is_a 'animal'"},
-                        {"type": "result", "content": "Therefore: 'eagle' is_a 'animal'"}
+                        {
+                            "type": "result",
+                            "content": "Therefore: 'eagle' is_a 'animal'",
+                        },
                     ]
 
             return False, []
@@ -234,14 +277,38 @@ class TestInferenceEngine(unittest.TestCase):
         def patched_forward_chain(**kwargs):
             # Handle both iterations and max_iterations parameters
             inferred_facts = [
-                {"source_entity": "dog", "relation_type": "has_property", "target_entity": "fur",
-                 "id": 11, "confidence": 0.9, "inferred": True},
-                {"source_entity": "cat", "relation_type": "has_property", "target_entity": "fur",
-                 "id": 12, "confidence": 0.9, "inferred": True},
-                {"source_entity": "eagle", "relation_type": "has_property", "target_entity": "feathers",
-                 "id": 13, "confidence": 0.9, "inferred": True},
-                {"source_entity": "dog", "relation_type": "is_a", "target_entity": "animal",
-                 "id": 14, "confidence": 0.9, "inferred": True}
+                {
+                    "source_entity": "dog",
+                    "relation_type": "has_property",
+                    "target_entity": "fur",
+                    "id": 11,
+                    "confidence": 0.9,
+                    "inferred": True,
+                },
+                {
+                    "source_entity": "cat",
+                    "relation_type": "has_property",
+                    "target_entity": "fur",
+                    "id": 12,
+                    "confidence": 0.9,
+                    "inferred": True,
+                },
+                {
+                    "source_entity": "eagle",
+                    "relation_type": "has_property",
+                    "target_entity": "feathers",
+                    "id": 13,
+                    "confidence": 0.9,
+                    "inferred": True,
+                },
+                {
+                    "source_entity": "dog",
+                    "relation_type": "is_a",
+                    "target_entity": "animal",
+                    "id": 14,
+                    "confidence": 0.9,
+                    "inferred": True,
+                },
             ]
             return inferred_facts
 
@@ -252,17 +319,33 @@ class TestInferenceEngine(unittest.TestCase):
             # Generate mock hypotheses
             if "eagle" in observation.lower():
                 return [
-                    {"hypothesis": "Eagles have hollow bones because they evolved for flight",
-                     "confidence": 0.8,
-                     "supporting_facts": [
-                         {"source_entity": "eagle", "relation_type": "is_a", "target_entity": "bird"},
-                         {"source_entity": "bird", "relation_type": "has_property", "target_entity": "feathers"}
-                     ]},
-                    {"hypothesis": "Eagles have hollow bones to reduce weight",
-                     "confidence": 0.7,
-                     "supporting_facts": [
-                         {"source_entity": "eagle", "relation_type": "is_a", "target_entity": "bird"}
-                     ]}
+                    {
+                        "hypothesis": "Eagles have hollow bones because they evolved for flight",
+                        "confidence": 0.8,
+                        "supporting_facts": [
+                            {
+                                "source_entity": "eagle",
+                                "relation_type": "is_a",
+                                "target_entity": "bird",
+                            },
+                            {
+                                "source_entity": "bird",
+                                "relation_type": "has_property",
+                                "target_entity": "feathers",
+                            },
+                        ],
+                    },
+                    {
+                        "hypothesis": "Eagles have hollow bones to reduce weight",
+                        "confidence": 0.7,
+                        "supporting_facts": [
+                            {
+                                "source_entity": "eagle",
+                                "relation_type": "is_a",
+                                "target_entity": "bird",
+                            }
+                        ],
+                    },
                 ]
             return []
 
@@ -272,21 +355,30 @@ class TestInferenceEngine(unittest.TestCase):
         def patched_discover_novel_implications(entity, max_implications=3):
             if entity == "dog":
                 return [
-                    {"implication": "Dogs likely have a keen sense of smell",
-                     "confidence": 0.8,
-                     "reasoning": [
-                         {"type": "fact", "content": "Dog is a mammal"},
-                         {"type": "fact", "content": "Many mammals have well-developed olfactory senses"}
-                     ]},
-                    {"implication": "Dogs can likely be trained for various tasks",
-                     "confidence": 0.7,
-                     "reasoning": [
-                         {"type": "fact", "content": "Dogs have been domesticated"}
-                     ]}
+                    {
+                        "implication": "Dogs likely have a keen sense of smell",
+                        "confidence": 0.8,
+                        "reasoning": [
+                            {"type": "fact", "content": "Dog is a mammal"},
+                            {
+                                "type": "fact",
+                                "content": "Many mammals have well-developed olfactory senses",
+                            },
+                        ],
+                    },
+                    {
+                        "implication": "Dogs can likely be trained for various tasks",
+                        "confidence": 0.7,
+                        "reasoning": [
+                            {"type": "fact", "content": "Dogs have been domesticated"}
+                        ],
+                    },
                 ]
             return []
 
-        inference_engine.discover_novel_implications = patched_discover_novel_implications
+        inference_engine.discover_novel_implications = (
+            patched_discover_novel_implications
+        )
 
         # Override methods in the knowledge store
         self.manager.knowledge_store.graph_store = graph_store
@@ -301,7 +393,10 @@ class TestInferenceEngine(unittest.TestCase):
                     {"type": "query", "content": "Why is a dog an animal?"},
                     {"type": "fact", "content": "Dogs are mammals"},
                     {"type": "fact", "content": "Mammals are animals"},
-                    {"type": "rule", "content": "Transitive property of classification"}
+                    {
+                        "type": "rule",
+                        "content": "Transitive property of classification",
+                    },
                 ]
             return []
 
@@ -309,8 +404,14 @@ class TestInferenceEngine(unittest.TestCase):
             """Mock the generate_hypotheses method."""
             if "eagle" in observation.lower() and "hollow bones" in observation.lower():
                 return [
-                    {"hypothesis": "Eagles have hollow bones to reduce weight for flight", "confidence": 0.9},
-                    {"hypothesis": "Hollow bones are a common adaptation in birds", "confidence": 0.85}
+                    {
+                        "hypothesis": "Eagles have hollow bones to reduce weight for flight",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "hypothesis": "Hollow bones are a common adaptation in birds",
+                        "confidence": 0.85,
+                    },
                 ]
             return []
 
@@ -318,14 +419,22 @@ class TestInferenceEngine(unittest.TestCase):
             """Mock the discover_novel_implications method."""
             if entity.lower() == "dog":
                 return [
-                    {"implication": "Dogs likely have a keen sense of smell", "confidence": 0.9},
-                    {"implication": "Dogs can likely be trained for various tasks", "confidence": 0.85}
+                    {
+                        "implication": "Dogs likely have a keen sense of smell",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "implication": "Dogs can likely be trained for various tasks",
+                        "confidence": 0.85,
+                    },
                 ]
             return []
 
         knowledge_store.explain_why = patched_explain_why
         knowledge_store.generate_hypotheses = patched_generate_hypotheses
-        knowledge_store.discover_novel_implications = patched_discover_novel_implications
+        knowledge_store.discover_novel_implications = (
+            patched_discover_novel_implications
+        )
 
         # Also update the inference engine to use this graph store
         self.manager.knowledge_store.inference_engine.graph_store = graph_store
@@ -366,21 +475,17 @@ class TestInferenceEngine(unittest.TestCase):
         # Add a rule for flying birds
         inference_engine.add_rule(
             name="birds_can_fly",
-            premise=[
-                {"source": "?X", "relation": "is_a", "target": "bird"}
-            ],
+            premise=[{"source": "?X", "relation": "is_a", "target": "bird"}],
             conclusion={"source": "?X", "relation": "can_fly", "target": "true"},
-            confidence=0.9
+            confidence=0.9,
         )
 
         # Add a rule for vertebrates
         inference_engine.add_rule(
             name="animals_are_vertebrates",
-            premise=[
-                {"source": "?X", "relation": "is_a", "target": "animal"}
-            ],
+            premise=[{"source": "?X", "relation": "is_a", "target": "animal"}],
             conclusion={"source": "?X", "relation": "is_a", "target": "vertebrate"},
-            confidence=0.95
+            confidence=0.95,
         )
 
     def test_rule_creation(self):
@@ -390,7 +495,7 @@ class TestInferenceEngine(unittest.TestCase):
             name="test_rule",
             premise=[{"source": "?X", "relation": "is_a", "target": "test"}],
             conclusion={"source": "?X", "relation": "has_property", "target": "tested"},
-            confidence=0.8
+            confidence=0.8,
         )
 
         # Check rule properties
@@ -413,7 +518,7 @@ class TestInferenceEngine(unittest.TestCase):
             name="test_rule",
             premise=[{"source": "?X", "relation": "is_a", "target": "test"}],
             conclusion={"source": "?X", "relation": "has_property", "target": "tested"},
-            confidence=0.8
+            confidence=0.8,
         )
 
         # Check that the rule was added
@@ -462,7 +567,9 @@ class TestInferenceEngine(unittest.TestCase):
     def test_why_question_answering(self):
         """Test answering 'why' questions through backward chaining."""
         # Test the higher-level API for explaining why something is true
-        explanation = self.manager.knowledge_store.explain_why("Why is a dog an animal?")
+        explanation = self.manager.knowledge_store.explain_why(
+            "Why is a dog an animal?"
+        )
 
         # Should have a non-empty explanation with multiple steps
         self.assertTrue(len(explanation) > 0)
@@ -502,7 +609,9 @@ class TestInferenceEngine(unittest.TestCase):
     def test_novel_implications_api(self):
         """Test the higher-level API for generating novel implications."""
         # Test discovering implications about dogs
-        implications = self.manager.knowledge_store.discover_novel_implications("dog", max_implications=2)
+        implications = self.manager.knowledge_store.discover_novel_implications(
+            "dog", max_implications=2
+        )
 
         # Should discover implications
         self.assertTrue(len(implications) > 0)
@@ -511,6 +620,7 @@ class TestInferenceEngine(unittest.TestCase):
         """Helper method to get all facts from the knowledge base."""
         # Just return our mock data
         return self.manager.knowledge_store.graph_store.query_relations()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,5 @@
 """Tests for cortexflow.dependency_utils."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -24,9 +25,7 @@ class TestCheckDependency:
     def test_custom_warning(self):
         """Custom warning is logged for missing module."""
         with patch("cortexflow.dependency_utils.logging") as mock_log:
-            check_dependency(
-                "nonexistent_xyz", warning_message="Custom warning text"
-            )
+            check_dependency("nonexistent_xyz", warning_message="Custom warning text")
             mock_log.warning.assert_called_once_with("Custom warning text")
 
     def test_classes_from_module(self):

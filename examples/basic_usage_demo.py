@@ -25,12 +25,8 @@ def send_to_ollama(prompt, model="llama3", ollama_host="http://localhost:11434")
     try:
         response = requests.post(
             f"{ollama_host}/api/generate",
-            json={
-                "model": model,
-                "prompt": prompt,
-                "stream": False
-            },
-            timeout=30
+            json={"model": model, "prompt": prompt, "stream": False},
+            timeout=30,
         )
 
         if response.status_code == 200:
@@ -40,14 +36,25 @@ def send_to_ollama(prompt, model="llama3", ollama_host="http://localhost:11434")
     except Exception as e:
         return f"Error communicating with Ollama: {e}"
 
+
 def main():
     parser = argparse.ArgumentParser(description="CortexFlow example")
     parser.add_argument("--model", default="llama3", help="Ollama model to use")
-    parser.add_argument("--host", default="http://localhost:11434", help="Ollama API host")
-    parser.add_argument("--active-tokens", type=int, default=2000, help="Active tier token limit")
-    parser.add_argument("--working-tokens", type=int, default=4000, help="Working tier token limit")
-    parser.add_argument("--archive-tokens", type=int, default=6000, help="Archive tier token limit")
-    parser.add_argument("--db", default="memory.db", help="Knowledge store database path")
+    parser.add_argument(
+        "--host", default="http://localhost:11434", help="Ollama API host"
+    )
+    parser.add_argument(
+        "--active-tokens", type=int, default=2000, help="Active tier token limit"
+    )
+    parser.add_argument(
+        "--working-tokens", type=int, default=4000, help="Working tier token limit"
+    )
+    parser.add_argument(
+        "--archive-tokens", type=int, default=6000, help="Archive tier token limit"
+    )
+    parser.add_argument(
+        "--db", default="memory.db", help="Knowledge store database path"
+    )
     args = parser.parse_args()
 
     # Configure CortexFlow using nested dataclass config
@@ -104,7 +111,9 @@ def main():
             elif user_input.lower().startswith("remember:"):
                 # Explicitly store information in the knowledge store
                 text_to_remember = user_input[9:].strip()
-                ids = context_manager.add_knowledge(text_to_remember, source="user_input")
+                ids = context_manager.add_knowledge(
+                    text_to_remember, source="user_input"
+                )
                 if ids:
                     print("Information stored in knowledge base")
                 else:
@@ -139,7 +148,9 @@ def main():
 
             # Send to Ollama
             start_time = time.time()
-            response = send_to_ollama(full_prompt, model=args.model, ollama_host=args.host)
+            response = send_to_ollama(
+                full_prompt, model=args.model, ollama_host=args.host
+            )
             end_time = time.time()
 
             # Add assistant response to context
@@ -155,6 +166,7 @@ def main():
     finally:
         # Clean up
         context_manager.close()
+
 
 if __name__ == "__main__":
     main()

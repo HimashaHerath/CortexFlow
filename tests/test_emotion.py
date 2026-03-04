@@ -15,8 +15,12 @@ class TestEmotionalState:
 
     def test_roundtrip(self):
         state = EmotionalState(
-            primary_emotion="joy", intensity=0.8, valence=0.7, arousal=0.5,
-            secondary_emotions={"trust": 0.3}, confidence=0.85,
+            primary_emotion="joy",
+            intensity=0.8,
+            valence=0.7,
+            arousal=0.5,
+            secondary_emotions={"trust": 0.3},
+            confidence=0.85,
         )
         d = state.to_dict()
         restored = EmotionalState.from_dict(d)

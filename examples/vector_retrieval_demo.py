@@ -15,7 +15,8 @@ from cortexflow import (
 
 
 def print_divider():
-    print("\n" + "="*70 + "\n")
+    print("\n" + "=" * 70 + "\n")
+
 
 def main():
     print("Testing CortexFlow Vector-Based Knowledge Retrieval")
@@ -29,8 +30,8 @@ def main():
             archive_token_limit=3000,
         ),
         knowledge_store=KnowledgeStoreConfig(
-            vector_model='all-MiniLM-L6-v2',
-            retrieval_type='hybrid',
+            vector_model="all-MiniLM-L6-v2",
+            retrieval_type="hybrid",
         ),
     )
 
@@ -38,11 +39,21 @@ def main():
 
     # Store some facts using the knowledge store's add_knowledge method
     print("Storing facts...")
-    manager.knowledge_store.add_knowledge("Alice lives in Boston.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("Bob has a dog named Max.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("The capital of France is Paris.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("Python is a programming language.", source="demo", confidence=0.95)
-    manager.knowledge_store.add_knowledge("The Eiffel Tower is in Paris.", source="demo", confidence=0.95)
+    manager.knowledge_store.add_knowledge(
+        "Alice lives in Boston.", source="demo", confidence=0.95
+    )
+    manager.knowledge_store.add_knowledge(
+        "Bob has a dog named Max.", source="demo", confidence=0.95
+    )
+    manager.knowledge_store.add_knowledge(
+        "The capital of France is Paris.", source="demo", confidence=0.95
+    )
+    manager.knowledge_store.add_knowledge(
+        "Python is a programming language.", source="demo", confidence=0.95
+    )
+    manager.knowledge_store.add_knowledge(
+        "The Eiffel Tower is in Paris.", source="demo", confidence=0.95
+    )
 
     # Wait for storage to complete
     time.sleep(1)
@@ -55,7 +66,7 @@ def main():
     queries = [
         "Where does Alice live?",
         "What is Bob's dog's name?",
-        "What is the capital of France?"
+        "What is the capital of France?",
     ]
 
     for query in queries:
@@ -65,7 +76,7 @@ def main():
             print("Results:")
             for i, result in enumerate(results, 1):
                 print(f"{i}. {result['content']}")
-                if 'similarity' in result:
+                if "similarity" in result:
                     print(f"   Similarity score: {result['similarity']:.4f}")
         else:
             print("No results found")
@@ -77,9 +88,9 @@ def main():
 
     semantic_queries = [
         "Where is Alice's residence?",  # Semantic match for "Alice lives in Boston"
-        "What pet does Bob own?",       # Semantic match for "Bob has a dog named Max"
+        "What pet does Bob own?",  # Semantic match for "Bob has a dog named Max"
         "What famous monument is located in France's capital?",  # Should connect Eiffel Tower and Paris
-        "Is Python a coding language?"  # Semantic match for "Python is a programming language"
+        "Is Python a coding language?",  # Semantic match for "Python is a programming language"
     ]
 
     for query in semantic_queries:
@@ -89,7 +100,7 @@ def main():
             print("Results:")
             for i, result in enumerate(results, 1):
                 print(f"{i}. {result['content']}")
-                if 'similarity' in result:
+                if "similarity" in result:
                     print(f"   Similarity score: {result['similarity']:.4f}")
         else:
             print("No results found")
@@ -99,6 +110,7 @@ def main():
     # Clean up
     manager.close()
     print("Test completed successfully")
+
 
 if __name__ == "__main__":
     main()

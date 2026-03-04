@@ -6,6 +6,7 @@ class.  CortexFlowManager delegates to an instance of
 KnowledgeCoordinator for knowledge storage, retrieval, contradiction
 handling, uncertainty operations, and multi-hop reasoning.
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,7 +14,7 @@ import re
 import warnings
 from typing import Any
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
 
 
 class KnowledgeCoordinator:
@@ -40,7 +41,9 @@ class KnowledgeCoordinator:
     # Knowledge storage
     # ------------------------------------------------------------------
 
-    def remember_knowledge(self, text: str, source: str = None, confidence: float = None) -> list[int]:
+    def remember_knowledge(
+        self, text: str, source: str = None, confidence: float = None
+    ) -> list[int]:
         """
         Store important knowledge in the knowledge store.
 
@@ -56,11 +59,14 @@ class KnowledgeCoordinator:
         """
         warnings.warn(
             "remember_knowledge() is deprecated; use add_knowledge() instead",
-            DeprecationWarning, stacklevel=2
+            DeprecationWarning,
+            stacklevel=2,
         )
         return self.add_knowledge(text, source, confidence)
 
-    def add_knowledge(self, text: str, source: str = None, confidence: float = None) -> list[int]:
+    def add_knowledge(
+        self, text: str, source: str = None, confidence: float = None
+    ) -> list[int]:
         """
         Store important knowledge in the knowledge store.
 
@@ -76,7 +82,9 @@ class KnowledgeCoordinator:
         if confidence is None:
             confidence = 0.95
 
-        item_ids = self.knowledge_store.add_knowledge(text, source=source, confidence=confidence)
+        item_ids = self.knowledge_store.add_knowledge(
+            text, source=source, confidence=confidence
+        )
 
         # Check for contradictions if enabled
         if self.uncertainty_handler:
@@ -85,11 +93,15 @@ class KnowledgeCoordinator:
             contradiction_strategy = "weighted"
 
             # Try new config structure first
-            if hasattr(self.config, 'uncertainty') and hasattr(self.config.uncertainty, 'auto_detect_contradictions'):
+            if hasattr(self.config, "uncertainty") and hasattr(
+                self.config.uncertainty, "auto_detect_contradictions"
+            ):
                 auto_detect = self.config.uncertainty.auto_detect_contradictions
-                contradiction_strategy = self.config.uncertainty.default_contradiction_strategy
+                contradiction_strategy = (
+                    self.config.uncertainty.default_contradiction_strategy
+                )
             # Fall back to old config structure
-            elif hasattr(self.config, 'auto_detect_contradictions'):
+            elif hasattr(self.config, "auto_detect_contradictions"):
                 auto_detect = self.config.auto_detect_contradictions
                 contradiction_strategy = self.config.default_contradiction_strategy
 
@@ -97,30 +109,37 @@ class KnowledgeCoordinator:
                 try:
                     # Extract entity IDs from the added items
                     entity_ids = []
-                    if hasattr(self.knowledge_store, 'graph_store'):
+                    if hasattr(self.knowledge_store, "graph_store"):
                         # Get the entity IDs from the knowledge store's graph store
                         for item_id in item_ids:
-                            entity_data = self.knowledge_store.get_knowledge_item(item_id)
-                            if entity_data and 'entity_id' in entity_data:
-                                entity_ids.append(entity_data['entity_id'])
+                            entity_data = self.knowledge_store.get_knowledge_item(
+                                item_id
+                            )
+                            if entity_data and "entity_id" in entity_data:
+                                entity_ids.append(entity_data["entity_id"])
 
                     # Check for contradictions for each entity
                     for entity_id in entity_ids:
-                        contradictions = self.uncertainty_handler.detect_contradictions(entity_id=entity_id)
+                        contradictions = self.uncertainty_handler.detect_contradictions(
+                            entity_id=entity_id
+                        )
 
                         # Auto-resolve contradictions if found
                         for contradiction in contradictions:
-                            logger.info(f"Detected contradiction for entity {contradiction.get('entity')}: "
-                                      f"{contradiction.get('target1')} vs {contradiction.get('target2')}")
+                            logger.info(
+                                f"Detected contradiction for entity {contradiction.get('entity')}: "
+                                f"{contradiction.get('target1')} vs {contradiction.get('target2')}"
+                            )
 
                             # Resolve using the configured strategy
                             resolution = self.uncertainty_handler.resolve_contradiction(
-                                contradiction,
-                                strategy=contradiction_strategy
+                                contradiction, strategy=contradiction_strategy
                             )
 
-                            logger.info(f"Resolved contradiction using {resolution.get('strategy_used')} strategy: "
-                                      f"Selected '{resolution.get('resolved_value')}' with confidence {resolution.get('confidence')}")
+                            logger.info(
+                                f"Resolved contradiction using {resolution.get('strategy_used')} strategy: "
+                                f"Selected '{resolution.get('resolved_value')}' with confidence {resolution.get('confidence')}"
+                            )
                 except Exception as e:
                     logger.error(f"Error detecting contradictions: {e}")
 
@@ -130,8 +149,9 @@ class KnowledgeCoordinator:
     # Contradiction / uncertainty
     # ------------------------------------------------------------------
 
-    def detect_contradictions(self, entity_id=None, relation_type=None,
-                          max_results=100) -> list[dict[str, Any]]:
+    def detect_contradictions(
+        self, entity_id=None, relation_type=None, max_results=100
+    ) -> list[dict[str, Any]]:
         """
         Detect contradictions in the knowledge graph.
 
@@ -144,17 +164,18 @@ class KnowledgeCoordinator:
             List of detected contradictions
         """
         if not self.uncertainty_handler:
-            logger.warning("Uncertainty handling is not enabled. Cannot detect contradictions.")
+            logger.warning(
+                "Uncertainty handling is not enabled. Cannot detect contradictions."
+            )
             return []
 
         return self.uncertainty_handler.detect_contradictions(
-            entity_id=entity_id,
-            relation_type=relation_type,
-            max_results=max_results
+            entity_id=entity_id, relation_type=relation_type, max_results=max_results
         )
 
-    def resolve_contradiction(self, contradiction: dict[str, Any],
-                           strategy: str = None) -> dict[str, Any]:
+    def resolve_contradiction(
+        self, contradiction: dict[str, Any], strategy: str = None
+    ) -> dict[str, Any]:
         """
         Resolve a contradiction using the specified strategy.
 
@@ -166,7 +187,9 @@ class KnowledgeCoordinator:
             Resolution result
         """
         if not self.uncertainty_handler:
-            logger.warning("Uncertainty handling is not enabled. Cannot resolve contradictions.")
+            logger.warning(
+                "Uncertainty handling is not enabled. Cannot resolve contradictions."
+            )
             return {"error": "Uncertainty handling not enabled"}
 
         if strategy is None:
@@ -174,8 +197,12 @@ class KnowledgeCoordinator:
 
         return self.uncertainty_handler.resolve_contradiction(contradiction, strategy)
 
-    def update_source_reliability(self, source_name: str, reliability_score: float,
-                              metadata: dict[str, Any] = None) -> None:
+    def update_source_reliability(
+        self,
+        source_name: str,
+        reliability_score: float,
+        metadata: dict[str, Any] = None,
+    ) -> None:
         """
         Update the reliability score for a knowledge source.
 
@@ -185,13 +212,15 @@ class KnowledgeCoordinator:
             metadata: Optional metadata about the source
         """
         if not self.uncertainty_handler:
-            logger.warning("Uncertainty handling is not enabled. Cannot update source reliability.")
+            logger.warning(
+                "Uncertainty handling is not enabled. Cannot update source reliability."
+            )
             return
 
         self.uncertainty_handler.update_source_reliability(
             source_name=source_name,
             reliability_score=reliability_score,
-            metadata=metadata
+            metadata=metadata,
         )
 
     def get_source_reliability(self, source_name: str) -> float:
@@ -205,13 +234,20 @@ class KnowledgeCoordinator:
             Reliability score (0.0-1.0)
         """
         if not self.uncertainty_handler:
-            logger.warning("Uncertainty handling is not enabled. Cannot get source reliability.")
+            logger.warning(
+                "Uncertainty handling is not enabled. Cannot get source reliability."
+            )
             return 0.5  # Default medium reliability
 
         return self.uncertainty_handler.get_source_reliability(source_name)
 
-    def add_probability_distribution(self, entity_id: int, relation_id: int,
-                                  distribution_type: str, distribution_data: dict[str, Any]) -> None:
+    def add_probability_distribution(
+        self,
+        entity_id: int,
+        relation_id: int,
+        distribution_type: str,
+        distribution_data: dict[str, Any],
+    ) -> None:
         """
         Add a probability distribution to represent uncertainty about a fact.
 
@@ -222,17 +258,21 @@ class KnowledgeCoordinator:
             distribution_data: Data representing the distribution
         """
         if not self.uncertainty_handler:
-            logger.warning("Uncertainty handling is not enabled. Cannot add probability distribution.")
+            logger.warning(
+                "Uncertainty handling is not enabled. Cannot add probability distribution."
+            )
             return
 
         self.uncertainty_handler.add_probability_distribution(
             entity_id=entity_id,
             relation_id=relation_id,
             distribution_type=distribution_type,
-            distribution_data=distribution_data
+            distribution_data=distribution_data,
         )
 
-    def get_probability_distribution(self, entity_id: int, relation_id: int) -> dict[str, Any] | None:
+    def get_probability_distribution(
+        self, entity_id: int, relation_id: int
+    ) -> dict[str, Any] | None:
         """
         Get the probability distribution for a fact.
 
@@ -244,16 +284,18 @@ class KnowledgeCoordinator:
             Probability distribution data or None if not found
         """
         if not self.uncertainty_handler:
-            logger.warning("Uncertainty handling is not enabled. Cannot get probability distribution.")
+            logger.warning(
+                "Uncertainty handling is not enabled. Cannot get probability distribution."
+            )
             return None
 
         return self.uncertainty_handler.get_probability_distribution(
-            entity_id=entity_id,
-            relation_id=relation_id
+            entity_id=entity_id, relation_id=relation_id
         )
 
-    def reason_with_incomplete_information(self, query: dict[str, Any],
-                                       available_knowledge: list[dict[str, Any]]) -> dict[str, Any]:
+    def reason_with_incomplete_information(
+        self, query: dict[str, Any], available_knowledge: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Reason with incomplete information to provide best possible answers.
 
@@ -270,17 +312,16 @@ class KnowledgeCoordinator:
                 "answer": None,
                 "confidence": 0,
                 "explanation": ["Reasoning with incomplete information is not enabled"],
-                "missing_information": []
+                "missing_information": [],
             }
 
         return self.uncertainty_handler.reason_with_incomplete_information(
-            query=query,
-            available_knowledge=available_knowledge
+            query=query, available_knowledge=available_knowledge
         )
 
-    def get_belief_revision_history(self, entity_id: int = None,
-                                 relation_id: int = None,
-                                 limit: int = 10) -> list[dict[str, Any]]:
+    def get_belief_revision_history(
+        self, entity_id: int = None, relation_id: int = None, limit: int = 10
+    ) -> list[dict[str, Any]]:
         """
         Get the revision history for beliefs about an entity or relation.
 
@@ -293,13 +334,13 @@ class KnowledgeCoordinator:
             List of belief revisions
         """
         if not self.uncertainty_handler:
-            logger.warning("Uncertainty handling is not enabled. Cannot get belief revision history.")
+            logger.warning(
+                "Uncertainty handling is not enabled. Cannot get belief revision history."
+            )
             return []
 
         return self.uncertainty_handler.get_belief_revision_history(
-            entity_id=entity_id,
-            relation_id=relation_id,
-            limit=limit
+            entity_id=entity_id, relation_id=relation_id, limit=limit
         )
 
     # ------------------------------------------------------------------
@@ -332,16 +373,24 @@ class KnowledgeCoordinator:
         Returns:
             Explanation steps for the answer
         """
-        if not self.knowledge_store or not hasattr(self.knowledge_store, "use_inference_engine") or not self.knowledge_store.use_inference_engine:
+        if (
+            not self.knowledge_store
+            or not hasattr(self.knowledge_store, "use_inference_engine")
+            or not self.knowledge_store.use_inference_engine
+        ):
             return [{"type": "error", "message": "Inference engine is not enabled"}]
 
         try:
             return self.knowledge_store.inference_engine.answer_why_question(query)
         except Exception as e:
             logger.error(f"Error answering why question: {e}")
-            return [{"type": "error", "message": f"Error processing question: {str(e)}"}]
+            return [
+                {"type": "error", "message": f"Error processing question: {str(e)}"}
+            ]
 
-    def generate_novel_implications(self, iterations: int = None) -> list[dict[str, Any]]:
+    def generate_novel_implications(
+        self, iterations: int = None
+    ) -> list[dict[str, Any]]:
         """
         Generate novel implications using forward chaining.
 
@@ -351,19 +400,27 @@ class KnowledgeCoordinator:
         Returns:
             List of newly inferred facts
         """
-        if not self.knowledge_store or not hasattr(self.knowledge_store, "use_inference_engine") or not self.knowledge_store.use_inference_engine:
+        if (
+            not self.knowledge_store
+            or not hasattr(self.knowledge_store, "use_inference_engine")
+            or not self.knowledge_store.use_inference_engine
+        ):
             return []
 
         try:
             if iterations is None:
                 iterations = self.config.max_forward_chain_iterations
 
-            return self.knowledge_store.inference_engine.forward_chain(iterations=iterations)
+            return self.knowledge_store.inference_engine.forward_chain(
+                iterations=iterations
+            )
         except Exception as e:
             logger.error(f"Error generating implications: {e}")
             return []
 
-    def generate_hypotheses(self, observation: str, max_hypotheses: int = None) -> list[dict[str, Any]]:
+    def generate_hypotheses(
+        self, observation: str, max_hypotheses: int = None
+    ) -> list[dict[str, Any]]:
         """
         Generate hypotheses to explain an observation using abductive reasoning.
 
@@ -374,20 +431,31 @@ class KnowledgeCoordinator:
         Returns:
             List of hypotheses that could explain the observation
         """
-        if not self.knowledge_store or not hasattr(self.knowledge_store, "use_inference_engine") or not self.knowledge_store.use_inference_engine:
+        if (
+            not self.knowledge_store
+            or not hasattr(self.knowledge_store, "use_inference_engine")
+            or not self.knowledge_store.use_inference_engine
+        ):
             return []
 
         try:
             if max_hypotheses is None:
                 max_hypotheses = self.config.max_abductive_hypotheses
 
-            return self.knowledge_store.generate_hypotheses(observation, max_hypotheses=max_hypotheses)
+            return self.knowledge_store.generate_hypotheses(
+                observation, max_hypotheses=max_hypotheses
+            )
         except Exception as e:
             logger.error(f"Error generating hypotheses: {e}")
             return []
 
-    def add_logical_rule(self, name: str, premise_patterns: list[dict[str, Any]],
-                       conclusion_pattern: dict[str, Any], confidence: float = 0.8) -> bool:
+    def add_logical_rule(
+        self,
+        name: str,
+        premise_patterns: list[dict[str, Any]],
+        conclusion_pattern: dict[str, Any],
+        confidence: float = 0.8,
+    ) -> bool:
         """
         Add a logical rule to the inference engine.
 
@@ -400,7 +468,11 @@ class KnowledgeCoordinator:
         Returns:
             Success status
         """
-        if not self.knowledge_store or not hasattr(self.knowledge_store, "use_inference_engine") or not self.knowledge_store.use_inference_engine:
+        if (
+            not self.knowledge_store
+            or not hasattr(self.knowledge_store, "use_inference_engine")
+            or not self.knowledge_store.use_inference_engine
+        ):
             return False
 
         try:
@@ -408,7 +480,7 @@ class KnowledgeCoordinator:
                 name=name,
                 premise=premise_patterns,
                 conclusion=conclusion_pattern,
-                confidence=confidence
+                confidence=confidence,
             )
             return True
         except Exception as e:
@@ -429,16 +501,13 @@ class KnowledgeCoordinator:
         Returns:
             Dictionary with path, entities, score, and other reasoning results
         """
-        if not hasattr(self, "knowledge_store") or not hasattr(self.knowledge_store, "graph_store"):
+        if not hasattr(self, "knowledge_store") or not hasattr(
+            self.knowledge_store, "graph_store"
+        ):
             logger.error("Graph store not available for multi-hop query")
             return {"path": [], "entities": [], "score": 0.0}
 
-        result = {
-            "path": [],
-            "entities": [],
-            "score": 0.0,
-            "hop_count": 0
-        }
+        result = {"path": [], "entities": [], "score": 0.0, "hop_count": 0}
 
         try:
             # Use the graph search to find relevant information
@@ -453,7 +522,7 @@ class KnowledgeCoordinator:
                 paths = self.knowledge_store.graph_store.path_query(
                     start_entity=start_entity,
                     end_entity=end_entity,
-                    max_hops=self.config.max_graph_hops
+                    max_hops=self.config.max_graph_hops,
                 )
 
                 # If we found paths, format the result
@@ -464,14 +533,21 @@ class KnowledgeCoordinator:
                     formatted_path = []
                     for i, node in enumerate(best_path):
                         # Add the entity
-                        formatted_path.append(node.get("entity", f"Entity_{node.get('id')}"))
+                        formatted_path.append(
+                            node.get("entity", f"Entity_{node.get('id')}")
+                        )
 
                         # Add the relation to the next node if not the last node
                         if i < len(best_path) - 1 and "next_relation" in node:
-                            formatted_path.append(node["next_relation"].get("type", "related_to"))
+                            formatted_path.append(
+                                node["next_relation"].get("type", "related_to")
+                            )
 
                     result["path"] = formatted_path
-                    result["entities"] = [node.get("entity", f"Entity_{node.get('id')}") for node in best_path]
+                    result["entities"] = [
+                        node.get("entity", f"Entity_{node.get('id')}")
+                        for node in best_path
+                    ]
                     result["hop_count"] = len(best_path) - 1
                     result["score"] = 0.8  # Default score
 
@@ -484,7 +560,10 @@ class KnowledgeCoordinator:
                         if path_text:
                             # Parse the path text into components
                             arrow = "\u2192"
-                            path = [p.strip() for p in path_text.replace(arrow, arrow).split(arrow)]
+                            path = [
+                                p.strip()
+                                for p in path_text.replace(arrow, arrow).split(arrow)
+                            ]
                             result["path"] = path
                             result["score"] = item.get("score", 0.5)
                             result["hop_count"] = len(path) - 1 if path else 0
@@ -501,7 +580,9 @@ class KnowledgeCoordinator:
             # Log the path if found
             if result["path"]:
                 arrow = " \u2192 "
-                logger.info(f"Found path for query '{query}': {arrow.join(result['path'])}")
+                logger.info(
+                    f"Found path for query '{query}': {arrow.join(result['path'])}"
+                )
             else:
                 logger.info(f"No path found for query '{query}'")
 
@@ -556,7 +637,9 @@ class KnowledgeCoordinator:
             Query result
         """
         # For multi-hop reasoning queries, use the multi_hop_query method
-        if self.config.enable_multi_hop_queries and self._is_multi_hop_query(query_text):
+        if self.config.enable_multi_hop_queries and self._is_multi_hop_query(
+            query_text
+        ):
             logger.info(f"Routing to multi_hop_query: {query_text}")
             return self.multi_hop_query(query_text)
 
@@ -568,7 +651,9 @@ class KnowledgeCoordinator:
         result = {
             "items": knowledge_items,
             "answer": self._extract_answer(query_text, knowledge_items),
-            "score": max([item.get("score", 0) for item in knowledge_items]) if knowledge_items else 0
+            "score": max([item.get("score", 0) for item in knowledge_items])
+            if knowledge_items
+            else 0,
         }
 
         return result
@@ -585,9 +670,15 @@ class KnowledgeCoordinator:
         """
         # Keywords that suggest multi-hop reasoning is needed
         multi_hop_indicators = [
-            r"connection between", r"relationship between", r"related to",
-            r"connect", r"path", r"link", r"how are .+ and .+ related",
-            r"what is the connection", r"how does .+ relate to",
+            r"connection between",
+            r"relationship between",
+            r"related to",
+            r"connect",
+            r"path",
+            r"link",
+            r"how are .+ and .+ related",
+            r"what is the connection",
+            r"how does .+ relate to",
         ]
 
         # Check if any indicators are present

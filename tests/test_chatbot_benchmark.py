@@ -66,9 +66,9 @@ def _info(msg):
 
 
 def _header(title):
-    print(f"\n{BOLD}{CYAN}{'─'*60}{RESET}")
+    print(f"\n{BOLD}{CYAN}{'─' * 60}{RESET}")
     print(f"{BOLD}{CYAN}  {title}{RESET}")
-    print(f"{BOLD}{CYAN}{'─'*60}{RESET}")
+    print(f"{BOLD}{CYAN}{'─' * 60}{RESET}")
 
 
 # ---------------------------------------------------------------------------
@@ -136,18 +136,20 @@ class Metrics:
 
     @classmethod
     def snapshot_tiers(cls, section, memory):
-        cls.tier_snapshots.append({
-            "section": section,
-            "active_tokens": memory.active_tier.current_token_count,
-            "active_max": memory.active_tier.max_tokens,
-            "active_segments": len(memory.active_tier.segments),
-            "working_tokens": memory.working_tier.current_token_count,
-            "working_max": memory.working_tier.max_tokens,
-            "working_segments": len(memory.working_tier.segments),
-            "archive_tokens": memory.archive_tier.current_token_count,
-            "archive_max": memory.archive_tier.max_tokens,
-            "archive_segments": len(memory.archive_tier.segments),
-        })
+        cls.tier_snapshots.append(
+            {
+                "section": section,
+                "active_tokens": memory.active_tier.current_token_count,
+                "active_max": memory.active_tier.max_tokens,
+                "active_segments": len(memory.active_tier.segments),
+                "working_tokens": memory.working_tier.current_token_count,
+                "working_max": memory.working_tier.max_tokens,
+                "working_segments": len(memory.working_tier.segments),
+                "archive_tokens": memory.archive_tier.current_token_count,
+                "archive_max": memory.archive_tier.max_tokens,
+                "archive_segments": len(memory.archive_tier.segments),
+            }
+        )
 
     @classmethod
     def record_section(cls, name, passed, total, details=""):
@@ -222,9 +224,15 @@ class TestChatbotBenchmark:
         # Pump 50 user/assistant pairs (100 messages total)
         num_pairs = 50
         topics = [
-            "quantum computing", "machine learning", "blockchain",
-            "climate change", "space exploration", "genetics",
-            "renewable energy", "cybersecurity", "robotics",
+            "quantum computing",
+            "machine learning",
+            "blockchain",
+            "climate change",
+            "space exploration",
+            "genetics",
+            "renewable energy",
+            "cybersecurity",
+            "robotics",
             "neuroscience",
         ]
 
@@ -237,7 +245,7 @@ class TestChatbotBenchmark:
                 f"Tell me an interesting and detailed fact about {topic}. "
                 f"I would like to understand the key concepts, recent breakthroughs, "
                 f"and why this field matters for the future of technology and society. "
-                f"This is message number {i+1} in our ongoing conversation about "
+                f"This is message number {i + 1} in our ongoing conversation about "
                 f"various scientific and technical topics that I find fascinating.",
             )
             manager.add_message(
@@ -247,18 +255,24 @@ class TestChatbotBenchmark:
                 f"Researchers have made significant progress in understanding the "
                 f"fundamental principles and practical applications. The implications "
                 f"for society are profound, ranging from healthcare to environmental "
-                f"protection. Fact number {i+1} for conversation tracking purposes.",
+                f"protection. Fact number {i + 1} for conversation tracking purposes.",
             )
 
         Metrics.snapshot_tiers(section, manager.memory)
         mem = manager.memory
 
-        _info(f"Active  : {mem.active_tier.current_token_count}/{mem.active_tier.max_tokens} tokens, "
-              f"{len(mem.active_tier.segments)} segments")
-        _info(f"Working : {mem.working_tier.current_token_count}/{mem.working_tier.max_tokens} tokens, "
-              f"{len(mem.working_tier.segments)} segments")
-        _info(f"Archive : {mem.archive_tier.current_token_count}/{mem.archive_tier.max_tokens} tokens, "
-              f"{len(mem.archive_tier.segments)} segments")
+        _info(
+            f"Active  : {mem.active_tier.current_token_count}/{mem.active_tier.max_tokens} tokens, "
+            f"{len(mem.active_tier.segments)} segments"
+        )
+        _info(
+            f"Working : {mem.working_tier.current_token_count}/{mem.working_tier.max_tokens} tokens, "
+            f"{len(mem.working_tier.segments)} segments"
+        )
+        _info(
+            f"Archive : {mem.archive_tier.current_token_count}/{mem.archive_tier.max_tokens} tokens, "
+            f"{len(mem.archive_tier.segments)} segments"
+        )
 
         # Verify tier cascade actually happened
         cascade_happened = (
@@ -290,8 +304,10 @@ class TestChatbotBenchmark:
             + mem.archive_tier.max_tokens
         )
         compression_ratio = total_tokens / total_capacity if total_capacity else 0
-        _info(f"Total tokens across tiers: {total_tokens}/{total_capacity} "
-              f"(usage {compression_ratio:.1%})")
+        _info(
+            f"Total tokens across tiers: {total_tokens}/{total_capacity} "
+            f"(usage {compression_ratio:.1%})"
+        )
 
         passed = int(cascade_happened) + int(response_ok)
         Metrics.record_section(section, passed, 2)
@@ -317,7 +333,10 @@ class TestChatbotBenchmark:
             ("Water boils at 100 degrees Celsius at sea level.", "physics"),
             ("The human body has 206 bones.", "biology"),
             ("Tokyo is the capital of Japan.", "geography"),
-            ("The Rust programming language was first released in 2010.", "programming"),
+            (
+                "The Rust programming language was first released in 2010.",
+                "programming",
+            ),
             ("Earth's atmosphere is 78% nitrogen.", "physics"),
             ("Mitochondria are known as the powerhouse of the cell.", "biology"),
             ("The Amazon River is the largest river by volume.", "geography"),
@@ -327,7 +346,10 @@ class TestChatbotBenchmark:
             ("Mount Everest is 8,849 meters tall.", "geography"),
             ("Git was created by Linus Torvalds in 2005.", "programming"),
             ("Absolute zero is minus 273.15 degrees Celsius.", "physics"),
-            ("Photosynthesis converts CO2 and water into glucose and oxygen.", "biology"),
+            (
+                "Photosynthesis converts CO2 and water into glucose and oxygen.",
+                "biology",
+            ),
         ]
 
         for text, source in facts:
@@ -402,20 +424,22 @@ class TestChatbotBenchmark:
         for i in range(30):
             manager.add_message(
                 "user",
-                f"Let's talk about topic number {i+1}. Tell me about data structures.",
+                f"Let's talk about topic number {i + 1}. Tell me about data structures.",
             )
             manager.add_message(
                 "assistant",
                 f"Data structures are fundamental to computer science. "
-                f"Topic {i+1} explored. Arrays, linked lists, trees, and graphs "
+                f"Topic {i + 1} explored. Arrays, linked lists, trees, and graphs "
                 f"are all important data structures.",
             )
 
         Metrics.snapshot_tiers(section, manager.memory)
-        _info(f"Injected 30 filler pairs — tiers: "
-              f"A={manager.memory.active_tier.current_token_count}, "
-              f"W={manager.memory.working_tier.current_token_count}, "
-              f"AR={manager.memory.archive_tier.current_token_count}")
+        _info(
+            f"Injected 30 filler pairs — tiers: "
+            f"A={manager.memory.active_tier.current_token_count}, "
+            f"W={manager.memory.working_tier.current_token_count}, "
+            f"AR={manager.memory.archive_tier.current_token_count}"
+        )
 
         # Now ask recall questions via live LLM
         recall_checks = [
@@ -466,25 +490,31 @@ class TestChatbotBenchmark:
             try:
                 manager.add_message(
                     "user",
-                    f"Message {i+1}: Please tell me about topic number {i+1} in detail. "
+                    f"Message {i + 1}: Please tell me about topic number {i + 1} in detail. "
                     f"I want to know everything about this interesting subject.",
                 )
                 manager.add_message(
                     "assistant",
-                    f"Response {i+1}: Here is detailed information about topic {i+1}. "
+                    f"Response {i + 1}: Here is detailed information about topic {i + 1}. "
                     f"This is a comprehensive overview covering many aspects of the subject.",
                 )
             except Exception as e:
                 crash = True
-                _fail(f"Crash at message {i+1}: {e}")
+                _fail(f"Crash at message {i + 1}: {e}")
                 break
 
         mem = manager.memory
         Metrics.snapshot_tiers(section, mem)
 
-        _info(f"Active  : {mem.active_tier.current_token_count}/{mem.active_tier.max_tokens}")
-        _info(f"Working : {mem.working_tier.current_token_count}/{mem.working_tier.max_tokens}")
-        _info(f"Archive : {mem.archive_tier.current_token_count}/{mem.archive_tier.max_tokens}")
+        _info(
+            f"Active  : {mem.active_tier.current_token_count}/{mem.active_tier.max_tokens}"
+        )
+        _info(
+            f"Working : {mem.working_tier.current_token_count}/{mem.working_tier.max_tokens}"
+        )
+        _info(
+            f"Archive : {mem.archive_tier.current_token_count}/{mem.archive_tier.max_tokens}"
+        )
         _info(f"Total messages tracked: {len(mem.messages)}")
 
         checks_passed = 0
@@ -521,7 +551,9 @@ class TestChatbotBenchmark:
         Metrics.record_section(section, checks_passed, total_checks)
 
         assert not crash, "System must not crash on overflow"
-        assert checks_passed >= 2, f"Only {checks_passed}/{total_checks} overflow checks passed"
+        assert checks_passed >= 2, (
+            f"Only {checks_passed}/{total_checks} overflow checks passed"
+        )
 
     # ── 6. Concurrent Knowledge + Conversation ──────────────────────────
 
@@ -532,16 +564,32 @@ class TestChatbotBenchmark:
 
         # Interleave knowledge additions with conversation
         interactions = [
-            ("knowledge", "The CortexFlow framework uses a three-tier memory architecture."),
+            (
+                "knowledge",
+                "The CortexFlow framework uses a three-tier memory architecture.",
+            ),
             ("chat", "What memory architecture does CortexFlow use?", "three-tier"),
-            ("knowledge", "CortexFlow supports BM25, Dense, and Hybrid search strategies."),
+            (
+                "knowledge",
+                "CortexFlow supports BM25, Dense, and Hybrid search strategies.",
+            ),
             ("chat", "What search strategies does CortexFlow support?", "bm25"),
-            ("knowledge", "CortexFlow's archive tier uses extractive compression at 30% ratio."),
+            (
+                "knowledge",
+                "CortexFlow's archive tier uses extractive compression at 30% ratio.",
+            ),
             ("chat", "How does CortexFlow compress data in the archive tier?", "30"),
             ("knowledge", "CortexFlow can integrate with Vertex AI for LLM inference."),
             ("chat", "What LLM backends does CortexFlow support?", "vertex"),
-            ("knowledge", "CortexFlow's knowledge graph uses NetworkX for graph operations."),
-            ("chat", "What library does CortexFlow use for graph operations?", "networkx"),
+            (
+                "knowledge",
+                "CortexFlow's knowledge graph uses NetworkX for graph operations.",
+            ),
+            (
+                "chat",
+                "What library does CortexFlow use for graph operations?",
+                "networkx",
+            ),
         ]
 
         knowledge_count = 0
@@ -609,8 +657,10 @@ class TestChatbotBenchmark:
                 sections_seen.setdefault(m["section"], []).append(m["latency"])
             print(f"\n  {BOLD}Latency by section:{RESET}")
             for sec, lats in sections_seen.items():
-                print(f"    {sec:30s}  avg={statistics.mean(lats):.2f}s  "
-                      f"n={len(lats)}  total={sum(lats):.1f}s")
+                print(
+                    f"    {sec:30s}  avg={statistics.mean(lats):.2f}s  "
+                    f"n={len(lats)}  total={sum(lats):.1f}s"
+                )
         else:
             print(f"  {YELLOW}No latency data collected.{RESET}")
 
@@ -619,12 +669,18 @@ class TestChatbotBenchmark:
             print(f"\n  {BOLD}Memory Tier Snapshots:{RESET}")
             for snap in Metrics.tier_snapshots:
                 print(f"    [{snap['section']}]")
-                print(f"      Active  : {snap['active_tokens']:>6}/{snap['active_max']} tokens, "
-                      f"{snap['active_segments']} segments")
-                print(f"      Working : {snap['working_tokens']:>6}/{snap['working_max']} tokens, "
-                      f"{snap['working_segments']} segments")
-                print(f"      Archive : {snap['archive_tokens']:>6}/{snap['archive_max']} tokens, "
-                      f"{snap['archive_segments']} segments")
+                print(
+                    f"      Active  : {snap['active_tokens']:>6}/{snap['active_max']} tokens, "
+                    f"{snap['active_segments']} segments"
+                )
+                print(
+                    f"      Working : {snap['working_tokens']:>6}/{snap['working_max']} tokens, "
+                    f"{snap['working_segments']} segments"
+                )
+                print(
+                    f"      Archive : {snap['archive_tokens']:>6}/{snap['archive_max']} tokens, "
+                    f"{snap['archive_segments']} segments"
+                )
 
         # ── Knowledge retrieval accuracy ──
         if Metrics.knowledge_attempts > 0:
@@ -647,9 +703,15 @@ class TestChatbotBenchmark:
 
         if total_tests:
             overall_rate = total_passed / total_tests
-            color = GREEN if overall_rate >= 0.8 else (YELLOW if overall_rate >= 0.5 else RED)
-            print(f"\n  {BOLD}Overall: {color}{total_passed}/{total_tests} "
-                  f"({overall_rate:.0%}){RESET}")
+            color = (
+                GREEN
+                if overall_rate >= 0.8
+                else (YELLOW if overall_rate >= 0.5 else RED)
+            )
+            print(
+                f"\n  {BOLD}Overall: {color}{total_passed}/{total_tests} "
+                f"({overall_rate:.0%}){RESET}"
+            )
         else:
             print(f"\n  {YELLOW}No test results collected.{RESET}")
 

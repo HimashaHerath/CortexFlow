@@ -3,6 +3,7 @@ CortexFlow Classifier module.
 
 This module provides content classification functionality for CortexFlow.
 """
+
 from __future__ import annotations
 
 import logging
@@ -26,44 +27,83 @@ class RuleBasedClassifier:
         """Initialize rule-based classifier."""
         # Patterns that suggest higher importance
         self.important_patterns = [
-            r'\b(?:important|critical|urgent|crucial|key|essential|remember|note|significant)\b',
-            r'\b(?:deadline|schedule|appointment|meeting|interview)\b',
-            r'\b(?:password|credential|account|login|security)\b',
-            r'\b(?:address|phone|email|contact)\b',
-            r'(?:\d{1,2}[:./-]\d{1,2}(?:[:./-]\d{2,4})?)',  # Date/time patterns
-            r'(?:\$\d+(?:\.\d{2})?)',  # Money patterns
-            r'(?:https?://\S+)',  # URLs
-            r'(?:\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b)',  # Email
-            r'(?:\b\d{3}[-.]?\d{3}[-.]?\d{4}\b)'  # Phone numbers
+            r"\b(?:important|critical|urgent|crucial|key|essential|remember|note|significant)\b",
+            r"\b(?:deadline|schedule|appointment|meeting|interview)\b",
+            r"\b(?:password|credential|account|login|security)\b",
+            r"\b(?:address|phone|email|contact)\b",
+            r"(?:\d{1,2}[:./-]\d{1,2}(?:[:./-]\d{2,4})?)",  # Date/time patterns
+            r"(?:\$\d+(?:\.\d{2})?)",  # Money patterns
+            r"(?:https?://\S+)",  # URLs
+            r"(?:\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b)",  # Email
+            r"(?:\b\d{3}[-.]?\d{3}[-.]?\d{4}\b)",  # Phone numbers
         ]
 
         # Patterns that suggest lower importance
         self.unimportant_patterns = [
-            r'\b(?:lol|haha|hmm|oh|ah|um|uh)\b',
-            r'(?:[\U0001F600-\U0001F64F])',  # Emojis
-            r'(?:^(?:ok|okay|sure|yes|no|maybe)$)',  # Single-word responses
+            r"\b(?:lol|haha|hmm|oh|ah|um|uh)\b",
+            r"(?:[\U0001F600-\U0001F64F])",  # Emojis
+            r"(?:^(?:ok|okay|sure|yes|no|maybe)$)",  # Single-word responses
         ]
 
         # Keywords that influence importance
         self.importance_keywords = {
-            'high': ['urgent', 'important', 'critical', 'emergency', 'deadline', 'required',
-                   'necessary', 'essential', 'vital', 'crucial', 'key', 'significant',
-                   'remember', 'note', 'attention', 'action', 'decision'],
-            'medium': ['meeting', 'project', 'task', 'update', 'information', 'report',
-                     'review', 'consider', 'discuss', 'option', 'alternative', 'suggestion'],
-            'low': ['fyi', 'maybe', 'perhaps', 'sometime', 'whenever', 'thought',
-                  'random', 'just', 'btw', 'by the way', 'off topic']
+            "high": [
+                "urgent",
+                "important",
+                "critical",
+                "emergency",
+                "deadline",
+                "required",
+                "necessary",
+                "essential",
+                "vital",
+                "crucial",
+                "key",
+                "significant",
+                "remember",
+                "note",
+                "attention",
+                "action",
+                "decision",
+            ],
+            "medium": [
+                "meeting",
+                "project",
+                "task",
+                "update",
+                "information",
+                "report",
+                "review",
+                "consider",
+                "discuss",
+                "option",
+                "alternative",
+                "suggestion",
+            ],
+            "low": [
+                "fyi",
+                "maybe",
+                "perhaps",
+                "sometime",
+                "whenever",
+                "thought",
+                "random",
+                "just",
+                "btw",
+                "by the way",
+                "off topic",
+            ],
         }
 
         # Message type weights
         self.type_weights = {
-            'system': 0.9,
-            'user': 0.7,
-            'assistant': 0.5,
-            'function': 0.6,
-            'data': 0.8,
-            'summary': 0.7,
-            'unknown': 0.5
+            "system": 0.9,
+            "user": 0.7,
+            "assistant": 0.5,
+            "function": 0.6,
+            "data": 0.8,
+            "summary": 0.7,
+            "unknown": 0.5,
         }
 
     def classify(self, segment: ContextSegment) -> float:
@@ -102,16 +142,16 @@ class RuleBasedClassifier:
                 score -= 0.1
 
         # Check for keywords
-        for keyword in self.importance_keywords['high']:
-            if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
+        for keyword in self.importance_keywords["high"]:
+            if re.search(r"\b" + re.escape(keyword) + r"\b", content, re.IGNORECASE):
                 score += 0.15
 
-        for keyword in self.importance_keywords['medium']:
-            if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
+        for keyword in self.importance_keywords["medium"]:
+            if re.search(r"\b" + re.escape(keyword) + r"\b", content, re.IGNORECASE):
                 score += 0.07
 
-        for keyword in self.importance_keywords['low']:
-            if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
+        for keyword in self.importance_keywords["low"]:
+            if re.search(r"\b" + re.escape(keyword) + r"\b", content, re.IGNORECASE):
                 score -= 0.05
 
         # Message length factor (longer messages might be more important)
@@ -119,19 +159,18 @@ class RuleBasedClassifier:
         score += length_factor
 
         # Content recency
-        if hasattr(segment, 'timestamp'):
+        if hasattr(segment, "timestamp"):
             recency = (time.time() - segment.timestamp) / 86400.0  # Days
             recency_factor = max(0.0, 0.1 - min(recency, 10) / 100.0)
             score += recency_factor
 
         # Explicit importance from metadata
-        if 'importance' in metadata:
-            explicit_importance = float(metadata['importance'])
+        if "importance" in metadata:
+            explicit_importance = float(metadata["importance"])
             score = score * 0.6 + explicit_importance * 0.4
 
         # Ensure score is within range
         return max(0.0, min(score, 1.0))
-
 
 
 class LLMClassifier:
@@ -172,7 +211,9 @@ class LLMClassifier:
         Rate the importance as a single number between 0.0 and 1.0:
         """
 
-    def classify(self, segment: ContextSegment, context: list[ContextSegment] = None) -> float:
+    def classify(
+        self, segment: ContextSegment, context: list[ContextSegment] = None
+    ) -> float:
         """
         Classify importance using LLM.
 
@@ -198,7 +239,9 @@ class LLMClassifier:
         context_text = ""
         if context:
             context_samples = context[-2:]  # Just use the last 2 messages
-            context_text = "\n".join([f"[{c.segment_type}] {c.content[:100]}..." for c in context_samples])
+            context_text = "\n".join(
+                [f"[{c.segment_type}] {c.content[:100]}..." for c in context_samples]
+            )
 
         # Truncate long messages
         max_length = 500  # Character limit for LLM
@@ -208,20 +251,22 @@ class LLMClassifier:
         # Prepare prompt
         prompt = self.base_prompt.format(message=content)
         if context_text:
-            prompt = prompt.replace("Message:", f"Recent context:\n{context_text}\n\nMessage:")
+            prompt = prompt.replace(
+                "Message:", f"Recent context:\n{context_text}\n\nMessage:"
+            )
 
         try:
             result = self.llm_client.generate_from_prompt(prompt, timeout=5)
 
             # Extract score from response
-            score_match = re.search(r'0\.\d+', result)
+            score_match = re.search(r"0\.\d+", result)
             if score_match:
                 score = float(score_match.group(0))
                 self.cache[cache_key] = score
                 return score
 
             # If no decimal found, look for integer
-            int_match = re.search(r'\b[0-9]\b', result)
+            int_match = re.search(r"\b[0-9]\b", result)
             if int_match:
                 score = float(int_match.group(0)) / 10.0
                 self.cache[cache_key] = score
@@ -262,15 +307,17 @@ class ImportanceClassifier:
 
         # Set up weights for ensemble (rule-based dominates since it's deterministic)
         self.rule_weight = 0.6  # Default weight for rule-based classifier
-        self.llm_weight = 0.4   # Default weight for LLM-based classifier
+        self.llm_weight = 0.4  # Default weight for LLM-based classifier
 
         # Override with config if available
-        if hasattr(config, 'rule_weight'):
+        if hasattr(config, "rule_weight"):
             self.rule_weight = config.rule_weight
-        if hasattr(config, 'llm_weight'):
+        if hasattr(config, "llm_weight"):
             self.llm_weight = config.llm_weight
 
-    def classify(self, segment: ContextSegment, context: list[ContextSegment] = None) -> float:
+    def classify(
+        self, segment: ContextSegment, context: list[ContextSegment] = None
+    ) -> float:
         """
         Classify the importance of a context segment.
 
@@ -295,9 +342,12 @@ class ImportanceClassifier:
         weights = [self.rule_weight]
 
         # Use LLM classifier for more complex content (returns 0-1)
-        use_llm = hasattr(self.config, 'use_llm_classification') and self.config.use_llm_classification
+        use_llm = (
+            hasattr(self.config, "use_llm_classification")
+            and self.config.use_llm_classification
+        )
         if use_llm:
-            max_llm_length = getattr(self.config, 'max_llm_classification_length', 250)
+            max_llm_length = getattr(self.config, "max_llm_classification_length", 250)
             if len(segment.content) < max_llm_length:
                 llm_score = self.llm_classifier.classify(segment, context)
                 scores.append(llm_score)
@@ -322,6 +372,7 @@ class ImportanceClassifier:
 
         return importance
 
+
 class ContentClassifier:
     """
     Classifier for content types in messages.
@@ -340,22 +391,43 @@ class ContentClassifier:
         # Define classification categories
         self.categories = {
             "question": ["what", "why", "how", "when", "where", "who", "which", "?"],
-            "command": ["do", "please", "can you", "could you", "make", "create", "find", "search"],
+            "command": [
+                "do",
+                "please",
+                "can you",
+                "could you",
+                "make",
+                "create",
+                "find",
+                "search",
+            ],
             "factual": ["is", "are", "was", "were", "fact", "knowledge", "information"],
             "opinion": ["think", "believe", "feel", "opinion", "perspective"],
-            "greeting": ["hi", "hello", "hey", "good morning", "good afternoon", "good evening"],
-            "farewell": ["bye", "goodbye", "see you", "talk later", "thanks"]
+            "greeting": [
+                "hi",
+                "hello",
+                "hey",
+                "good morning",
+                "good afternoon",
+                "good evening",
+            ],
+            "farewell": ["bye", "goodbye", "see you", "talk later", "thanks"],
         }
 
         # Initialize vector model if ML classification is enabled
         self.model = None
-        if hasattr(config, 'use_ml_classifier') and config.use_ml_classifier:
+        if hasattr(config, "use_ml_classifier") and config.use_ml_classifier:
             try:
                 from sentence_transformers import SentenceTransformer
+
                 self.model = SentenceTransformer(config.classifier_model)
-                logger.info(f"Content classifier model loaded: {config.classifier_model}")
+                logger.info(
+                    f"Content classifier model loaded: {config.classifier_model}"
+                )
             except ImportError:
-                logger.warning("SentenceTransformer not available for ML classification")
+                logger.warning(
+                    "SentenceTransformer not available for ML classification"
+                )
             except Exception as e:
                 logger.error(f"Error loading classifier model: {e}")
 
@@ -374,7 +446,7 @@ class ContentClassifier:
             "primary_category": None,
             "is_question": False,
             "sentiment": "neutral",
-            "confidence": 0.0
+            "confidence": 0.0,
         }
 
         # Skip classification for very short content
@@ -403,11 +475,32 @@ class ContentClassifier:
                 result["confidence"] = primary[1]
 
         # Check if content is a question
-        result["is_question"] = normalized.endswith("?") or any(q in normalized for q in ["what", "why", "how", "when", "where", "who", "which"])
+        result["is_question"] = normalized.endswith("?") or any(
+            q in normalized
+            for q in ["what", "why", "how", "when", "where", "who", "which"]
+        )
 
         # Simple sentiment detection
-        positive_words = ["good", "great", "excellent", "amazing", "wonderful", "fantastic", "happy", "thanks"]
-        negative_words = ["bad", "terrible", "awful", "horrible", "sad", "angry", "upset", "disappointed"]
+        positive_words = [
+            "good",
+            "great",
+            "excellent",
+            "amazing",
+            "wonderful",
+            "fantastic",
+            "happy",
+            "thanks",
+        ]
+        negative_words = [
+            "bad",
+            "terrible",
+            "awful",
+            "horrible",
+            "sad",
+            "angry",
+            "upset",
+            "disappointed",
+        ]
 
         positive_score = sum(1 for word in positive_words if word in normalized)
         negative_score = sum(1 for word in negative_words if word in normalized)
@@ -424,7 +517,7 @@ class ContentClassifier:
                 # A real implementation would have a trained classifier
                 result["ml_classification"] = {
                     "enabled": True,
-                    "model": self.config.classifier_model
+                    "model": self.config.classifier_model,
                 }
             except Exception as e:
                 logger.error(f"Error in ML classification: {e}")

@@ -1,4 +1,5 @@
 """Tests for cortexflow.mcp_server."""
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,7 @@ from cortexflow.mcp_server import (
 # ------------------------------------------------------------------
 # Fixtures
 # ------------------------------------------------------------------
+
 
 @pytest.fixture()
 def mock_manager():
@@ -69,6 +71,7 @@ def mock_ctx(mock_manager):
 # ------------------------------------------------------------------
 # Tool tests
 # ------------------------------------------------------------------
+
 
 class TestAddMemory:
     async def test_adds_message(self, mock_ctx, mock_manager):

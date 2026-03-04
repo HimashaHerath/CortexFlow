@@ -7,7 +7,9 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 # Import the necessary modules
 from cortexflow.config import CortexFlowConfig  # noqa: E402
@@ -28,32 +30,76 @@ class MockGraphStore:
         #                           \-> Machine Learning -> Artificial Intelligence
         self.neighbors = {
             "Python": {
-                "outgoing": [{"entity": "Data Science", "relation": "used_in", "confidence": 0.9}],
-                "incoming": []
+                "outgoing": [
+                    {"entity": "Data Science", "relation": "used_in", "confidence": 0.9}
+                ],
+                "incoming": [],
             },
             "Data Science": {
                 "outgoing": [
-                    {"entity": "Statistical Analysis", "relation": "involves", "confidence": 0.85},
-                    {"entity": "Machine Learning", "relation": "includes", "confidence": 0.9}
+                    {
+                        "entity": "Statistical Analysis",
+                        "relation": "involves",
+                        "confidence": 0.85,
+                    },
+                    {
+                        "entity": "Machine Learning",
+                        "relation": "includes",
+                        "confidence": 0.9,
+                    },
                 ],
-                "incoming": [{"entity": "Python", "relation": "used_in", "confidence": 0.9}]
+                "incoming": [
+                    {"entity": "Python", "relation": "used_in", "confidence": 0.9}
+                ],
             },
             "Statistical Analysis": {
-                "outgoing": [{"entity": "Mathematics", "relation": "is_a", "confidence": 0.95}],
-                "incoming": [{"entity": "Data Science", "relation": "involves", "confidence": 0.85}]
+                "outgoing": [
+                    {"entity": "Mathematics", "relation": "is_a", "confidence": 0.95}
+                ],
+                "incoming": [
+                    {
+                        "entity": "Data Science",
+                        "relation": "involves",
+                        "confidence": 0.85,
+                    }
+                ],
             },
             "Mathematics": {
                 "outgoing": [],
-                "incoming": [{"entity": "Statistical Analysis", "relation": "is_a", "confidence": 0.95}]
+                "incoming": [
+                    {
+                        "entity": "Statistical Analysis",
+                        "relation": "is_a",
+                        "confidence": 0.95,
+                    }
+                ],
             },
             "Machine Learning": {
-                "outgoing": [{"entity": "Artificial Intelligence", "relation": "is_a", "confidence": 0.95}],
-                "incoming": [{"entity": "Data Science", "relation": "includes", "confidence": 0.9}]
+                "outgoing": [
+                    {
+                        "entity": "Artificial Intelligence",
+                        "relation": "is_a",
+                        "confidence": 0.95,
+                    }
+                ],
+                "incoming": [
+                    {
+                        "entity": "Data Science",
+                        "relation": "includes",
+                        "confidence": 0.9,
+                    }
+                ],
             },
             "Artificial Intelligence": {
                 "outgoing": [],
-                "incoming": [{"entity": "Machine Learning", "relation": "is_a", "confidence": 0.95}]
-            }
+                "incoming": [
+                    {
+                        "entity": "Machine Learning",
+                        "relation": "is_a",
+                        "confidence": 0.95,
+                    }
+                ],
+            },
         }
 
     def get_entity_neighbors(self, entity, direction="both"):
@@ -62,7 +108,9 @@ class MockGraphStore:
             return []
 
         if direction == "both":
-            return self.neighbors[entity]["outgoing"] + self.neighbors[entity]["incoming"]
+            return (
+                self.neighbors[entity]["outgoing"] + self.neighbors[entity]["incoming"]
+            )
         elif direction == "outgoing":
             return self.neighbors[entity]["outgoing"]
         elif direction == "incoming":
@@ -99,9 +147,24 @@ class MockGraphStore:
         if start_entity == "Python" and end_entity == "Mathematics":
             return [
                 [
-                    {"source": "Python", "relation": "used_in", "target": "Data Science", "confidence": 0.9},
-                    {"source": "Data Science", "relation": "involves", "target": "Statistical Analysis", "confidence": 0.85},
-                    {"source": "Statistical Analysis", "relation": "is_a", "target": "Mathematics", "confidence": 0.95}
+                    {
+                        "source": "Python",
+                        "relation": "used_in",
+                        "target": "Data Science",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Data Science",
+                        "relation": "involves",
+                        "target": "Statistical Analysis",
+                        "confidence": 0.85,
+                    },
+                    {
+                        "source": "Statistical Analysis",
+                        "relation": "is_a",
+                        "target": "Mathematics",
+                        "confidence": 0.95,
+                    },
                 ]
             ]
         return []
@@ -111,9 +174,24 @@ class MockGraphStore:
         if start_entity == "Python" and end_entity == "Artificial Intelligence":
             return [
                 [
-                    {"source": "Python", "relation": "used_in", "target": "Data Science", "confidence": 0.9},
-                    {"source": "Data Science", "relation": "includes", "target": "Machine Learning", "confidence": 0.9},
-                    {"source": "Machine Learning", "relation": "is_a", "target": "Artificial Intelligence", "confidence": 0.95}
+                    {
+                        "source": "Python",
+                        "relation": "used_in",
+                        "target": "Data Science",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Data Science",
+                        "relation": "includes",
+                        "target": "Machine Learning",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Machine Learning",
+                        "relation": "is_a",
+                        "target": "Artificial Intelligence",
+                        "confidence": 0.95,
+                    },
                 ]
             ]
         return []
@@ -123,9 +201,24 @@ class MockGraphStore:
         if start_entity == "Python" and end_entity == "Artificial Intelligence":
             return [
                 [
-                    {"source": "Python", "relation": "used_in", "target": "Data Science", "confidence": 0.9},
-                    {"source": "Data Science", "relation": "includes", "target": "Machine Learning", "confidence": 0.9},
-                    {"source": "Machine Learning", "relation": "is_a", "target": "Artificial Intelligence", "confidence": 0.95}
+                    {
+                        "source": "Python",
+                        "relation": "used_in",
+                        "target": "Data Science",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Data Science",
+                        "relation": "includes",
+                        "target": "Machine Learning",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source": "Machine Learning",
+                        "relation": "is_a",
+                        "target": "Artificial Intelligence",
+                        "confidence": 0.95,
+                    },
                 ]
             ]
         return []
@@ -149,9 +242,7 @@ class TestPathInference(unittest.TestCase):
         # For this test, we'll directly use the mock implementation instead
         # of going through the BidirectionalSearch class
         paths = self.graph_store.bidirectional_search(
-            start_entity="Python",
-            end_entity="Mathematics",
-            max_hops=3
+            start_entity="Python", end_entity="Mathematics", max_hops=3
         )
 
         # Should find at least one path
@@ -169,9 +260,7 @@ class TestPathInference(unittest.TestCase):
         """Test weighted path search functionality."""
         # For this test, use the mock implementation directly
         paths = self.graph_store.weighted_path_query(
-            start_entity="Python",
-            end_entity="Artificial Intelligence",
-            max_hops=4
+            start_entity="Python", end_entity="Artificial Intelligence", max_hops=4
         )
 
         # Should find at least one path
@@ -184,7 +273,7 @@ class TestPathInference(unittest.TestCase):
             start_entity="Python",
             end_entity="Artificial Intelligence",
             allowed_relations=["used_in", "includes", "is_a"],
-            max_hops=4
+            max_hops=4,
         )
 
         # Should find at least one path
@@ -195,8 +284,16 @@ class TestPathInference(unittest.TestCase):
         # Create a sample path
         sample_path = [
             {"source": "Python", "relation": "used_in", "target": "Data Science"},
-            {"source": "Data Science", "relation": "involves", "target": "Statistical Analysis"},
-            {"source": "Statistical Analysis", "relation": "is_a", "target": "Mathematics"}
+            {
+                "source": "Data Science",
+                "relation": "involves",
+                "target": "Statistical Analysis",
+            },
+            {
+                "source": "Statistical Analysis",
+                "relation": "is_a",
+                "target": "Mathematics",
+            },
         ]
 
         # Generate explanation
@@ -241,12 +338,12 @@ class TestReasoningEngine(unittest.TestCase):
     def test_reasoning_process(self):
         """Test the full reasoning process with mocked methods."""
         # Patch the internal method that executes reasoning steps
-        with patch.object(self.engine, '_execute_reasoning_step') as mock_execute:
+        with patch.object(self.engine, "_execute_reasoning_step") as mock_execute:
             # Configure mock to return fake reasoning step results
             mock_execute.return_value = {
                 "result": "Python connects to mathematics through data science and statistical analysis.",
                 "confidence": 0.85,
-                "sources": ["knowledge graph"]
+                "sources": ["knowledge graph"],
             }
 
             # Perform reasoning on a query

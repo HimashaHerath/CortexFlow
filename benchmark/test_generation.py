@@ -30,14 +30,27 @@ class ReasoningTestGenerator:
 
         # Default entity types for testing
         self.entity_types = [
-            "PERSON", "ORGANIZATION", "LOCATION", "CONCEPT",
-            "TECHNOLOGY", "EVENT", "PRODUCT", "FIELD"
+            "PERSON",
+            "ORGANIZATION",
+            "LOCATION",
+            "CONCEPT",
+            "TECHNOLOGY",
+            "EVENT",
+            "PRODUCT",
+            "FIELD",
         ]
 
         # Default relation types for testing
         self.relation_types = [
-            "created", "invented", "discovered", "works_for", "founded",
-            "located_in", "part_of", "used_for", "specializes_in"
+            "created",
+            "invented",
+            "discovered",
+            "works_for",
+            "founded",
+            "located_in",
+            "part_of",
+            "used_for",
+            "specializes_in",
         ]
 
     def _extract_graph_data(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -60,23 +73,29 @@ class ReasoningTestGenerator:
                 entity = {
                     "id": node_id,
                     "name": node_data.get("name", f"Entity_{node_id}"),
-                    "type": node_data.get("type", "UNKNOWN")
+                    "type": node_data.get("type", "UNKNOWN"),
                 }
                 entities.append(entity)
 
             # Extract relations
             for src, dst, data in self.graph_store.graph.edges(data=True):
                 relation = {
-                    "subject": self.graph_store.graph.nodes[src].get("name", f"Entity_{src}"),
+                    "subject": self.graph_store.graph.nodes[src].get(
+                        "name", f"Entity_{src}"
+                    ),
                     "predicate": data.get("type", "related_to"),
-                    "object": self.graph_store.graph.nodes[dst].get("name", f"Entity_{dst}"),
-                    "weight": data.get("weight", 1.0)
+                    "object": self.graph_store.graph.nodes[dst].get(
+                        "name", f"Entity_{dst}"
+                    ),
+                    "weight": data.get("weight", 1.0),
                 }
                 relations.append(relation)
 
         return entities, relations
 
-    def _get_db_entities_relations(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    def _get_db_entities_relations(
+        self,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """
         Get entities and relations from the database.
 
@@ -142,7 +161,7 @@ class ReasoningTestGenerator:
                     subject_id,
                     object_id,
                     predicate=relation["predicate"],
-                    weight=relation.get("weight", 1.0)
+                    weight=relation.get("weight", 1.0),
                 )
 
         # Generate test cases
@@ -165,7 +184,9 @@ class ReasoningTestGenerator:
 
                     try:
                         paths = list(nx.all_simple_paths(G, source_id, node, cutoff=3))
-                        if paths and any(len(path) >= 3 for path in paths):  # At least 2 hops
+                        if paths and any(
+                            len(path) >= 3 for path in paths
+                        ):  # At least 2 hops
                             targets.append((node, paths))
                     except nx.NetworkXNoPath:
                         continue
@@ -183,8 +204,12 @@ class ReasoningTestGenerator:
                 continue
 
             # Create test case
-            source_name = G.nodes[connected_nodes[0]].get("name", f"Entity_{connected_nodes[0]}")
-            target_name = G.nodes[connected_nodes[-1]].get("name", f"Entity_{connected_nodes[-1]}")
+            source_name = G.nodes[connected_nodes[0]].get(
+                "name", f"Entity_{connected_nodes[0]}"
+            )
+            target_name = G.nodes[connected_nodes[-1]].get(
+                "name", f"Entity_{connected_nodes[-1]}"
+            )
 
             # Create expected path
             expected_path = []
@@ -196,7 +221,11 @@ class ReasoningTestGenerator:
                 G.nodes[dst_id].get("name", f"Entity_{dst_id}")
 
                 edge_data = G.get_edge_data(src_id, dst_id)
-                predicate = edge_data.get("predicate", "related_to") if edge_data else "related_to"
+                predicate = (
+                    edge_data.get("predicate", "related_to")
+                    if edge_data
+                    else "related_to"
+                )
 
                 expected_path.append(src_name)
                 expected_path.append(predicate)
@@ -204,7 +233,10 @@ class ReasoningTestGenerator:
             expected_path.append(target_name)
 
             # Create expected entities (all entities in the path)
-            expected_entities = [G.nodes[node_id].get("name", f"Entity_{node_id}") for node_id in connected_nodes]
+            expected_entities = [
+                G.nodes[node_id].get("name", f"Entity_{node_id}")
+                for node_id in connected_nodes
+            ]
 
             # Generate query
             query = f"What is the connection between {source_name} and {target_name}?"
@@ -216,19 +248,23 @@ class ReasoningTestGenerator:
                 "expected_entities": expected_entities,
                 "hop_count": len(connected_nodes) - 1,
                 "source": source_name,
-                "target": target_name
+                "target": target_name,
             }
 
             tests.append(test_case)
 
         # If we couldn't generate enough tests, supplement with synthetic ones
         if len(tests) < num_tests:
-            synthetic_tests = self._generate_synthetic_multi_hop_tests(num_tests - len(tests))
+            synthetic_tests = self._generate_synthetic_multi_hop_tests(
+                num_tests - len(tests)
+            )
             tests.extend(synthetic_tests)
 
         return tests[:num_tests]  # Ensure we return exactly num_tests
 
-    def _generate_synthetic_multi_hop_tests(self, num_tests: int) -> list[dict[str, Any]]:
+    def _generate_synthetic_multi_hop_tests(
+        self, num_tests: int
+    ) -> list[dict[str, Any]]:
         """
         Generate synthetic test cases for multi-hop reasoning.
 
@@ -243,17 +279,61 @@ class ReasoningTestGenerator:
         # Sample entities for different domains
         domains = {
             "tech": {
-                "entities": ["Python", "JavaScript", "TensorFlow", "PyTorch", "Google", "Microsoft", "Amazon", "Facebook"],
-                "relations": ["created", "developed", "uses", "supports", "invested_in"]
+                "entities": [
+                    "Python",
+                    "JavaScript",
+                    "TensorFlow",
+                    "PyTorch",
+                    "Google",
+                    "Microsoft",
+                    "Amazon",
+                    "Facebook",
+                ],
+                "relations": [
+                    "created",
+                    "developed",
+                    "uses",
+                    "supports",
+                    "invested_in",
+                ],
             },
             "science": {
-                "entities": ["Einstein", "Newton", "Relativity", "Gravity", "Physics", "Mathematics", "CERN", "NASA"],
-                "relations": ["discovered", "formulated", "proved", "studied", "works_for"]
+                "entities": [
+                    "Einstein",
+                    "Newton",
+                    "Relativity",
+                    "Gravity",
+                    "Physics",
+                    "Mathematics",
+                    "CERN",
+                    "NASA",
+                ],
+                "relations": [
+                    "discovered",
+                    "formulated",
+                    "proved",
+                    "studied",
+                    "works_for",
+                ],
             },
             "business": {
-                "entities": ["Elon Musk", "Jeff Bezos", "Tesla", "SpaceX", "Blue Origin", "Silicon Valley", "Wall Street"],
-                "relations": ["founded", "leads", "invested_in", "located_in", "competes_with"]
-            }
+                "entities": [
+                    "Elon Musk",
+                    "Jeff Bezos",
+                    "Tesla",
+                    "SpaceX",
+                    "Blue Origin",
+                    "Silicon Valley",
+                    "Wall Street",
+                ],
+                "relations": [
+                    "founded",
+                    "leads",
+                    "invested_in",
+                    "located_in",
+                    "competes_with",
+                ],
+            },
         }
 
         # Generate test cases
@@ -276,7 +356,9 @@ class ReasoningTestGenerator:
 
             # Generate path entities
             path_entities = [source]
-            remaining_entities = [e for e in domain["entities"] if e != source and e != target]
+            remaining_entities = [
+                e for e in domain["entities"] if e != source and e != target
+            ]
 
             # Add intermediate entities
             for _ in range(max_possible_length - 2):  # -2 for source and target
@@ -311,7 +393,7 @@ class ReasoningTestGenerator:
                 "hop_count": len(path_entities) - 1,
                 "source": source,
                 "target": target,
-                "synthetic": True
+                "synthetic": True,
             }
 
             tests.append(test_case)
@@ -365,8 +447,11 @@ class ReasoningTestGenerator:
                 entity2_name = entity2.get("name", f"Entity_{entity2.get('id')}")
 
                 # Choose a relation type that doesn't exist between these entities
-                available_predicates = [r for r in self.relation_types
-                                        if (entity1_name, r, entity2_name) not in existing_relations]
+                available_predicates = [
+                    r
+                    for r in self.relation_types
+                    if (entity1_name, r, entity2_name) not in existing_relations
+                ]
 
                 if available_predicates:
                     predicate = random.choice(available_predicates)
@@ -384,7 +469,7 @@ class ReasoningTestGenerator:
                         "expected_path": [],
                         "hop_count": 0,
                         "counterfactual": True,
-                        "description": f"False relation: {entity1_name} {predicate} {entity2_name}"
+                        "description": f"False relation: {entity1_name} {predicate} {entity2_name}",
                     }
 
                     tests.append(test_case)
@@ -392,7 +477,9 @@ class ReasoningTestGenerator:
             # Strategy 2: Mix entities from different domains that shouldn't be connected
             if len(entities_by_type) >= 2:
                 # Choose two different entity types
-                available_types = [t for t in entities_by_type if len(entities_by_type[t]) > 0]
+                available_types = [
+                    t for t in entities_by_type if len(entities_by_type[t]) > 0
+                ]
                 if len(available_types) >= 2:
                     type1, type2 = random.sample(available_types, 2)
 
@@ -413,19 +500,23 @@ class ReasoningTestGenerator:
                         "expected_path": [],
                         "hop_count": 0,
                         "counterfactual": True,
-                        "description": f"No connection between {entity1_name} and {entity2_name}"
+                        "description": f"No connection between {entity1_name} and {entity2_name}",
                     }
 
                     tests.append(test_case)
 
         # If we couldn't generate enough tests, supplement with synthetic ones
         if len(tests) < num_tests:
-            synthetic_tests = self._generate_synthetic_counterfactual_tests(num_tests - len(tests))
+            synthetic_tests = self._generate_synthetic_counterfactual_tests(
+                num_tests - len(tests)
+            )
             tests.extend(synthetic_tests)
 
         return tests[:num_tests]  # Ensure we return exactly num_tests
 
-    def _generate_synthetic_counterfactual_tests(self, num_tests: int) -> list[dict[str, Any]]:
+    def _generate_synthetic_counterfactual_tests(
+        self, num_tests: int
+    ) -> list[dict[str, Any]]:
         """
         Generate synthetic test cases for counterfactual reasoning.
 
@@ -442,11 +533,18 @@ class ReasoningTestGenerator:
             "tech": ["Python", "JavaScript", "Google", "Microsoft"],
             "history": ["Napoleon", "Alexander the Great", "Rome", "Egypt"],
             "physics": ["Einstein", "Newton", "Quantum Mechanics", "Relativity"],
-            "fiction": ["Harry Potter", "Luke Skywalker", "Middle Earth", "Narnia"]
+            "fiction": ["Harry Potter", "Luke Skywalker", "Middle Earth", "Narnia"],
         }
 
         # Sample predicates
-        predicates = ["created", "discovered", "founded", "visited", "conquered", "studied"]
+        predicates = [
+            "created",
+            "discovered",
+            "founded",
+            "visited",
+            "conquered",
+            "studied",
+        ]
 
         for _ in range(num_tests):
             # Choose entities from different domains
@@ -471,16 +569,19 @@ class ReasoningTestGenerator:
                 "hop_count": 0,
                 "counterfactual": True,
                 "synthetic": True,
-                "description": f"Synthetic counterfactual between domains {domain1} and {domain2}"
+                "description": f"Synthetic counterfactual between domains {domain1} and {domain2}",
             }
 
             tests.append(test_case)
 
         return tests
 
-    def generate_test_suite(self, suite_name: str = "default",
-                            num_multi_hop: int = 10,
-                            num_counterfactual: int = 5) -> dict[str, Any]:
+    def generate_test_suite(
+        self,
+        suite_name: str = "default",
+        num_multi_hop: int = 10,
+        num_counterfactual: int = 5,
+    ) -> dict[str, Any]:
         """
         Generate a complete test suite with different types of tests.
 
@@ -502,13 +603,13 @@ class ReasoningTestGenerator:
             "timestamp": datetime.datetime.now().isoformat(),
             "tests": {
                 "multi_hop": multi_hop_tests,
-                "counterfactual": counterfactual_tests
+                "counterfactual": counterfactual_tests,
             },
             "metadata": {
                 "total_tests": len(multi_hop_tests) + len(counterfactual_tests),
                 "num_multi_hop": len(multi_hop_tests),
-                "num_counterfactual": len(counterfactual_tests)
-            }
+                "num_counterfactual": len(counterfactual_tests),
+            },
         }
 
         # Store test suite
@@ -531,7 +632,7 @@ class ReasoningTestGenerator:
             return False
 
         try:
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 json.dump(self.test_suites[suite_name], f, indent=2)
             return True
         except Exception:

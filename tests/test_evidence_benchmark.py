@@ -65,9 +65,9 @@ def _info(msg):
 
 
 def _header(title):
-    print(f"\n{BOLD}{CYAN}{'='*70}{RESET}")
+    print(f"\n{BOLD}{CYAN}{'=' * 70}{RESET}")
     print(f"{BOLD}{CYAN}  {title}{RESET}")
-    print(f"{BOLD}{CYAN}{'='*70}{RESET}")
+    print(f"{BOLD}{CYAN}{'=' * 70}{RESET}")
 
 
 def _subheader(title):
@@ -177,13 +177,14 @@ Example: {{"accuracy": 8, "relevance": 9, "completeness": 7}}
     try:
         raw = llm_client.generate_from_prompt(prompt)
         # Extract JSON from response (handle markdown code blocks)
-        json_match = re.search(r'\{[^{}]+\}', raw)
+        json_match = re.search(r"\{[^{}]+\}", raw)
         if json_match:
             scores = json.loads(json_match.group())
             for key in ("accuracy", "relevance", "completeness"):
                 scores[key] = max(1, min(10, int(scores.get(key, 0))))
             scores["average"] = round(
-                (scores["accuracy"] + scores["relevance"] + scores["completeness"]) / 3, 1
+                (scores["accuracy"] + scores["relevance"] + scores["completeness"]) / 3,
+                1,
             )
             return scores
     except Exception:
@@ -229,39 +230,52 @@ class TestEvidenceBenchmark:
         ]
 
         filler_topics = [
-            "data structures", "operating systems", "compilers", "databases",
-            "networking", "cryptography", "algorithms", "machine learning",
-            "distributed systems", "cloud computing",
+            "data structures",
+            "operating systems",
+            "compilers",
+            "databases",
+            "networking",
+            "cryptography",
+            "algorithms",
+            "machine learning",
+            "distributed systems",
+            "cloud computing",
         ]
 
         # Build full conversation history
         full_history = []
         for fact_text, _ in personal_facts:
             full_history.append({"role": "user", "content": fact_text})
-            full_history.append({
-                "role": "assistant",
-                "content": f"Got it, I'll remember that. {fact_text}",
-            })
+            full_history.append(
+                {
+                    "role": "assistant",
+                    "content": f"Got it, I'll remember that. {fact_text}",
+                }
+            )
 
         for i in range(40):
             topic = filler_topics[i % len(filler_topics)]
-            full_history.append({
-                "role": "user",
-                "content": (
-                    f"Tell me about {topic} in detail. I want to understand "
-                    f"the key concepts, practical applications, and recent "
-                    f"advances in this area. This is conversation turn {i+1}."
-                ),
-            })
-            full_history.append({
-                "role": "assistant",
-                "content": (
-                    f"Here is a comprehensive overview of {topic}. This field "
-                    f"encompasses many important concepts and has seen significant "
-                    f"development in recent years. Understanding {topic} is crucial "
-                    f"for modern software engineering. Turn {i+1} complete."
-                ),
-            })
+            full_history.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Tell me about {topic} in detail. I want to understand "
+                        f"the key concepts, practical applications, and recent "
+                        f"advances in this area. This is conversation turn {i + 1}."
+                    ),
+                }
+            )
+            full_history.append(
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Here is a comprehensive overview of {topic}. This field "
+                        f"encompasses many important concepts and has seen significant "
+                        f"development in recent years. Understanding {topic} is crucial "
+                        f"for modern software engineering. Turn {i + 1} complete."
+                    ),
+                }
+            )
 
         recall_questions = [
             ("What is my name?", "Alice"),
@@ -308,9 +322,7 @@ class TestEvidenceBenchmark:
                 _ok(f"CortexFlow recalled '{expected}'")
             else:
                 _fail(f"CortexFlow missed '{expected}' — response: {response[:120]}")
-            score = _llm_judge_score(
-                manager.llm_client, response, expected, question
-            )
+            score = _llm_judge_score(manager.llm_client, response, expected, question)
             cf_scores.append(score)
 
         # -- Naive arm --
@@ -328,30 +340,43 @@ class TestEvidenceBenchmark:
                 _ok(f"Naive recalled '{expected}' (budget {tokens} tokens)")
             else:
                 _fail(f"Naive missed '{expected}' — response: {response[:120]}")
-            score = _llm_judge_score(
-                manager.llm_client, response, expected, question
-            )
+            score = _llm_judge_score(manager.llm_client, response, expected, question)
             naive_scores.append(score)
 
         # -- Verdict --
-        cf_avg = sum(s["average"] for s in cf_scores) / len(cf_scores) if cf_scores else 0
-        naive_avg = sum(s["average"] for s in naive_scores) / len(naive_scores) if naive_scores else 0
-        winner = "CortexFlow" if cf_recall > naive_recall else (
-            "Tie" if cf_recall == naive_recall else "Naive"
+        cf_avg = (
+            sum(s["average"] for s in cf_scores) / len(cf_scores) if cf_scores else 0
+        )
+        naive_avg = (
+            sum(s["average"] for s in naive_scores) / len(naive_scores)
+            if naive_scores
+            else 0
+        )
+        winner = (
+            "CortexFlow"
+            if cf_recall > naive_recall
+            else ("Tie" if cf_recall == naive_recall else "Naive")
         )
 
         _subheader("Results")
-        _info(f"CortexFlow recall: {cf_recall}/{len(recall_questions)}, judge avg: {cf_avg:.1f}")
-        _info(f"Naive recall:      {naive_recall}/{len(recall_questions)}, judge avg: {naive_avg:.1f}")
+        _info(
+            f"CortexFlow recall: {cf_recall}/{len(recall_questions)}, judge avg: {cf_avg:.1f}"
+        )
+        _info(
+            f"Naive recall:      {naive_recall}/{len(recall_questions)}, judge avg: {naive_avg:.1f}"
+        )
         _info(f"Winner: {winner}")
 
-        Results.add("deep_memory_recall", {
-            "cortexflow_recall": cf_recall,
-            "naive_recall": naive_recall,
-            "cortexflow_judge_avg": cf_avg,
-            "naive_judge_avg": naive_avg,
-            "winner": winner,
-        })
+        Results.add(
+            "deep_memory_recall",
+            {
+                "cortexflow_recall": cf_recall,
+                "naive_recall": naive_recall,
+                "cortexflow_judge_avg": cf_avg,
+                "naive_judge_avg": naive_avg,
+                "winner": winner,
+            },
+        )
 
         # With fact extraction enabled, CortexFlow should recall strictly
         # more facts than naive (facts are preserved via importance scoring,
@@ -367,26 +392,56 @@ class TestEvidenceBenchmark:
 
         # Invented facts that no LLM could know from training
         invented_facts = [
-            ("CortexFlow was originally named MemoryWeave before the 2025 rebrand.",
-             "What was CortexFlow originally named?", "MemoryWeave"),
-            ("The CortexFlow archive tier uses a compression ratio of exactly 0.27.",
-             "What compression ratio does the CortexFlow archive tier use?", "0.27"),
-            ("Project Zephyr is CortexFlow's internal code name for the graph partitioning module.",
-             "What is the internal code name for CortexFlow's graph partitioning module?", "Zephyr"),
-            ("CortexFlow's default vector model is MiniLM-Turbo-X9, a custom distillation.",
-             "What is CortexFlow's default vector model?", "MiniLM-Turbo-X9"),
-            ("The CortexFlow team is headquartered in Tallinn, Estonia.",
-             "Where is the CortexFlow team headquartered?", "Tallinn"),
-            ("CortexFlow v0.5.0 introduced the Cascade Scheduler for tier promotion.",
-             "What did CortexFlow v0.5.0 introduce?", "Cascade Scheduler"),
-            ("CortexFlow uses 7 importance buckets internally, labeled P0 through P6.",
-             "How many importance buckets does CortexFlow use?", "7"),
-            ("The maximum graph depth in CortexFlow's ontology engine is 12 hops.",
-             "What is the maximum graph depth in CortexFlow's ontology engine?", "12"),
-            ("CortexFlow's benchmark suite is codenamed Operation Lighthouse.",
-             "What is CortexFlow's benchmark suite codenamed?", "Lighthouse"),
-            ("CortexFlow was first presented at the MemSys 2024 conference in Kyoto.",
-             "Where was CortexFlow first presented?", "Kyoto"),
+            (
+                "CortexFlow was originally named MemoryWeave before the 2025 rebrand.",
+                "What was CortexFlow originally named?",
+                "MemoryWeave",
+            ),
+            (
+                "The CortexFlow archive tier uses a compression ratio of exactly 0.27.",
+                "What compression ratio does the CortexFlow archive tier use?",
+                "0.27",
+            ),
+            (
+                "Project Zephyr is CortexFlow's internal code name for the graph partitioning module.",
+                "What is the internal code name for CortexFlow's graph partitioning module?",
+                "Zephyr",
+            ),
+            (
+                "CortexFlow's default vector model is MiniLM-Turbo-X9, a custom distillation.",
+                "What is CortexFlow's default vector model?",
+                "MiniLM-Turbo-X9",
+            ),
+            (
+                "The CortexFlow team is headquartered in Tallinn, Estonia.",
+                "Where is the CortexFlow team headquartered?",
+                "Tallinn",
+            ),
+            (
+                "CortexFlow v0.5.0 introduced the Cascade Scheduler for tier promotion.",
+                "What did CortexFlow v0.5.0 introduce?",
+                "Cascade Scheduler",
+            ),
+            (
+                "CortexFlow uses 7 importance buckets internally, labeled P0 through P6.",
+                "How many importance buckets does CortexFlow use?",
+                "7",
+            ),
+            (
+                "The maximum graph depth in CortexFlow's ontology engine is 12 hops.",
+                "What is the maximum graph depth in CortexFlow's ontology engine?",
+                "12",
+            ),
+            (
+                "CortexFlow's benchmark suite is codenamed Operation Lighthouse.",
+                "What is CortexFlow's benchmark suite codenamed?",
+                "Lighthouse",
+            ),
+            (
+                "CortexFlow was first presented at the MemSys 2024 conference in Kyoto.",
+                "Where was CortexFlow first presented?",
+                "Kyoto",
+            ),
         ]
 
         manager = _make_manager(db_name="knowledge_aug")
@@ -409,9 +464,7 @@ class TestEvidenceBenchmark:
                 _ok(f"Found '{expected}'")
             else:
                 _fail(f"Missed '{expected}' — response: {response[:150]}")
-            score = _llm_judge_score(
-                manager.llm_client, response, expected, question
-            )
+            score = _llm_judge_score(manager.llm_client, response, expected, question)
             cf_scores.append(score)
             manager.memory.clear_memory()
 
@@ -428,29 +481,42 @@ class TestEvidenceBenchmark:
                 _ok(f"Naive found '{expected}' (unexpected!)")
             else:
                 _info(f"Naive missed '{expected}' (expected)")
-            score = _llm_judge_score(
-                manager.llm_client, response, expected, question
-            )
+            score = _llm_judge_score(manager.llm_client, response, expected, question)
             naive_scores.append(score)
 
-        cf_avg = sum(s["average"] for s in cf_scores) / len(cf_scores) if cf_scores else 0
-        naive_avg = sum(s["average"] for s in naive_scores) / len(naive_scores) if naive_scores else 0
-        winner = "CortexFlow" if cf_hits > naive_hits else (
-            "Tie" if cf_hits == naive_hits else "Naive"
+        cf_avg = (
+            sum(s["average"] for s in cf_scores) / len(cf_scores) if cf_scores else 0
+        )
+        naive_avg = (
+            sum(s["average"] for s in naive_scores) / len(naive_scores)
+            if naive_scores
+            else 0
+        )
+        winner = (
+            "CortexFlow"
+            if cf_hits > naive_hits
+            else ("Tie" if cf_hits == naive_hits else "Naive")
         )
 
         _subheader("Results")
-        _info(f"CortexFlow hits: {cf_hits}/{len(invented_facts)}, judge avg: {cf_avg:.1f}")
-        _info(f"Naive hits:      {naive_hits}/{len(invented_facts)}, judge avg: {naive_avg:.1f}")
+        _info(
+            f"CortexFlow hits: {cf_hits}/{len(invented_facts)}, judge avg: {cf_avg:.1f}"
+        )
+        _info(
+            f"Naive hits:      {naive_hits}/{len(invented_facts)}, judge avg: {naive_avg:.1f}"
+        )
         _info(f"Winner: {winner}")
 
-        Results.add("knowledge_augmented", {
-            "cortexflow_hits": cf_hits,
-            "naive_hits": naive_hits,
-            "cortexflow_judge_avg": cf_avg,
-            "naive_judge_avg": naive_avg,
-            "winner": winner,
-        })
+        Results.add(
+            "knowledge_augmented",
+            {
+                "cortexflow_hits": cf_hits,
+                "naive_hits": naive_hits,
+                "cortexflow_judge_avg": cf_avg,
+                "naive_judge_avg": naive_avg,
+                "winner": winner,
+            },
+        )
 
         assert cf_hits >= 5, (
             f"CortexFlow should retrieve at least 5/10 invented facts, got {cf_hits}"
@@ -468,30 +534,41 @@ class TestEvidenceBenchmark:
         )
 
         filler_topics = [
-            "quantum physics", "ancient history", "marine biology",
-            "philosophy", "architecture", "astronomy", "music theory",
-            "economics", "psychology", "linguistics",
+            "quantum physics",
+            "ancient history",
+            "marine biology",
+            "philosophy",
+            "architecture",
+            "astronomy",
+            "music theory",
+            "economics",
+            "psychology",
+            "linguistics",
         ]
 
         # Build history: system message + 60 filler pairs
         full_history = [{"role": "system", "content": system_msg}]
         for i in range(60):
             topic = filler_topics[i % len(filler_topics)]
-            full_history.append({
-                "role": "user",
-                "content": (
-                    f"Tell me about {topic}. Give me a thorough explanation "
-                    f"of the key principles and recent discoveries. Turn {i+1}."
-                ),
-            })
-            full_history.append({
-                "role": "assistant",
-                "content": (
-                    f"Here is detailed information about {topic}. This is a "
-                    f"fascinating field with many important developments. "
-                    f"Response for turn {i+1}.\n{sentinel}"
-                ),
-            })
+            full_history.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Tell me about {topic}. Give me a thorough explanation "
+                        f"of the key principles and recent discoveries. Turn {i + 1}."
+                    ),
+                }
+            )
+            full_history.append(
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Here is detailed information about {topic}. This is a "
+                        f"fascinating field with many important developments. "
+                        f"Response for turn {i + 1}.\n{sentinel}"
+                    ),
+                }
+            )
 
         test_questions = [
             "What is the speed of light?",
@@ -542,8 +619,10 @@ class TestEvidenceBenchmark:
             else:
                 _info("Naive: sentinel missing (expected — system msg truncated)")
 
-        winner = "CortexFlow" if cf_compliance > naive_compliance else (
-            "Tie" if cf_compliance == naive_compliance else "Naive"
+        winner = (
+            "CortexFlow"
+            if cf_compliance > naive_compliance
+            else ("Tie" if cf_compliance == naive_compliance else "Naive")
         )
 
         _subheader("Results")
@@ -551,12 +630,15 @@ class TestEvidenceBenchmark:
         _info(f"Naive compliance:      {naive_compliance}/{len(test_questions)}")
         _info(f"Winner: {winner}")
 
-        Results.add("system_instruction", {
-            "cortexflow_compliance": cf_compliance,
-            "naive_compliance": naive_compliance,
-            "total_questions": len(test_questions),
-            "winner": winner,
-        })
+        Results.add(
+            "system_instruction",
+            {
+                "cortexflow_compliance": cf_compliance,
+                "naive_compliance": naive_compliance,
+                "total_questions": len(test_questions),
+                "winner": winner,
+            },
+        )
 
         assert cf_compliance >= 2, (
             f"CortexFlow should preserve system instruction in at least 2/3 "
@@ -572,62 +654,78 @@ class TestEvidenceBenchmark:
         full_history = []
 
         # Phase 1: project setup context
-        full_history.append({
-            "role": "user",
-            "content": "I'm building a web API using FastAPI in Python.",
-        })
-        full_history.append({
-            "role": "assistant",
-            "content": "Great choice! FastAPI is excellent for building modern APIs in Python.",
-        })
+        full_history.append(
+            {
+                "role": "user",
+                "content": "I'm building a web API using FastAPI in Python.",
+            }
+        )
+        full_history.append(
+            {
+                "role": "assistant",
+                "content": "Great choice! FastAPI is excellent for building modern APIs in Python.",
+            }
+        )
 
         # 15 filler pairs
         for i in range(15):
-            full_history.append({
-                "role": "user",
-                "content": (
-                    f"Tell me about software design pattern number {i+1}. "
-                    f"I want detailed information about common patterns "
-                    f"used in professional software development."
-                ),
-            })
-            full_history.append({
-                "role": "assistant",
-                "content": (
-                    f"Here is information about design pattern {i+1}. "
-                    f"Software design patterns are reusable solutions to common "
-                    f"problems in software design. Pattern {i+1} explanation."
-                ),
-            })
+            full_history.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Tell me about software design pattern number {i + 1}. "
+                        f"I want detailed information about common patterns "
+                        f"used in professional software development."
+                    ),
+                }
+            )
+            full_history.append(
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Here is information about design pattern {i + 1}. "
+                        f"Software design patterns are reusable solutions to common "
+                        f"problems in software design. Pattern {i + 1} explanation."
+                    ),
+                }
+            )
 
         # Phase 2: authentication context
-        full_history.append({
-            "role": "user",
-            "content": "I added JWT authentication to my API using the PyJWT library.",
-        })
-        full_history.append({
-            "role": "assistant",
-            "content": "JWT auth with PyJWT is a solid approach for FastAPI applications.",
-        })
+        full_history.append(
+            {
+                "role": "user",
+                "content": "I added JWT authentication to my API using the PyJWT library.",
+            }
+        )
+        full_history.append(
+            {
+                "role": "assistant",
+                "content": "JWT auth with PyJWT is a solid approach for FastAPI applications.",
+            }
+        )
 
         # 15 more filler pairs
         for i in range(15):
-            full_history.append({
-                "role": "user",
-                "content": (
-                    f"Tell me about cloud service number {i+1}. "
-                    f"What are the key features and use cases for this "
-                    f"cloud technology in modern applications?"
-                ),
-            })
-            full_history.append({
-                "role": "assistant",
-                "content": (
-                    f"Cloud service {i+1} explanation. Cloud computing offers "
-                    f"scalability, reliability, and cost efficiency for modern "
-                    f"applications. Service {i+1} details."
-                ),
-            })
+            full_history.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Tell me about cloud service number {i + 1}. "
+                        f"What are the key features and use cases for this "
+                        f"cloud technology in modern applications?"
+                    ),
+                }
+            )
+            full_history.append(
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Cloud service {i + 1} explanation. Cloud computing offers "
+                        f"scalability, reliability, and cost efficiency for modern "
+                        f"applications. Service {i + 1} details."
+                    ),
+                }
+            )
 
         # Coherence questions with ground truths
         coherence_questions = [
@@ -699,24 +797,39 @@ class TestEvidenceBenchmark:
             )
             naive_scores.append(score)
 
-        cf_avg = sum(s["average"] for s in cf_scores) / len(cf_scores) if cf_scores else 0
-        naive_avg = sum(s["average"] for s in naive_scores) / len(naive_scores) if naive_scores else 0
-        winner = "CortexFlow" if cf_coherence > naive_coherence else (
-            "Tie" if cf_coherence == naive_coherence else "Naive"
+        cf_avg = (
+            sum(s["average"] for s in cf_scores) / len(cf_scores) if cf_scores else 0
+        )
+        naive_avg = (
+            sum(s["average"] for s in naive_scores) / len(naive_scores)
+            if naive_scores
+            else 0
+        )
+        winner = (
+            "CortexFlow"
+            if cf_coherence > naive_coherence
+            else ("Tie" if cf_coherence == naive_coherence else "Naive")
         )
 
         _subheader("Results")
-        _info(f"CortexFlow coherence: {cf_coherence}/{len(coherence_questions)}, judge avg: {cf_avg:.1f}")
-        _info(f"Naive coherence:      {naive_coherence}/{len(coherence_questions)}, judge avg: {naive_avg:.1f}")
+        _info(
+            f"CortexFlow coherence: {cf_coherence}/{len(coherence_questions)}, judge avg: {cf_avg:.1f}"
+        )
+        _info(
+            f"Naive coherence:      {naive_coherence}/{len(coherence_questions)}, judge avg: {naive_avg:.1f}"
+        )
         _info(f"Winner: {winner}")
 
-        Results.add("conversational_coherence", {
-            "cortexflow_coherence": cf_coherence,
-            "naive_coherence": naive_coherence,
-            "cortexflow_judge_avg": cf_avg,
-            "naive_judge_avg": naive_avg,
-            "winner": winner,
-        })
+        Results.add(
+            "conversational_coherence",
+            {
+                "cortexflow_coherence": cf_coherence,
+                "naive_coherence": naive_coherence,
+                "cortexflow_judge_avg": cf_avg,
+                "naive_judge_avg": naive_avg,
+                "winner": winner,
+            },
+        )
 
         assert cf_coherence >= naive_coherence, (
             f"CortexFlow ({cf_coherence}) should be at least as coherent "
@@ -731,30 +844,40 @@ class TestEvidenceBenchmark:
         # 20-turn conversation
         full_history = []
         topics = [
-            "Python generators", "async programming", "type hints",
-            "testing strategies", "CI/CD pipelines", "Docker containers",
-            "REST API design", "database indexing", "caching strategies",
+            "Python generators",
+            "async programming",
+            "type hints",
+            "testing strategies",
+            "CI/CD pipelines",
+            "Docker containers",
+            "REST API design",
+            "database indexing",
+            "caching strategies",
             "monitoring and logging",
         ]
 
         for i in range(20):
             topic = topics[i % len(topics)]
-            full_history.append({
-                "role": "user",
-                "content": (
-                    f"Explain {topic} concisely. Focus on practical usage "
-                    f"and common pitfalls. This is turn {i+1} of our "
-                    f"technical discussion."
-                ),
-            })
-            full_history.append({
-                "role": "assistant",
-                "content": (
-                    f"Here is a practical overview of {topic}. Key points "
-                    f"include best practices, common mistakes to avoid, and "
-                    f"real-world examples. Turn {i+1} response."
-                ),
-            })
+            full_history.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Explain {topic} concisely. Focus on practical usage "
+                        f"and common pitfalls. This is turn {i + 1} of our "
+                        f"technical discussion."
+                    ),
+                }
+            )
+            full_history.append(
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Here is a practical overview of {topic}. Key points "
+                        f"include best practices, common mistakes to avoid, and "
+                        f"real-world examples. Turn {i + 1} response."
+                    ),
+                }
+            )
 
         test_questions = [
             ("Summarize what Python topics we covered.", "Python", "python"),
@@ -788,12 +911,14 @@ class TestEvidenceBenchmark:
             score = _llm_judge_score(
                 manager.llm_client, response, ground_truth, question
             )
-            cf_results.append({
-                "question": question,
-                "tokens_sent": cf_tokens,
-                "found": found,
-                "score": score,
-            })
+            cf_results.append(
+                {
+                    "question": question,
+                    "tokens_sent": cf_tokens,
+                    "found": found,
+                    "score": score,
+                }
+            )
 
         # -- Naive arm --
         _subheader("Naive arm")
@@ -807,12 +932,14 @@ class TestEvidenceBenchmark:
             score = _llm_judge_score(
                 manager.llm_client, response, ground_truth, question
             )
-            naive_results.append({
-                "question": question,
-                "tokens_sent": tokens,
-                "found": found,
-                "score": score,
-            })
+            naive_results.append(
+                {
+                    "question": question,
+                    "tokens_sent": tokens,
+                    "found": found,
+                    "score": score,
+                }
+            )
 
         # -- Compute efficiency --
         cf_total_tokens = sum(r["tokens_sent"] for r in cf_results)
@@ -820,34 +947,49 @@ class TestEvidenceBenchmark:
         naive_total_tokens = sum(r["tokens_sent"] for r in naive_results)
         naive_total_quality = sum(r["score"]["average"] for r in naive_results)
 
-        cf_efficiency = cf_total_quality / cf_total_tokens * 1000 if cf_total_tokens else 0
-        naive_efficiency = naive_total_quality / naive_total_tokens * 1000 if naive_total_tokens else 0
+        cf_efficiency = (
+            cf_total_quality / cf_total_tokens * 1000 if cf_total_tokens else 0
+        )
+        naive_efficiency = (
+            naive_total_quality / naive_total_tokens * 1000 if naive_total_tokens else 0
+        )
 
         _subheader("Results")
-        _info(f"CortexFlow: {cf_total_tokens} tokens, quality {cf_total_quality:.1f}, "
-              f"efficiency {cf_efficiency:.2f} quality/1k tokens")
-        _info(f"Naive:      {naive_total_tokens} tokens, quality {naive_total_quality:.1f}, "
-              f"efficiency {naive_efficiency:.2f} quality/1k tokens")
+        _info(
+            f"CortexFlow: {cf_total_tokens} tokens, quality {cf_total_quality:.1f}, "
+            f"efficiency {cf_efficiency:.2f} quality/1k tokens"
+        )
+        _info(
+            f"Naive:      {naive_total_tokens} tokens, quality {naive_total_quality:.1f}, "
+            f"efficiency {naive_efficiency:.2f} quality/1k tokens"
+        )
 
         cf_quality_avg = cf_total_quality / len(cf_results) if cf_results else 0
-        naive_quality_avg = naive_total_quality / len(naive_results) if naive_results else 0
+        naive_quality_avg = (
+            naive_total_quality / len(naive_results) if naive_results else 0
+        )
 
-        winner = "CortexFlow" if cf_efficiency > naive_efficiency else (
-            "Tie" if cf_efficiency == naive_efficiency else "Naive"
+        winner = (
+            "CortexFlow"
+            if cf_efficiency > naive_efficiency
+            else ("Tie" if cf_efficiency == naive_efficiency else "Naive")
         )
         _info(f"Winner (by efficiency): {winner}")
 
-        Results.add("token_efficiency", {
-            "cortexflow_tokens": cf_total_tokens,
-            "cortexflow_quality": cf_total_quality,
-            "cortexflow_efficiency": cf_efficiency,
-            "naive_tokens": naive_total_tokens,
-            "naive_quality": naive_total_quality,
-            "naive_efficiency": naive_efficiency,
-            "cortexflow_quality_avg": cf_quality_avg,
-            "naive_quality_avg": naive_quality_avg,
-            "winner": winner,
-        })
+        Results.add(
+            "token_efficiency",
+            {
+                "cortexflow_tokens": cf_total_tokens,
+                "cortexflow_quality": cf_total_quality,
+                "cortexflow_efficiency": cf_efficiency,
+                "naive_tokens": naive_total_tokens,
+                "naive_quality": naive_total_quality,
+                "naive_efficiency": naive_efficiency,
+                "cortexflow_quality_avg": cf_quality_avg,
+                "naive_quality_avg": naive_quality_avg,
+                "winner": winner,
+            },
+        )
 
         # Report-only: LLM judge scores are nondeterministic, so we log
         # the efficiency comparison but don't assert on it.
@@ -881,7 +1023,9 @@ class TestEvidenceBenchmark:
                 naive_judge_avgs.append(data["naive_judge_avg"])
 
         cf_mean = sum(cf_judge_avgs) / len(cf_judge_avgs) if cf_judge_avgs else 0
-        naive_mean = sum(naive_judge_avgs) / len(naive_judge_avgs) if naive_judge_avgs else 0
+        naive_mean = (
+            sum(naive_judge_avgs) / len(naive_judge_avgs) if naive_judge_avgs else 0
+        )
 
         _subheader("Win/Loss/Tie")
         _info(f"CortexFlow wins: {win_counts['CortexFlow']}")
@@ -892,11 +1036,14 @@ class TestEvidenceBenchmark:
         _info(f"CortexFlow mean: {cf_mean:.1f}")
         _info(f"Naive mean:      {naive_mean:.1f}")
 
-        Results.add("judge_aggregate", {
-            "win_counts": win_counts,
-            "cortexflow_mean_judge": cf_mean,
-            "naive_mean_judge": naive_mean,
-        })
+        Results.add(
+            "judge_aggregate",
+            {
+                "win_counts": win_counts,
+                "cortexflow_mean_judge": cf_mean,
+                "naive_mean_judge": naive_mean,
+            },
+        )
 
         # Report only — always passes
         assert True
@@ -906,14 +1053,20 @@ class TestEvidenceBenchmark:
     def test_07_final_evidence_report(self):
         _header("7. Final Evidence Report")
 
-        print(f"\n  {BOLD}{'Scenario':<35} {'CortexFlow':>12} {'Naive':>12} {'Winner':>12}{RESET}")
-        print(f"  {'─'*71}")
+        print(
+            f"\n  {BOLD}{'Scenario':<35} {'CortexFlow':>12} {'Naive':>12} {'Winner':>12}{RESET}"
+        )
+        print(f"  {'─' * 71}")
 
         scenario_display = {
             "deep_memory_recall": ("1. Deep Memory Recall", "recall", "recall"),
             "knowledge_augmented": ("2. Knowledge-Augmented", "hits", "hits"),
             "system_instruction": ("3. System Instruction", "compliance", "compliance"),
-            "conversational_coherence": ("4. Conversational Coherence", "coherence", "coherence"),
+            "conversational_coherence": (
+                "4. Conversational Coherence",
+                "coherence",
+                "coherence",
+            ),
             "token_efficiency": ("5. Token Efficiency", "quality", "quality"),
         }
 
@@ -935,10 +1088,12 @@ class TestEvidenceBenchmark:
             else:
                 color = YELLOW
 
-            print(f"  {label:<35} {str(cf_val):>12} {str(naive_val):>12} "
-                  f"{color}{winner:>12}{RESET}")
+            print(
+                f"  {label:<35} {str(cf_val):>12} {str(naive_val):>12} "
+                f"{color}{winner:>12}{RESET}"
+            )
 
-        print(f"  {'─'*71}")
+        print(f"  {'─' * 71}")
 
         # Overall verdict
         if total_cf_wins > total_naive_wins:
@@ -951,18 +1106,24 @@ class TestEvidenceBenchmark:
             overall_color = YELLOW
             overall_verdict = "TIE"
 
-        print(f"\n  {BOLD}{overall_color}Overall Verdict: {overall_verdict} "
-              f"(CortexFlow {total_cf_wins} - Naive {total_naive_wins}){RESET}")
+        print(
+            f"\n  {BOLD}{overall_color}Overall Verdict: {overall_verdict} "
+            f"(CortexFlow {total_cf_wins} - Naive {total_naive_wins}){RESET}"
+        )
 
         # Judge aggregate if available
         agg = Results.scenarios.get("judge_aggregate", {})
         if agg:
             print(f"\n  {BOLD}LLM Judge Summary:{RESET}")
-            print(f"    CortexFlow mean score: {agg.get('cortexflow_mean_judge', 0):.1f}/10")
+            print(
+                f"    CortexFlow mean score: {agg.get('cortexflow_mean_judge', 0):.1f}/10"
+            )
             print(f"    Naive mean score:      {agg.get('naive_mean_judge', 0):.1f}/10")
             wc = agg.get("win_counts", {})
-            print(f"    Scenario wins: CF={wc.get('CortexFlow', 0)}, "
-                  f"Naive={wc.get('Naive', 0)}, Tie={wc.get('Tie', 0)}")
+            print(
+                f"    Scenario wins: CF={wc.get('CortexFlow', 0)}, "
+                f"Naive={wc.get('Naive', 0)}, Tie={wc.get('Tie', 0)}"
+            )
 
         print()
 

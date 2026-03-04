@@ -1,4 +1,5 @@
 """Event system for CortexFlow — pub/sub middleware with thread-safe event bus."""
+
 from __future__ import annotations
 
 import enum
@@ -14,6 +15,7 @@ logger = logging.getLogger("cortexflow")
 
 class EventType(enum.Enum):
     """All CortexFlow event types."""
+
     MESSAGE_ADDED = "message_added"
     MEMORY_CLEARED = "memory_cleared"
     KNOWLEDGE_ADDED = "knowledge_added"
@@ -31,6 +33,7 @@ class EventType(enum.Enum):
 @dataclass
 class Event:
     """An event emitted by the CortexFlow system."""
+
     type: EventType
     data: dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
@@ -92,10 +95,16 @@ class EventBus:
             try:
                 handler(event)
             except Exception:
-                logger.exception("Event handler %s raised an exception for %s", handler, event.type)
+                logger.exception(
+                    "Event handler %s raised an exception for %s", handler, event.type
+                )
 
-    def emit_typed(self, event_type: EventType, data: dict[str, Any] | None = None,
-                   source: str = "") -> Event:
+    def emit_typed(
+        self,
+        event_type: EventType,
+        data: dict[str, Any] | None = None,
+        source: str = "",
+    ) -> Event:
         """Convenience: create an Event and emit it. Returns the emitted Event."""
         event = Event(type=event_type, data=data or {}, source=source)
         self.emit(event)

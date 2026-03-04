@@ -1,4 +1,5 @@
 """Tests for cortexflow.events — EventBus, Event, EventType."""
+
 import threading
 
 from cortexflow.events import Event, EventBus, EventType
@@ -7,9 +8,12 @@ from cortexflow.events import Event, EventBus, EventType
 # Event dataclass
 # ──────────────────────────────────────────────────────────────
 
+
 class TestEventDataclass:
     def test_event_fields(self):
-        event = Event(type=EventType.MESSAGE_ADDED, data={"role": "user"}, source="test")
+        event = Event(
+            type=EventType.MESSAGE_ADDED, data={"role": "user"}, source="test"
+        )
         assert event.type == EventType.MESSAGE_ADDED
         assert event.data == {"role": "user"}
         assert event.source == "test"
@@ -26,6 +30,7 @@ class TestEventDataclass:
 # ──────────────────────────────────────────────────────────────
 # EventBus — on / emit
 # ──────────────────────────────────────────────────────────────
+
 
 class TestOnAndEmit:
     def test_on_and_emit(self):
@@ -44,8 +49,10 @@ class TestOnAndEmit:
 
     def test_on_returns_handler(self):
         bus = EventBus()
+
         def handler(e):
             return None
+
         result = bus.on(EventType.MEMORY_CLEARED, handler)
         assert result is handler
 
@@ -53,6 +60,7 @@ class TestOnAndEmit:
 # ──────────────────────────────────────────────────────────────
 # EventBus — on_all
 # ──────────────────────────────────────────────────────────────
+
 
 class TestOnAll:
     def test_on_all_receives_all_types(self):
@@ -76,10 +84,12 @@ class TestOnAll:
 # EventBus — off / off_all
 # ──────────────────────────────────────────────────────────────
 
+
 class TestOff:
     def test_off_removes_handler(self):
         bus = EventBus()
         received = []
+
         def handler(e):
             return received.append(e)
 
@@ -96,6 +106,7 @@ class TestOff:
     def test_off_all_removes_global_handler(self):
         bus = EventBus()
         received = []
+
         def handler(e):
             return received.append(e)
 
@@ -114,13 +125,16 @@ class TestOff:
 # EventBus — emit_typed
 # ──────────────────────────────────────────────────────────────
 
+
 class TestEmitTyped:
     def test_emit_typed_creates_and_emits(self):
         bus = EventBus()
         received = []
         bus.on(EventType.KNOWLEDGE_ADDED, lambda e: received.append(e))
 
-        event = bus.emit_typed(EventType.KNOWLEDGE_ADDED, data={"text": "fact"}, source="test")
+        event = bus.emit_typed(
+            EventType.KNOWLEDGE_ADDED, data={"text": "fact"}, source="test"
+        )
 
         assert isinstance(event, Event)
         assert event.type == EventType.KNOWLEDGE_ADDED
@@ -139,6 +153,7 @@ class TestEmitTyped:
 # ──────────────────────────────────────────────────────────────
 # Handler exception isolation
 # ──────────────────────────────────────────────────────────────
+
 
 class TestHandlerExceptionCaught:
     def test_bad_handler_does_not_break_others(self):
@@ -167,6 +182,7 @@ class TestHandlerExceptionCaught:
 # handler_count
 # ──────────────────────────────────────────────────────────────
 
+
 class TestHandlerCount:
     def test_handler_count_specific(self):
         bus = EventBus()
@@ -194,6 +210,7 @@ class TestHandlerCount:
 # Thread safety
 # ──────────────────────────────────────────────────────────────
 
+
 class TestThreadSafety:
     def test_concurrent_register_and_emit(self):
         bus = EventBus()
@@ -216,8 +233,12 @@ class TestThreadSafety:
 
         threads = [
             threading.Thread(target=register_and_emit, args=(EventType.MESSAGE_ADDED,)),
-            threading.Thread(target=register_and_emit, args=(EventType.MEMORY_CLEARED,)),
-            threading.Thread(target=register_and_emit, args=(EventType.KNOWLEDGE_ADDED,)),
+            threading.Thread(
+                target=register_and_emit, args=(EventType.MEMORY_CLEARED,)
+            ),
+            threading.Thread(
+                target=register_and_emit, args=(EventType.KNOWLEDGE_ADDED,)
+            ),
         ]
         for t in threads:
             t.start()

@@ -6,6 +6,7 @@ from cortexflow.temporal import TemporalFact, TemporalManager
 # TemporalManager
 # ──────────────────────────────────────────────────────────────
 
+
 class TestTemporalManager:
     def _make_manager(self) -> TemporalManager:
         return TemporalManager(db_path=":memory:")
@@ -76,27 +77,33 @@ class TestTemporalManager:
     def test_get_facts_at_time(self):
         mgr = self._make_manager()
         # Fact valid 2020-2023
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="lives_in",
-            object="New York",
-            valid_from="2020-01-01T00:00:00",
-            valid_until="2023-01-01T00:00:00",
-        ))
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="lives_in",
+                object="New York",
+                valid_from="2020-01-01T00:00:00",
+                valid_until="2023-01-01T00:00:00",
+            )
+        )
         # Fact valid 2023-ongoing
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="lives_in",
-            object="San Francisco",
-            valid_from="2023-01-01T00:00:00",
-        ))
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="lives_in",
+                object="San Francisco",
+                valid_from="2023-01-01T00:00:00",
+            )
+        )
         # Another subject
-        mgr.add_temporal_fact(TemporalFact(
-            subject="bob",
-            predicate="works_at",
-            object="Acme Corp",
-            valid_from="2021-01-01T00:00:00",
-        ))
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="bob",
+                predicate="works_at",
+                object="Acme Corp",
+                valid_from="2021-01-01T00:00:00",
+            )
+        )
 
         # Query at 2021: should get alice=NY and bob=Acme
         facts_2021 = mgr.get_facts_at_time("2021-06-01T00:00:00")
@@ -119,28 +126,34 @@ class TestTemporalManager:
 
     def test_get_fact_timeline(self):
         mgr = self._make_manager()
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="lives_in",
-            object="Boston",
-            valid_from="2015-01-01T00:00:00",
-            valid_until="2020-01-01T00:00:00",
-            created_at="2015-01-01T00:00:00",
-        ))
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="lives_in",
-            object="New York",
-            valid_from="2020-01-01T00:00:00",
-            created_at="2020-01-01T00:00:00",
-        ))
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="works_at",
-            object="Google",
-            valid_from="2018-01-01T00:00:00",
-            created_at="2018-01-01T00:00:00",
-        ))
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="lives_in",
+                object="Boston",
+                valid_from="2015-01-01T00:00:00",
+                valid_until="2020-01-01T00:00:00",
+                created_at="2015-01-01T00:00:00",
+            )
+        )
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="lives_in",
+                object="New York",
+                valid_from="2020-01-01T00:00:00",
+                created_at="2020-01-01T00:00:00",
+            )
+        )
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="works_at",
+                object="Google",
+                valid_from="2018-01-01T00:00:00",
+                created_at="2018-01-01T00:00:00",
+            )
+        )
 
         # Full timeline for alice
         full_timeline = mgr.get_fact_timeline("alice")
@@ -157,20 +170,24 @@ class TestTemporalManager:
     def test_detect_temporal_conflicts_overlapping(self):
         mgr = self._make_manager()
         # Two overlapping facts for same subject+predicate
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="lives_in",
-            object="New York",
-            valid_from="2020-01-01T00:00:00",
-            valid_until="2024-01-01T00:00:00",
-        ))
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="lives_in",
-            object="San Francisco",
-            valid_from="2023-01-01T00:00:00",
-            valid_until="2025-01-01T00:00:00",
-        ))
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="lives_in",
+                object="New York",
+                valid_from="2020-01-01T00:00:00",
+                valid_until="2024-01-01T00:00:00",
+            )
+        )
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="lives_in",
+                object="San Francisco",
+                valid_from="2023-01-01T00:00:00",
+                valid_until="2025-01-01T00:00:00",
+            )
+        )
         conflicts = mgr.detect_temporal_conflicts()
         assert len(conflicts) == 1
         f1, f2 = conflicts[0]
@@ -180,20 +197,24 @@ class TestTemporalManager:
     def test_detect_temporal_conflicts_non_overlapping(self):
         mgr = self._make_manager()
         # Two non-overlapping facts
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="lives_in",
-            object="New York",
-            valid_from="2020-01-01T00:00:00",
-            valid_until="2023-01-01T00:00:00",
-        ))
-        mgr.add_temporal_fact(TemporalFact(
-            subject="alice",
-            predicate="lives_in",
-            object="San Francisco",
-            valid_from="2023-01-01T00:00:00",
-            valid_until="2025-01-01T00:00:00",
-        ))
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="lives_in",
+                object="New York",
+                valid_from="2020-01-01T00:00:00",
+                valid_until="2023-01-01T00:00:00",
+            )
+        )
+        mgr.add_temporal_fact(
+            TemporalFact(
+                subject="alice",
+                predicate="lives_in",
+                object="San Francisco",
+                valid_from="2023-01-01T00:00:00",
+                valid_until="2025-01-01T00:00:00",
+            )
+        )
         conflicts = mgr.detect_temporal_conflicts()
         assert len(conflicts) == 0
         mgr.close()

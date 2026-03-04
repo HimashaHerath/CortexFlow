@@ -1,4 +1,5 @@
 """Temporal fact management for CortexFlow."""
+
 from __future__ import annotations
 
 import logging
@@ -13,6 +14,7 @@ logger = logging.getLogger("cortexflow")
 @dataclass
 class TemporalFact:
     """A fact with temporal validity."""
+
     id: int | None = None
     subject: str = ""
     predicate: str = ""
@@ -35,7 +37,7 @@ class TemporalManager:
         self._init_db()
 
     def _init_db(self):
-        self._conn.execute('''
+        self._conn.execute("""
             CREATE TABLE IF NOT EXISTS temporal_facts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 subject TEXT NOT NULL,
@@ -50,25 +52,35 @@ class TemporalManager:
                 metadata TEXT DEFAULT '{}',
                 FOREIGN KEY (superseded_by) REFERENCES temporal_facts(id)
             )
-        ''')
-        self._conn.execute('''
+        """)
+        self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_temporal_subject ON temporal_facts(subject)
-        ''')
-        self._conn.execute('''
+        """)
+        self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_temporal_validity ON temporal_facts(valid_from, valid_until)
-        ''')
+        """)
         self._conn.commit()
 
     def add_temporal_fact(self, fact: TemporalFact) -> int:
         """Add a temporal fact. Returns the fact ID."""
         import json
+
         cursor = self._conn.execute(
-            '''INSERT INTO temporal_facts
+            """INSERT INTO temporal_facts
                (subject, predicate, object, valid_from, valid_until, confidence, source, superseded_by, created_at, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (fact.subject, fact.predicate, fact.object, fact.valid_from, fact.valid_until,
-             fact.confidence, fact.source, fact.superseded_by, fact.created_at,
-             json.dumps(fact.metadata))
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                fact.subject,
+                fact.predicate,
+                fact.object,
+                fact.valid_from,
+                fact.valid_until,
+                fact.confidence,
+                fact.source,
+                fact.superseded_by,
+                fact.created_at,
+                json.dumps(fact.metadata),
+            ),
         )
         self._conn.commit()
         return cursor.lastrowid
@@ -76,8 +88,8 @@ class TemporalManager:
     def update_fact_validity(self, fact_id: int, valid_until: str) -> bool:
         """Update the end validity of a fact."""
         cursor = self._conn.execute(
-            'UPDATE temporal_facts SET valid_until = ? WHERE id = ?',
-            (valid_until, fact_id)
+            "UPDATE temporal_facts SET valid_until = ? WHERE id = ?",
+            (valid_until, fact_id),
         )
         self._conn.commit()
         return cursor.rowcount > 0
@@ -87,60 +99,66 @@ class TemporalManager:
         now = datetime.utcnow().isoformat()
         # Close old fact
         self._conn.execute(
-            'UPDATE temporal_facts SET valid_until = ? WHERE id = ? AND valid_until IS NULL',
-            (now, old_fact_id)
+            "UPDATE temporal_facts SET valid_until = ? WHERE id = ? AND valid_until IS NULL",
+            (now, old_fact_id),
         )
         # Add new fact
         new_id = self.add_temporal_fact(new_fact)
         # Link old to new
         self._conn.execute(
-            'UPDATE temporal_facts SET superseded_by = ? WHERE id = ?',
-            (new_id, old_fact_id)
+            "UPDATE temporal_facts SET superseded_by = ? WHERE id = ?",
+            (new_id, old_fact_id),
         )
         self._conn.commit()
         return new_id
 
-    def get_facts_at_time(self, timestamp: str, subject: str | None = None) -> list[TemporalFact]:
+    def get_facts_at_time(
+        self, timestamp: str, subject: str | None = None
+    ) -> list[TemporalFact]:
         """Get all facts valid at a specific time."""
-        query = '''SELECT * FROM temporal_facts
+        query = """SELECT * FROM temporal_facts
                    WHERE (valid_from IS NULL OR valid_from <= ?)
                    AND (valid_until IS NULL OR valid_until > ?)
-                   AND superseded_by IS NULL'''
+                   AND superseded_by IS NULL"""
         params = [timestamp, timestamp]
         if subject:
-            query += ' AND subject = ?'
+            query += " AND subject = ?"
             params.append(subject)
 
         rows = self._conn.execute(query, params).fetchall()
         return [self._row_to_fact(row) for row in rows]
 
-    def get_fact_timeline(self, subject: str, predicate: str | None = None) -> list[TemporalFact]:
+    def get_fact_timeline(
+        self, subject: str, predicate: str | None = None
+    ) -> list[TemporalFact]:
         """Get the timeline of facts for a subject, ordered by creation."""
-        query = 'SELECT * FROM temporal_facts WHERE subject = ?'
+        query = "SELECT * FROM temporal_facts WHERE subject = ?"
         params: list[str] = [subject]
         if predicate:
-            query += ' AND predicate = ?'
+            query += " AND predicate = ?"
             params.append(predicate)
-        query += ' ORDER BY created_at ASC'
+        query += " ORDER BY created_at ASC"
 
         rows = self._conn.execute(query, params).fetchall()
         return [self._row_to_fact(row) for row in rows]
 
-    def detect_temporal_conflicts(self, subject: str | None = None) -> list[tuple[TemporalFact, TemporalFact]]:
+    def detect_temporal_conflicts(
+        self, subject: str | None = None
+    ) -> list[tuple[TemporalFact, TemporalFact]]:
         """Detect overlapping facts that may conflict (same subject+predicate, overlapping validity)."""
-        query = '''SELECT * FROM temporal_facts WHERE superseded_by IS NULL'''
+        query = """SELECT * FROM temporal_facts WHERE superseded_by IS NULL"""
         params: list[str] = []
         if subject:
-            query += ' AND subject = ?'
+            query += " AND subject = ?"
             params.append(subject)
-        query += ' ORDER BY subject, predicate, valid_from'
+        query += " ORDER BY subject, predicate, valid_from"
 
         rows = self._conn.execute(query, params).fetchall()
         facts = [self._row_to_fact(row) for row in rows]
 
         conflicts: list[tuple[TemporalFact, TemporalFact]] = []
         for i, f1 in enumerate(facts):
-            for f2 in facts[i+1:]:
+            for f2 in facts[i + 1 :]:
                 if f1.subject == f2.subject and f1.predicate == f2.predicate:
                     if self._overlaps(f1, f2):
                         conflicts.append((f1, f2))
@@ -157,18 +175,19 @@ class TemporalManager:
 
     def _row_to_fact(self, row) -> TemporalFact:
         import json
+
         return TemporalFact(
-            id=row['id'],
-            subject=row['subject'],
-            predicate=row['predicate'],
-            object=row['object'],
-            valid_from=row['valid_from'],
-            valid_until=row['valid_until'],
-            confidence=row['confidence'],
-            source=row['source'],
-            superseded_by=row['superseded_by'],
-            created_at=row['created_at'],
-            metadata=json.loads(row['metadata']) if row['metadata'] else {},
+            id=row["id"],
+            subject=row["subject"],
+            predicate=row["predicate"],
+            object=row["object"],
+            valid_from=row["valid_from"],
+            valid_until=row["valid_until"],
+            confidence=row["confidence"],
+            source=row["source"],
+            superseded_by=row["superseded_by"],
+            created_at=row["created_at"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {},
         )
 
     def close(self):

@@ -1,4 +1,5 @@
 """Episodic memory for CortexFlow -- stores and retrieves conversation episodes."""
+
 from __future__ import annotations
 
 import logging
@@ -13,6 +14,7 @@ logger = logging.getLogger("cortexflow")
 @dataclass
 class Episode:
     """A discrete conversational episode."""
+
     id: int | None = None
     session_id: str | None = None
     user_id: str | None = None
@@ -36,7 +38,7 @@ class EpisodicMemoryStore:
         self._init_db()
 
     def _init_db(self):
-        self._conn.execute('''
+        self._conn.execute("""
             CREATE TABLE IF NOT EXISTS episodes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT,
@@ -51,15 +53,15 @@ class EpisodicMemoryStore:
                 metadata TEXT DEFAULT '{}',
                 importance REAL DEFAULT 0.5
             )
-        ''')
+        """)
         # FTS5 virtual table for full-text search on summary and title
-        self._conn.execute('''
+        self._conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(
                 title, summary, topics, content=episodes, content_rowid=id
             )
-        ''')
+        """)
         # Triggers to keep FTS in sync
-        self._conn.executescript('''
+        self._conn.executescript("""
             CREATE TRIGGER IF NOT EXISTS episodes_ai AFTER INSERT ON episodes BEGIN
                 INSERT INTO episodes_fts(rowid, title, summary, topics)
                 VALUES (new.id, new.title, new.summary, new.topics);
@@ -74,22 +76,38 @@ class EpisodicMemoryStore:
                 INSERT INTO episodes_fts(episodes_fts, rowid, title, summary, topics)
                 VALUES ('delete', old.id, old.title, old.summary, old.topics);
             END;
-        ''')
-        self._conn.execute('CREATE INDEX IF NOT EXISTS idx_episodes_session ON episodes(session_id)')
-        self._conn.execute('CREATE INDEX IF NOT EXISTS idx_episodes_user ON episodes(user_id)')
+        """)
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodes_session ON episodes(session_id)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodes_user ON episodes(user_id)"
+        )
         self._conn.commit()
 
     def save_episode(self, episode: Episode) -> int:
         """Save an episode. Returns the episode ID."""
         import json
+
         cursor = self._conn.execute(
-            '''INSERT INTO episodes
+            """INSERT INTO episodes
                (session_id, user_id, title, summary, messages, emotions, topics, start_time, end_time, metadata, importance)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (episode.session_id, episode.user_id, episode.title, episode.summary,
-             json.dumps(episode.messages), json.dumps(episode.emotions),
-             json.dumps(episode.topics) if isinstance(episode.topics, list) else episode.topics,
-             episode.start_time, episode.end_time, json.dumps(episode.metadata), episode.importance)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                episode.session_id,
+                episode.user_id,
+                episode.title,
+                episode.summary,
+                json.dumps(episode.messages),
+                json.dumps(episode.emotions),
+                json.dumps(episode.topics)
+                if isinstance(episode.topics, list)
+                else episode.topics,
+                episode.start_time,
+                episode.end_time,
+                json.dumps(episode.metadata),
+                episode.importance,
+            ),
         )
         self._conn.commit()
         return cursor.lastrowid
@@ -98,31 +116,33 @@ class EpisodicMemoryStore:
         """Search episodes using FTS5 full-text search."""
         try:
             rows = self._conn.execute(
-                '''SELECT e.* FROM episodes e
+                """SELECT e.* FROM episodes e
                    JOIN episodes_fts f ON e.id = f.rowid
                    WHERE episodes_fts MATCH ?
                    ORDER BY rank
-                   LIMIT ?''',
-                (query, max_results)
+                   LIMIT ?""",
+                (query, max_results),
             ).fetchall()
         except sqlite3.OperationalError:
             # Fallback to LIKE search if FTS fails
             rows = self._conn.execute(
-                '''SELECT * FROM episodes
+                """SELECT * FROM episodes
                    WHERE summary LIKE ? OR title LIKE ? OR topics LIKE ?
-                   LIMIT ?''',
-                (f'%{query}%', f'%{query}%', f'%{query}%', max_results)
+                   LIMIT ?""",
+                (f"%{query}%", f"%{query}%", f"%{query}%", max_results),
             ).fetchall()
         return [self._row_to_episode(row) for row in rows]
 
-    def get_recent_episodes(self, user_id: str | None = None, limit: int = 10) -> list[Episode]:
+    def get_recent_episodes(
+        self, user_id: str | None = None, limit: int = 10
+    ) -> list[Episode]:
         """Get recent episodes, optionally filtered by user."""
-        query = 'SELECT * FROM episodes'
+        query = "SELECT * FROM episodes"
         params: list = []
         if user_id:
-            query += ' WHERE user_id = ?'
+            query += " WHERE user_id = ?"
             params.append(user_id)
-        query += ' ORDER BY start_time DESC LIMIT ?'
+        query += " ORDER BY start_time DESC LIMIT ?"
         params.append(limit)
 
         rows = self._conn.execute(query, params).fetchall()
@@ -131,8 +151,8 @@ class EpisodicMemoryStore:
     def summarize_session(self, session_id: str) -> Episode | None:
         """Get or create a summary episode for a session."""
         rows = self._conn.execute(
-            'SELECT * FROM episodes WHERE session_id = ? ORDER BY start_time ASC',
-            (session_id,)
+            "SELECT * FROM episodes WHERE session_id = ? ORDER BY start_time ASC",
+            (session_id,),
         ).fetchall()
         if not rows:
             return None
@@ -162,7 +182,8 @@ class EpisodicMemoryStore:
 
     def _row_to_episode(self, row) -> Episode:
         import json
-        topics_raw = row['topics']
+
+        topics_raw = row["topics"]
         if isinstance(topics_raw, str):
             try:
                 topics = json.loads(topics_raw)
@@ -172,18 +193,18 @@ class EpisodicMemoryStore:
             topics = topics_raw or []
 
         return Episode(
-            id=row['id'],
-            session_id=row['session_id'],
-            user_id=row['user_id'],
-            title=row['title'],
-            summary=row['summary'],
-            messages=json.loads(row['messages']) if row['messages'] else [],
-            emotions=json.loads(row['emotions']) if row['emotions'] else [],
+            id=row["id"],
+            session_id=row["session_id"],
+            user_id=row["user_id"],
+            title=row["title"],
+            summary=row["summary"],
+            messages=json.loads(row["messages"]) if row["messages"] else [],
+            emotions=json.loads(row["emotions"]) if row["emotions"] else [],
             topics=topics if isinstance(topics, list) else [topics],
-            start_time=row['start_time'],
-            end_time=row['end_time'],
-            metadata=json.loads(row['metadata']) if row['metadata'] else {},
-            importance=row['importance'],
+            start_time=row["start_time"],
+            end_time=row["end_time"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            importance=row["importance"],
         )
 
     def close(self):

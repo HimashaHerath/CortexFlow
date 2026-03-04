@@ -1,4 +1,5 @@
 """Abstract base class and shared types for vector store backends."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

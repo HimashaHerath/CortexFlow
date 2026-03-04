@@ -3,6 +3,7 @@ CortexFlow Compressor module.
 
 This module provides context compression functionality for CortexFlow.
 """
+
 from __future__ import annotations
 
 import re
@@ -43,10 +44,44 @@ class ExtractiveSummarizer:
 
     def __init__(self):
         self.stop_words = {
-            "the", "a", "an", "and", "or", "but", "is", "are", "was", "were",
-            "in", "on", "at", "to", "for", "with", "by", "about", "as", "of",
-            "that", "this", "these", "those", "it", "they", "them", "their",
-            "he", "she", "his", "her", "i", "you", "we", "my", "your", "our"
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "but",
+            "is",
+            "are",
+            "was",
+            "were",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "with",
+            "by",
+            "about",
+            "as",
+            "of",
+            "that",
+            "this",
+            "these",
+            "those",
+            "it",
+            "they",
+            "them",
+            "their",
+            "he",
+            "she",
+            "his",
+            "her",
+            "i",
+            "you",
+            "we",
+            "my",
+            "your",
+            "our",
         }
 
     def extract_keywords(self, text: str, top_n: int = 10) -> list[str]:
@@ -61,10 +96,10 @@ class ExtractiveSummarizer:
             List of keywords
         """
         # Remove code blocks before processing
-        text_without_code = re.sub(r'```[\s\S]*?```', '', text)
+        text_without_code = re.sub(r"```[\s\S]*?```", "", text)
 
         # Tokenize and convert to lowercase
-        words = re.findall(r'\b\w+\b', text_without_code.lower())
+        words = re.findall(r"\b\w+\b", text_without_code.lower())
 
         # Filter out stop words and count frequencies
         word_freq = {}
@@ -83,6 +118,7 @@ class ExtractiveSummarizer:
     def _get_fact_detector(cls):
         if cls._fact_detector is None:
             from cortexflow.fact_detector import PersonalFactDetector
+
             cls._fact_detector = PersonalFactDetector(use_spacy=False)
         return cls._fact_detector
 
@@ -98,11 +134,11 @@ class ExtractiveSummarizer:
             List of (sentence, score) tuples
         """
         # Split into sentences
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = re.split(r"(?<=[.!?])\s+", text)
 
         # Preserve code blocks and specific patterns as important
-        code_blocks = re.findall(r'```[\s\S]*?```', text)
-        equations = re.findall(r'\$\$[\s\S]*?\$\$', text)
+        code_blocks = re.findall(r"```[\s\S]*?```", text)
+        equations = re.findall(r"\$\$[\s\S]*?\$\$", text)
 
         # Get fact detector for entity bonus
         try:
@@ -114,7 +150,9 @@ class ExtractiveSummarizer:
         scored_sentences = []
         for sentence in sentences:
             # Code blocks and equations get high scores
-            if any(block in sentence for block in code_blocks) or any(eq in sentence for eq in equations):
+            if any(block in sentence for block in code_blocks) or any(
+                eq in sentence for eq in equations
+            ):
                 scored_sentences.append((sentence, 10.0))
                 continue
 
@@ -124,7 +162,9 @@ class ExtractiveSummarizer:
                 continue
 
             # Otherwise score based on keywords
-            score = sum(1.0 for keyword in keywords if keyword.lower() in sentence.lower())
+            score = sum(
+                1.0 for keyword in keywords if keyword.lower() in sentence.lower()
+            )
             scored_sentences.append((sentence, score))
 
         return scored_sentences
@@ -219,9 +259,13 @@ class LLMSummarizer:
         """
 
         try:
-            compressed = self.llm_client.generate_from_prompt(prompt, timeout=10).strip()
+            compressed = self.llm_client.generate_from_prompt(
+                prompt, timeout=10
+            ).strip()
             # Verify compression was achieved
-            if compressed and len(compressed.split()) <= approx_tokens * 1.1:  # Allow 10% margin
+            if (
+                compressed and len(compressed.split()) <= approx_tokens * 1.1
+            ):  # Allow 10% margin
                 return compressed
         except Exception:  # noqa: S110
             # Fall back to extractive summarization on error
@@ -265,7 +309,9 @@ class ContextCompressor:
         """
         return cls(config=None)
 
-    def compress_segment(self, segment: ContextSegment, target_ratio: float) -> ContextSegment:
+    def compress_segment(
+        self, segment: ContextSegment, target_ratio: float
+    ) -> ContextSegment:
         """
         Compress a single context segment.
 
@@ -303,7 +349,9 @@ class ContextCompressor:
 
         # Create new segment with compressed content
         # Estimate token count based on original ratio
-        new_token_count = int(segment.token_count * (len(compressed_content) / len(content)))
+        new_token_count = int(
+            segment.token_count * (len(compressed_content) / len(content))
+        )
 
         return ContextSegment(
             content=compressed_content,
@@ -311,10 +359,16 @@ class ContextCompressor:
             timestamp=segment.timestamp,
             token_count=new_token_count,
             segment_type=segment.segment_type,
-            metadata={**segment.metadata, "compressed": True, "original_length": len(content)}
+            metadata={
+                **segment.metadata,
+                "compressed": True,
+                "original_length": len(content),
+            },
         )
 
-    def progressive_compress(self, segments: list[ContextSegment], target_token_count: int) -> list[ContextSegment]:
+    def progressive_compress(
+        self, segments: list[ContextSegment], target_token_count: int
+    ) -> list[ContextSegment]:
         """
         Progressively compress segments to meet target token count.
 
@@ -335,11 +389,15 @@ class ContextCompressor:
 
         # Sort by importance and age simultaneously - least important and oldest first
         # We'll only sort once to avoid inefficiency
-        sorted_indices = sorted(range(len(segments)),
-                                key=lambda i: (segments[i].importance, -segments[i].age))
+        sorted_indices = sorted(
+            range(len(segments)),
+            key=lambda i: (segments[i].importance, -segments[i].age),
+        )
 
         # Compress segments progressively
-        compressed_segments = segments.copy()  # Start with a copy of the original segments
+        compressed_segments = (
+            segments.copy()
+        )  # Start with a copy of the original segments
         remaining_tokens = current_token_count
         tokens_to_remove = current_token_count - target_token_count
 
@@ -355,7 +413,9 @@ class ContextCompressor:
 
             # Calculate compression ratio for this segment
             # Adjust based on importance - compress less important segments more
-            segment_ratio = min(1.0, max(0.3, compression_ratio + (segment.importance / 20)))
+            segment_ratio = min(
+                1.0, max(0.3, compression_ratio + (segment.importance / 20))
+            )
 
             # More aggressive compression for older segments
             if segment.age > 3600:  # Older than 1 hour

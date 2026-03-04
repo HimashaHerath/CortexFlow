@@ -4,6 +4,7 @@ Emotion tracking for CortexFlow.
 Detects and tracks emotional states in conversation messages, enabling
 emotionally-aware response generation for companion AI applications.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,21 +19,27 @@ logger = logging.getLogger("cortexflow")
 
 # Plutchik's primary emotions
 EMOTIONS = (
-    "joy", "sadness", "anger", "fear",
-    "surprise", "disgust", "trust", "anticipation",
+    "joy",
+    "sadness",
+    "anger",
+    "fear",
+    "surprise",
+    "disgust",
+    "trust",
+    "anticipation",
 )
 
 # Valence / arousal mapping for each primary emotion
 _EMOTION_VA: dict[str, tuple[float, float]] = {
-    "joy":          ( 0.8,  0.6),
-    "sadness":      (-0.7,  -0.3),
-    "anger":        (-0.6,   0.8),
-    "fear":         (-0.7,   0.7),
-    "surprise":     ( 0.1,   0.8),
-    "disgust":      (-0.6,  -0.1),
-    "trust":        ( 0.6,   0.2),
-    "anticipation": ( 0.4,   0.5),
-    "neutral":      ( 0.0,   0.0),
+    "joy": (0.8, 0.6),
+    "sadness": (-0.7, -0.3),
+    "anger": (-0.6, 0.8),
+    "fear": (-0.7, 0.7),
+    "surprise": (0.1, 0.8),
+    "disgust": (-0.6, -0.1),
+    "trust": (0.6, 0.2),
+    "anticipation": (0.4, 0.5),
+    "neutral": (0.0, 0.0),
 }
 
 
@@ -42,8 +49,8 @@ class EmotionalState:
 
     primary_emotion: str = "neutral"
     intensity: float = 0.0  # 0–1
-    valence: float = 0.0    # -1 (negative) to +1 (positive)
-    arousal: float = 0.0    # -1 (calm) to +1 (excited)
+    valence: float = 0.0  # -1 (negative) to +1 (positive)
+    arousal: float = 0.0  # -1 (calm) to +1 (excited)
     secondary_emotions: dict[str, float] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
     confidence: float = 0.0
@@ -54,7 +61,9 @@ class EmotionalState:
             "intensity": round(self.intensity, 3),
             "valence": round(self.valence, 3),
             "arousal": round(self.arousal, 3),
-            "secondary_emotions": {k: round(v, 3) for k, v in self.secondary_emotions.items()},
+            "secondary_emotions": {
+                k: round(v, 3) for k, v in self.secondary_emotions.items()
+            },
             "timestamp": self.timestamp,
             "confidence": round(self.confidence, 3),
         }
@@ -76,6 +85,7 @@ class EmotionalState:
 # Detector ABC (Strategy pattern)
 # ------------------------------------------------------------------
 
+
 class EmotionDetector(ABC):
     """Strategy interface for emotion detection."""
 
@@ -91,64 +101,150 @@ class EmotionDetector(ABC):
 # Lexicon: word → (emotion, weight)
 _LEXICON: dict[str, tuple[str, float]] = {}
 
+
 def _build_lexicon() -> dict[str, tuple[str, float]]:
     if _LEXICON:
         return _LEXICON
 
     raw: dict[str, list[tuple[str, float]]] = {
         "joy": [
-            ("happy", 0.8), ("glad", 0.7), ("excited", 0.8), ("love", 0.9),
-            ("wonderful", 0.8), ("great", 0.7), ("amazing", 0.8), ("fantastic", 0.8),
-            ("delighted", 0.8), ("cheerful", 0.7), ("thrilled", 0.9),
-            ("blessed", 0.7), ("grateful", 0.7), ("thankful", 0.7),
-            ("awesome", 0.7), ("perfect", 0.7), ("beautiful", 0.6),
-            ("laugh", 0.7), ("smile", 0.6), ("fun", 0.6), ("enjoy", 0.7),
-            ("pleased", 0.6), ("content", 0.5), ("elated", 0.9),
+            ("happy", 0.8),
+            ("glad", 0.7),
+            ("excited", 0.8),
+            ("love", 0.9),
+            ("wonderful", 0.8),
+            ("great", 0.7),
+            ("amazing", 0.8),
+            ("fantastic", 0.8),
+            ("delighted", 0.8),
+            ("cheerful", 0.7),
+            ("thrilled", 0.9),
+            ("blessed", 0.7),
+            ("grateful", 0.7),
+            ("thankful", 0.7),
+            ("awesome", 0.7),
+            ("perfect", 0.7),
+            ("beautiful", 0.6),
+            ("laugh", 0.7),
+            ("smile", 0.6),
+            ("fun", 0.6),
+            ("enjoy", 0.7),
+            ("pleased", 0.6),
+            ("content", 0.5),
+            ("elated", 0.9),
         ],
         "sadness": [
-            ("sad", 0.8), ("unhappy", 0.7), ("depressed", 0.9), ("lonely", 0.8),
-            ("miserable", 0.9), ("heartbroken", 0.9), ("grief", 0.9),
-            ("crying", 0.8), ("cry", 0.7), ("tears", 0.7), ("sorrow", 0.8),
-            ("hopeless", 0.8), ("melancholy", 0.7), ("gloomy", 0.7),
-            ("devastated", 0.9), ("hurt", 0.7), ("pain", 0.6),
-            ("miss", 0.5), ("lost", 0.5), ("empty", 0.7), ("broken", 0.7),
+            ("sad", 0.8),
+            ("unhappy", 0.7),
+            ("depressed", 0.9),
+            ("lonely", 0.8),
+            ("miserable", 0.9),
+            ("heartbroken", 0.9),
+            ("grief", 0.9),
+            ("crying", 0.8),
+            ("cry", 0.7),
+            ("tears", 0.7),
+            ("sorrow", 0.8),
+            ("hopeless", 0.8),
+            ("melancholy", 0.7),
+            ("gloomy", 0.7),
+            ("devastated", 0.9),
+            ("hurt", 0.7),
+            ("pain", 0.6),
+            ("miss", 0.5),
+            ("lost", 0.5),
+            ("empty", 0.7),
+            ("broken", 0.7),
         ],
         "anger": [
-            ("angry", 0.8), ("furious", 0.9), ("mad", 0.7), ("hate", 0.9),
-            ("annoyed", 0.6), ("irritated", 0.6), ("frustrated", 0.7),
-            ("rage", 0.9), ("pissed", 0.8), ("outraged", 0.9),
-            ("livid", 0.9), ("hostile", 0.7), ("resent", 0.7),
-            ("bitter", 0.6), ("aggravated", 0.7), ("infuriated", 0.9),
+            ("angry", 0.8),
+            ("furious", 0.9),
+            ("mad", 0.7),
+            ("hate", 0.9),
+            ("annoyed", 0.6),
+            ("irritated", 0.6),
+            ("frustrated", 0.7),
+            ("rage", 0.9),
+            ("pissed", 0.8),
+            ("outraged", 0.9),
+            ("livid", 0.9),
+            ("hostile", 0.7),
+            ("resent", 0.7),
+            ("bitter", 0.6),
+            ("aggravated", 0.7),
+            ("infuriated", 0.9),
         ],
         "fear": [
-            ("afraid", 0.8), ("scared", 0.8), ("terrified", 0.9), ("anxious", 0.7),
-            ("worried", 0.6), ("nervous", 0.6), ("panic", 0.9), ("dread", 0.8),
-            ("frightened", 0.8), ("uneasy", 0.5), ("paranoid", 0.7),
-            ("phobia", 0.8), ("horror", 0.8), ("alarmed", 0.7),
-            ("insecure", 0.5), ("overwhelmed", 0.6), ("stressed", 0.6),
+            ("afraid", 0.8),
+            ("scared", 0.8),
+            ("terrified", 0.9),
+            ("anxious", 0.7),
+            ("worried", 0.6),
+            ("nervous", 0.6),
+            ("panic", 0.9),
+            ("dread", 0.8),
+            ("frightened", 0.8),
+            ("uneasy", 0.5),
+            ("paranoid", 0.7),
+            ("phobia", 0.8),
+            ("horror", 0.8),
+            ("alarmed", 0.7),
+            ("insecure", 0.5),
+            ("overwhelmed", 0.6),
+            ("stressed", 0.6),
         ],
         "surprise": [
-            ("surprised", 0.7), ("shocked", 0.8), ("astonished", 0.8),
-            ("amazed", 0.7), ("stunned", 0.8), ("unexpected", 0.6),
-            ("wow", 0.6), ("whoa", 0.6), ("omg", 0.7), ("unbelievable", 0.7),
+            ("surprised", 0.7),
+            ("shocked", 0.8),
+            ("astonished", 0.8),
+            ("amazed", 0.7),
+            ("stunned", 0.8),
+            ("unexpected", 0.6),
+            ("wow", 0.6),
+            ("whoa", 0.6),
+            ("omg", 0.7),
+            ("unbelievable", 0.7),
         ],
         "disgust": [
-            ("disgusted", 0.8), ("gross", 0.7), ("revolting", 0.8),
-            ("sick", 0.5), ("nasty", 0.7), ("repulsive", 0.8),
-            ("vile", 0.8), ("horrible", 0.6), ("awful", 0.6),
-            ("yuck", 0.6), ("ew", 0.5), ("cringe", 0.5),
+            ("disgusted", 0.8),
+            ("gross", 0.7),
+            ("revolting", 0.8),
+            ("sick", 0.5),
+            ("nasty", 0.7),
+            ("repulsive", 0.8),
+            ("vile", 0.8),
+            ("horrible", 0.6),
+            ("awful", 0.6),
+            ("yuck", 0.6),
+            ("ew", 0.5),
+            ("cringe", 0.5),
         ],
         "trust": [
-            ("trust", 0.7), ("believe", 0.5), ("faith", 0.7), ("reliable", 0.6),
-            ("honest", 0.6), ("loyal", 0.7), ("confident", 0.6),
-            ("safe", 0.6), ("secure", 0.5), ("comfortable", 0.5),
-            ("depend", 0.5), ("support", 0.5),
+            ("trust", 0.7),
+            ("believe", 0.5),
+            ("faith", 0.7),
+            ("reliable", 0.6),
+            ("honest", 0.6),
+            ("loyal", 0.7),
+            ("confident", 0.6),
+            ("safe", 0.6),
+            ("secure", 0.5),
+            ("comfortable", 0.5),
+            ("depend", 0.5),
+            ("support", 0.5),
         ],
         "anticipation": [
-            ("excited", 0.6), ("eager", 0.7), ("looking forward", 0.7),
-            ("hope", 0.6), ("expect", 0.5), ("waiting", 0.4),
-            ("curious", 0.6), ("wonder", 0.5), ("can't wait", 0.8),
-            ("impatient", 0.5), ("ready", 0.4),
+            ("excited", 0.6),
+            ("eager", 0.7),
+            ("looking forward", 0.7),
+            ("hope", 0.6),
+            ("expect", 0.5),
+            ("waiting", 0.4),
+            ("curious", 0.6),
+            ("wonder", 0.5),
+            ("can't wait", 0.8),
+            ("impatient", 0.5),
+            ("ready", 0.4),
         ],
     }
 
@@ -161,16 +257,33 @@ def _build_lexicon() -> dict[str, tuple[str, float]]:
 
 # Emoji → (emotion, weight)
 _EMOJI_MAP: dict[str, tuple[str, float]] = {
-    "😊": ("joy", 0.7), "😃": ("joy", 0.7), "😄": ("joy", 0.8),
-    "😁": ("joy", 0.7), "🥰": ("joy", 0.8), "❤️": ("joy", 0.7),
-    "💕": ("joy", 0.7), "😍": ("joy", 0.8), "🎉": ("joy", 0.7),
-    "😢": ("sadness", 0.7), "😭": ("sadness", 0.9), "💔": ("sadness", 0.8),
-    "😞": ("sadness", 0.6), "😔": ("sadness", 0.6),
-    "😠": ("anger", 0.7), "😡": ("anger", 0.8), "🤬": ("anger", 0.9),
-    "😱": ("fear", 0.8), "😰": ("fear", 0.7), "😨": ("fear", 0.7),
-    "😲": ("surprise", 0.7), "😮": ("surprise", 0.6), "🤯": ("surprise", 0.8),
-    "🤢": ("disgust", 0.7), "🤮": ("disgust", 0.8),
-    "🤗": ("trust", 0.6), "🙏": ("trust", 0.5),
+    "😊": ("joy", 0.7),
+    "😃": ("joy", 0.7),
+    "😄": ("joy", 0.8),
+    "😁": ("joy", 0.7),
+    "🥰": ("joy", 0.8),
+    "❤️": ("joy", 0.7),
+    "💕": ("joy", 0.7),
+    "😍": ("joy", 0.8),
+    "🎉": ("joy", 0.7),
+    "😢": ("sadness", 0.7),
+    "😭": ("sadness", 0.9),
+    "💔": ("sadness", 0.8),
+    "😞": ("sadness", 0.6),
+    "😔": ("sadness", 0.6),
+    "😠": ("anger", 0.7),
+    "😡": ("anger", 0.8),
+    "🤬": ("anger", 0.9),
+    "😱": ("fear", 0.8),
+    "😰": ("fear", 0.7),
+    "😨": ("fear", 0.7),
+    "😲": ("surprise", 0.7),
+    "😮": ("surprise", 0.6),
+    "🤯": ("surprise", 0.8),
+    "🤢": ("disgust", 0.7),
+    "🤮": ("disgust", 0.8),
+    "🤗": ("trust", 0.6),
+    "🙏": ("trust", 0.5),
 }
 
 
@@ -323,7 +436,9 @@ class LLMEmotionDetector(EmotionDetector):
             data = _json.loads(cleaned)
             state = EmotionalState.from_dict(data)
         except Exception as exc:
-            logger.debug("LLM emotion detection failed (%s), using rule-based fallback", exc)
+            logger.debug(
+                "LLM emotion detection failed (%s), using rule-based fallback", exc
+            )
             state = self._fallback.detect(text)
 
         # LRU eviction
@@ -337,6 +452,7 @@ class LLMEmotionDetector(EmotionDetector):
 # ------------------------------------------------------------------
 # Emotion Tracker (per-session state over time)
 # ------------------------------------------------------------------
+
 
 class EmotionTracker:
     """Tracks emotional state over time within a session.

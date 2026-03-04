@@ -18,6 +18,7 @@ from cortexflow.memory import ContextSegment
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_segment(content, segment_type="user", importance=5.0, metadata=None):
     """Create a ContextSegment for testing."""
     return ContextSegment(
@@ -33,6 +34,7 @@ def _make_segment(content, segment_type="user", importance=5.0, metadata=None):
 # ---------------------------------------------------------------------------
 # RuleBasedClassifier
 # ---------------------------------------------------------------------------
+
 
 class TestRuleBasedClassifier:
     """Test the deterministic rule-based classifier."""
@@ -130,6 +132,7 @@ class TestRuleBasedClassifier:
 # MLClassifier removal verification
 # ---------------------------------------------------------------------------
 
+
 class TestMLClassifierRemoved:
     """Verify that the old MLClassifier class was removed."""
 
@@ -141,6 +144,7 @@ class TestMLClassifierRemoved:
 # ---------------------------------------------------------------------------
 # ImportanceClassifier ensemble (rule-only, no LLM)
 # ---------------------------------------------------------------------------
+
 
 class TestImportanceClassifier:
     """Test the ensemble classifier with rule-only mode (LLM mocked out)."""

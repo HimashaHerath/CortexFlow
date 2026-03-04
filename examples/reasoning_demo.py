@@ -16,8 +16,11 @@ from cortexflow.config import CortexFlowConfig
 from cortexflow.manager import CortexFlowManager
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 def setup_knowledge_graph():
     """Set up a sample knowledge graph with facts for demonstration."""
@@ -27,7 +30,7 @@ def setup_knowledge_graph():
         use_inference_engine=True,
         max_inference_depth=5,
         inference_confidence_threshold=0.6,
-        abductive_reasoning_enabled=True
+        abductive_reasoning_enabled=True,
     )
 
     # Initialize CortexFlow manager
@@ -80,38 +83,35 @@ def setup_knowledge_graph():
     # Rule for "can_fly" property
     inference_engine.add_rule(
         name="birds_can_fly",
-        premise=[
-            {"source": "?X", "relation": "is_a", "target": "bird"}
-        ],
+        premise=[{"source": "?X", "relation": "is_a", "target": "bird"}],
         conclusion={"source": "?X", "relation": "can_fly", "target": "true"},
         confidence=0.8,
-        metadata={"category": "ability"}
+        metadata={"category": "ability"},
     )
 
     # Rule for "vertebrate" classification
     inference_engine.add_rule(
         name="animals_are_vertebrates",
-        premise=[
-            {"source": "?X", "relation": "is_a", "target": "animal"}
-        ],
+        premise=[{"source": "?X", "relation": "is_a", "target": "animal"}],
         conclusion={"source": "?X", "relation": "is_a", "target": "vertebrate"},
         confidence=0.85,
-        metadata={"category": "classification"}
+        metadata={"category": "classification"},
     )
 
     return cf
 
+
 def demonstrate_backward_chaining(cf: CortexFlowManager):
     """Demonstrate backward chaining for "why" questions."""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("BACKWARD CHAINING DEMO: Answering 'Why' Questions")
-    print("="*50)
+    print("=" * 50)
 
     why_questions = [
         "Why is a dog an animal?",
         "Why does a dog have fur?",
         "Why can an eagle fly?",
-        "Why is a snake cold blooded?"
+        "Why is a snake cold blooded?",
     ]
 
     for question in why_questions:
@@ -132,11 +132,12 @@ def demonstrate_backward_chaining(cf: CortexFlowManager):
         else:
             print("  No explanation found.")
 
+
 def demonstrate_forward_chaining(cf: CortexFlowManager):
     """Demonstrate forward chaining to discover novel implications."""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("FORWARD CHAINING DEMO: Discovering Novel Implications")
-    print("="*50)
+    print("=" * 50)
 
     print("\nRunning forward chaining to derive new facts...")
     inferred_facts = cf.generate_novel_implications(iterations=2)
@@ -150,21 +151,24 @@ def demonstrate_forward_chaining(cf: CortexFlowManager):
             rule = fact.get("rule", "")
             confidence = fact.get("confidence", 0)
 
-            print(f"  {i}. {source} {relation} {target} (Rule: {rule}, Confidence: {confidence:.2f})")
+            print(
+                f"  {i}. {source} {relation} {target} (Rule: {rule}, Confidence: {confidence:.2f})"
+            )
     else:
         print("  No new facts were inferred.")
 
+
 def demonstrate_abductive_reasoning(cf: CortexFlowManager):
     """Demonstrate abductive reasoning for hypothesis generation."""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("ABDUCTIVE REASONING DEMO: Generating Hypotheses")
-    print("="*50)
+    print("=" * 50)
 
     observations = [
         "Eagles have wings",
         "Mammals give birth to live young",
         "Reptiles lay eggs",
-        "Cats have retractable claws"
+        "Cats have retractable claws",
     ]
 
     for observation in observations:
@@ -185,6 +189,7 @@ def demonstrate_abductive_reasoning(cf: CortexFlowManager):
         else:
             print("  No hypotheses generated.")
 
+
 def main():
     """Run the reasoning demo."""
     print("Initializing CortexFlow with sample knowledge graph...")
@@ -196,6 +201,7 @@ def main():
     demonstrate_abductive_reasoning(cf)
 
     print("\nReasoning demo completed.")
+
 
 if __name__ == "__main__":
     main()

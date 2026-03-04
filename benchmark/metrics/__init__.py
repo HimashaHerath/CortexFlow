@@ -23,17 +23,16 @@ from benchmark.metrics.multi_hop_metrics import (
 
 __all__ = [
     # Multi-hop metrics
-    'normalize_path',
-    'path_overlap_score',
-    'path_order_accuracy',
-    'multi_hop_reasoning_score',
-    'evaluate_reasoning_chain',
-    'benchmark_multi_hop_reasoning',
-
+    "normalize_path",
+    "path_overlap_score",
+    "path_order_accuracy",
+    "multi_hop_reasoning_score",
+    "evaluate_reasoning_chain",
+    "benchmark_multi_hop_reasoning",
     # Consistency metrics
-    'jaccard_similarity',
-    'temporal_consistency_score',
-    'track_knowledge_growth',
-    'belief_revision_impact',
-    'evaluate_knowledge_consistency'
+    "jaccard_similarity",
+    "temporal_consistency_score",
+    "track_knowledge_growth",
+    "belief_revision_impact",
+    "evaluate_knowledge_consistency",
 ]

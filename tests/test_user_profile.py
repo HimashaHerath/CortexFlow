@@ -12,9 +12,12 @@ class TestUserProfile:
         assert p.boundaries == []
 
     def test_roundtrip(self):
-        p = UserProfile(user_id="u1", name="Alice",
-                        demographics={"age": "25"},
-                        interests=["coding", "music"])
+        p = UserProfile(
+            user_id="u1",
+            name="Alice",
+            demographics={"age": "25"},
+            interests=["coding", "music"],
+        )
         d = p.to_dict()
         p2 = UserProfile.from_dict(d)
         assert p2.name == "Alice"
@@ -80,7 +83,9 @@ class TestUserProfileManager:
 
     def test_check_boundary_overlap(self):
         self.mgr.record_boundary("u1", "don't discuss my family problems please")
-        result = self.mgr.check_boundary("u1", "I want to discuss my family problems with you")
+        result = self.mgr.check_boundary(
+            "u1", "I want to discuss my family problems with you"
+        )
         assert result is not None
 
     def test_check_boundary_no_match(self):
@@ -89,10 +94,13 @@ class TestUserProfileManager:
         assert result is None
 
     def test_profile_summary(self):
-        self.mgr.update_from_facts("u1", [
-            {"fact_type": "name", "value": "Alice"},
-            {"fact_type": "interest", "value": "music"},
-        ])
+        self.mgr.update_from_facts(
+            "u1",
+            [
+                {"fact_type": "name", "value": "Alice"},
+                {"fact_type": "interest", "value": "music"},
+            ],
+        )
         summary = self.mgr.get_profile_summary("u1")
         assert "Alice" in summary
         assert "music" in summary

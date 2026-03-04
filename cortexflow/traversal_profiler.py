@@ -4,6 +4,7 @@ Traversal Profiler for CortexFlow.
 This module provides functionality for profiling and optimizing graph traversal operations
 in the CortexFlow knowledge graph.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,8 @@ from functools import wraps
 from typing import Any
 
 # Configure logging
-logger = logging.getLogger('cortexflow.traversal')
+logger = logging.getLogger("cortexflow.traversal")
+
 
 class TraversalProfile:
     """
@@ -50,7 +52,9 @@ class TraversalProfile:
         self.end_time = datetime.now()
         self.duration = (self.end_time - self.start_time).total_seconds()
 
-    def add_step(self, step_name: str, duration: float, metadata: dict[str, Any] = None):
+    def add_step(
+        self, step_name: str, duration: float, metadata: dict[str, Any] = None
+    ):
         """
         Add a step to the traversal profile.
 
@@ -59,11 +63,9 @@ class TraversalProfile:
             duration: Duration of the step in seconds
             metadata: Optional metadata about the step
         """
-        self.steps.append({
-            "name": step_name,
-            "duration": duration,
-            "metadata": metadata or {}
-        })
+        self.steps.append(
+            {"name": step_name, "duration": duration, "metadata": metadata or {}}
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -76,8 +78,9 @@ class TraversalProfile:
             "nodes_visited": self.nodes_visited,
             "edges_traversed": self.edges_traversed,
             "path_length": self.path_length,
-            "steps": self.steps
+            "steps": self.steps,
         }
+
 
 class TraversalProfiler:
     """
@@ -133,7 +136,9 @@ class TraversalProfiler:
         """Destructor to ensure resources are cleaned up."""
         self.close()
 
-    def start_profile(self, name: str, metadata: dict[str, Any] = None) -> TraversalProfile | None:
+    def start_profile(
+        self, name: str, metadata: dict[str, Any] = None
+    ) -> TraversalProfile | None:
         """
         Start profiling a traversal operation.
 
@@ -182,7 +187,9 @@ class TraversalProfiler:
 
         return profile
 
-    def log_traversal_step(self, step_name: str, duration: float, metadata: dict[str, Any] = None):
+    def log_traversal_step(
+        self, step_name: str, duration: float, metadata: dict[str, Any] = None
+    ):
         """
         Log a step in the current traversal profile.
 
@@ -196,7 +203,9 @@ class TraversalProfiler:
 
         self.current_profile.add_step(step_name, duration, metadata)
 
-    def update_traversal_stats(self, nodes_visited: int, edges_traversed: int, path_length: int):
+    def update_traversal_stats(
+        self, nodes_visited: int, edges_traversed: int, path_length: int
+    ):
         """
         Update statistics for the current traversal profile.
 
@@ -238,11 +247,11 @@ class TraversalProfiler:
         data = {
             "profiles": profiles_data,
             "optimization_suggestions": self.optimization_suggestions,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         try:
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 json.dump(data, f, indent=2)
 
             logger.info(f"Saved {len(self.profiles)} traversal profiles to {file_path}")
@@ -263,11 +272,13 @@ class TraversalProfiler:
         # Check for excessive node visitation
         nodes_to_path_ratio = profile.nodes_visited / max(1, profile.path_length)
         if nodes_to_path_ratio > 10:
-            suggestions.append({
-                "type": "excessive_exploration",
-                "description": f"Traversal visited {profile.nodes_visited} nodes for a path of length {profile.path_length}",
-                "improvement": "Consider adding more specific constraints or using bidirectional search"
-            })
+            suggestions.append(
+                {
+                    "type": "excessive_exploration",
+                    "description": f"Traversal visited {profile.nodes_visited} nodes for a path of length {profile.path_length}",
+                    "improvement": "Consider adding more specific constraints or using bidirectional search",
+                }
+            )
 
         # Check for slow steps
         slow_steps = []
@@ -276,28 +287,34 @@ class TraversalProfiler:
                 slow_steps.append(step)
 
         if slow_steps:
-            suggestions.append({
-                "type": "slow_steps",
-                "description": f"Found {len(slow_steps)} slow steps in traversal",
-                "steps": [step["name"] for step in slow_steps],
-                "improvement": "Consider optimizing these specific traversal steps"
-            })
+            suggestions.append(
+                {
+                    "type": "slow_steps",
+                    "description": f"Found {len(slow_steps)} slow steps in traversal",
+                    "steps": [step["name"] for step in slow_steps],
+                    "improvement": "Consider optimizing these specific traversal steps",
+                }
+            )
 
         # Check for excessive total duration
         if profile.duration > 1.0:  # More than 1 second
-            suggestions.append({
-                "type": "slow_traversal",
-                "description": f"Traversal took {profile.duration:.2f} seconds to complete",
-                "improvement": "Consider adding indexes or partitioning the graph"
-            })
+            suggestions.append(
+                {
+                    "type": "slow_traversal",
+                    "description": f"Traversal took {profile.duration:.2f} seconds to complete",
+                    "improvement": "Consider adding indexes or partitioning the graph",
+                }
+            )
 
         # Add suggestions to the list
         if suggestions:
-            self.optimization_suggestions.append({
-                "profile_name": profile.name,
-                "timestamp": datetime.now().isoformat(),
-                "suggestions": suggestions
-            })
+            self.optimization_suggestions.append(
+                {
+                    "profile_name": profile.name,
+                    "timestamp": datetime.now().isoformat(),
+                    "suggestions": suggestions,
+                }
+            )
 
     def get_optimization_suggestions(self) -> list[dict[str, Any]]:
         """
@@ -324,10 +341,13 @@ class TraversalProfiler:
             "avg_duration": sum(p.duration for p in self.profiles) / len(self.profiles),
             "max_duration": max(p.duration for p in self.profiles),
             "min_duration": min(p.duration for p in self.profiles),
-            "avg_nodes_visited": sum(p.nodes_visited for p in self.profiles) / len(self.profiles),
-            "avg_edges_traversed": sum(p.edges_traversed for p in self.profiles) / len(self.profiles),
-            "avg_path_length": sum(p.path_length for p in self.profiles) / len(self.profiles),
-            "operations_by_type": defaultdict(int)
+            "avg_nodes_visited": sum(p.nodes_visited for p in self.profiles)
+            / len(self.profiles),
+            "avg_edges_traversed": sum(p.edges_traversed for p in self.profiles)
+            / len(self.profiles),
+            "avg_path_length": sum(p.path_length for p in self.profiles)
+            / len(self.profiles),
+            "operations_by_type": defaultdict(int),
         }
 
         # Count operations by type
@@ -347,6 +367,7 @@ class TraversalProfiler:
         self.optimization_suggestions = []
         logger.info("Cleared all traversal profiles")
 
+
 def profile_traversal(name: str = None):
     """
     Decorator for profiling traversal methods.
@@ -357,6 +378,7 @@ def profile_traversal(name: str = None):
     Returns:
         Decorated function
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -367,11 +389,7 @@ def profile_traversal(name: str = None):
 
             # Start profiling
             profile_name = name or func.__name__
-            metadata = {
-                "type": func.__name__,
-                "args": str(args),
-                "kwargs": str(kwargs)
-            }
+            metadata = {"type": func.__name__, "args": str(args), "kwargs": str(kwargs)}
 
             profiler.start_profile(profile_name, metadata)
 
@@ -385,7 +403,9 @@ def profile_traversal(name: str = None):
                 nodes_visited = result.get("nodes_visited", 0)
                 edges_traversed = result.get("edges_traversed", 0)
                 path_length = len(result.get("path", []))
-                profiler.update_traversal_stats(nodes_visited, edges_traversed, path_length)
+                profiler.update_traversal_stats(
+                    nodes_visited, edges_traversed, path_length
+                )
 
             # Stop profiling
             profiler.stop_profile()

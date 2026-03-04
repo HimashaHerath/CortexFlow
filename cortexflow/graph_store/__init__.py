@@ -15,6 +15,7 @@ Backward-compatible usage::
 
     from cortexflow.graph_store import GraphStore, RelationExtractor, GraphMerger
 """
+
 from __future__ import annotations
 
 # Re-export dependency flags so existing code that does

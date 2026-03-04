@@ -14,20 +14,20 @@ import sys
 from datetime import datetime
 
 # Add parent directory to sys.path to import cortexflow modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 logger = logging.getLogger("setup_evaluation")
 
+
 def setup_directories(
     results_dir: str = "evaluation_results",
     logs_dir: str = None,
-    create_subdirs: bool = True
+    create_subdirs: bool = True,
 ):
     """
     Set up directories for the evaluation framework.
@@ -54,7 +54,7 @@ def setup_directories(
             "consistency_evaluations",
             "reasoning_analysis",
             "test_suites",
-            "visualizations"
+            "visualizations",
         ]
 
         for subdir in subdirs:
@@ -62,10 +62,11 @@ def setup_directories(
             os.makedirs(subdir_path, exist_ok=True)
             logger.info(f"Created subdirectory: {subdir_path}")
 
+
 def create_default_config(
     config_path: str = "evaluation_config.json",
     db_path: str = None,
-    overwrite: bool = False
+    overwrite: bool = False,
 ):
     """
     Create a default configuration file for the evaluation framework.
@@ -89,43 +90,31 @@ def create_default_config(
         "db_path": db_path,
         "reasoning_log_db": "evaluation_results/reasoning_logs.db",
         "benchmarks": {
-            "multi_hop": {
-                "num_tests": 30,
-                "synthetic_ratio": 0.5,
-                "max_hops": 3
-            },
-            "consistency": {
-                "time_window_days": 30,
-                "take_snapshot": True
-            },
-            "reasoning": {
-                "n_sessions": 10
-            }
+            "multi_hop": {"num_tests": 30, "synthetic_ratio": 0.5, "max_hops": 3},
+            "consistency": {"time_window_days": 30, "take_snapshot": True},
+            "reasoning": {"n_sessions": 10},
         },
         "visualization": {
             "enabled": True,
             "formats": ["png", "html"],
-            "interactive": True
+            "interactive": True,
         },
         "test_generation": {
             "num_multi_hop": 20,
             "num_counterfactual": 10,
-            "custom_domains": []
+            "custom_domains": [],
         },
-        "logging": {
-            "level": "INFO",
-            "file_logging": True,
-            "console_logging": True
-        },
-        "created_at": datetime.now().isoformat()
+        "logging": {"level": "INFO", "file_logging": True, "console_logging": True},
+        "created_at": datetime.now().isoformat(),
     }
 
     # Write configuration to file
-    with open(config_path, 'w') as f:
+    with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
     logger.info(f"Created default configuration at {config_path}")
     return True
+
 
 def check_dependencies():
     """
@@ -134,12 +123,7 @@ def check_dependencies():
     Returns:
         True if all dependencies are available, False otherwise
     """
-    required_packages = [
-        "numpy",
-        "matplotlib",
-        "networkx",
-        "sqlite3"
-    ]
+    required_packages = ["numpy", "matplotlib", "networkx", "sqlite3"]
 
     missing_packages = []
 
@@ -151,11 +135,14 @@ def check_dependencies():
 
     if missing_packages:
         logger.warning(f"Missing packages: {', '.join(missing_packages)}")
-        logger.warning("Install missing packages with: pip install " + " ".join(missing_packages))
+        logger.warning(
+            "Install missing packages with: pip install " + " ".join(missing_packages)
+        )
         return False
 
     logger.info("All required dependencies are installed")
     return True
+
 
 def initialize_database(db_path: str):
     """
@@ -189,19 +176,19 @@ def initialize_database(db_path: str):
         cursor = conn.cursor()
 
         # Create basic tables - actual schema will be created by the framework
-        cursor.execute('''
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS evaluation_metadata (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             key TEXT NOT NULL,
             value TEXT,
             timestamp REAL
         )
-        ''')
+        """)
 
         # Add initialization timestamp
         cursor.execute(
             "INSERT INTO evaluation_metadata (key, value, timestamp) VALUES (?, ?, ?)",
-            ("initialized", "true", datetime.now().timestamp())
+            ("initialized", "true", datetime.now().timestamp()),
         )
 
         conn.commit()
@@ -214,23 +201,44 @@ def initialize_database(db_path: str):
         logger.error(f"Failed to initialize database: {e}")
         return False
 
+
 def main():
     """Main function to set up the evaluation framework."""
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Setup CortexFlow Evaluation Framework')
-    parser.add_argument('--results_dir', type=str, default='evaluation_results', help='Directory for evaluation results')
-    parser.add_argument('--logs_dir', type=str, help='Directory for logs')
-    parser.add_argument('--db_path', type=str, help='Path to knowledge database')
-    parser.add_argument('--config', type=str, default='evaluation_config.json', help='Path to configuration file')
-    parser.add_argument('--overwrite', action='store_true', help='Overwrite existing configuration')
-    parser.add_argument('--no_subdirs', action='store_true', help='Do not create benchmark-specific subdirectories')
+    parser = argparse.ArgumentParser(
+        description="Setup CortexFlow Evaluation Framework"
+    )
+    parser.add_argument(
+        "--results_dir",
+        type=str,
+        default="evaluation_results",
+        help="Directory for evaluation results",
+    )
+    parser.add_argument("--logs_dir", type=str, help="Directory for logs")
+    parser.add_argument("--db_path", type=str, help="Path to knowledge database")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="evaluation_config.json",
+        help="Path to configuration file",
+    )
+    parser.add_argument(
+        "--overwrite", action="store_true", help="Overwrite existing configuration"
+    )
+    parser.add_argument(
+        "--no_subdirs",
+        action="store_true",
+        help="Do not create benchmark-specific subdirectories",
+    )
 
     args = parser.parse_args()
 
     # Check dependencies
     dependencies_ok = check_dependencies()
     if not dependencies_ok:
-        logger.warning("Some dependencies are missing. Continuing setup but framework may not work.")
+        logger.warning(
+            "Some dependencies are missing. Continuing setup but framework may not work."
+        )
 
     # Setup directories
     setup_directories(args.results_dir, args.logs_dir, not args.no_subdirs)
@@ -243,7 +251,10 @@ def main():
         initialize_database(args.db_path)
 
     logger.info("Setup completed successfully")
-    logger.info(f"To run the evaluation framework, use: python benchmark/evaluation_framework.py --config {args.config}")
+    logger.info(
+        f"To run the evaluation framework, use: python benchmark/evaluation_framework.py --config {args.config}"
+    )
+
 
 if __name__ == "__main__":
     main()

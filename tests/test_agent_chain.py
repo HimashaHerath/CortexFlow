@@ -20,6 +20,7 @@ from cortexflow.config import ConfigBuilder
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_knowledge_store():
     """Create a mock knowledge store for agent chain tests."""
@@ -46,7 +47,9 @@ def chain_manager(config, mock_knowledge_store):
     with patch("cortexflow.agent_chain.create_llm_client") as mock_llm_factory:
         mock_client = MagicMock()
         mock_client.generate_from_prompt.return_value = "Mocked LLM response."
-        mock_client.batch_generate_from_prompts.return_value = ["Mocked batch response."]
+        mock_client.batch_generate_from_prompts.return_value = [
+            "Mocked batch response."
+        ]
         mock_llm_factory.return_value = mock_client
         manager = AgentChainManager(config, mock_knowledge_store)
     return manager
@@ -55,6 +58,7 @@ def chain_manager(config, mock_knowledge_store):
 # ---------------------------------------------------------------------------
 # _is_complex_query
 # ---------------------------------------------------------------------------
+
 
 class TestIsComplexQuery:
     """Test the complexity heuristic for query routing."""
@@ -66,9 +70,11 @@ class TestIsComplexQuery:
         assert chain_manager._is_complex_query("What time is it?") is False
 
     def test_long_query_is_complex(self, chain_manager):
-        long_query = "Please tell me about the history of computer science " \
-                     "and all the major breakthroughs that happened in the field " \
-                     "throughout the twentieth century and beyond"
+        long_query = (
+            "Please tell me about the history of computer science "
+            "and all the major breakthroughs that happened in the field "
+            "throughout the twentieth century and beyond"
+        )
         assert chain_manager._is_complex_query(long_query) is True
 
     def test_query_with_analysis_word_is_complex(self, chain_manager):
@@ -96,6 +102,7 @@ class TestIsComplexQuery:
 # Simple queries return skipped
 # ---------------------------------------------------------------------------
 
+
 class TestSimpleQuerySkip:
     """Test that simple queries skip the agent chain."""
 
@@ -119,6 +126,7 @@ class TestSimpleQuerySkip:
 # Agent error handling
 # ---------------------------------------------------------------------------
 
+
 class TestAgentErrorHandling:
     """Test that agent failures produce proper error dicts."""
 
@@ -131,7 +139,9 @@ class TestAgentErrorHandling:
         assert result["status"] == "error"
         assert "No previous agent history" in str(result["analysis_results"])
 
-    def test_synthesizer_without_enough_history_returns_error(self, config, mock_knowledge_store):
+    def test_synthesizer_without_enough_history_returns_error(
+        self, config, mock_knowledge_store
+    ):
         with patch("cortexflow.agent_chain.create_llm_client") as mock_llm:
             mock_llm.return_value = MagicMock()
             agent = SynthesizerAgent(config, mock_knowledge_store)
@@ -183,6 +193,7 @@ class TestAgentErrorHandling:
 # ---------------------------------------------------------------------------
 # Full chain processing (mocked LLM)
 # ---------------------------------------------------------------------------
+
 
 class TestFullChainProcessing:
     """Test end-to-end processing with mocked LLM."""

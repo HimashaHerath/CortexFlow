@@ -18,20 +18,24 @@ from cortexflow.config import CortexFlowConfig
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_config(db_path):
     """Create a minimal config pointing to the given DB path."""
-    return CortexFlowConfig.from_dict({
-        "knowledge_store_path": db_path,
-        "use_graph_rag": False,
-        "use_inference_engine": False,
-        "use_reranking": False,
-        "use_ml_classifier": False,
-    })
+    return CortexFlowConfig.from_dict(
+        {
+            "knowledge_store_path": db_path,
+            "use_graph_rag": False,
+            "use_inference_engine": False,
+            "use_reranking": False,
+            "use_ml_classifier": False,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def tmp_db_path():
@@ -51,6 +55,7 @@ def tmp_db_path():
 def knowledge_store(tmp_db_path):
     """Create a KnowledgeStore with a temp DB."""
     from cortexflow.knowledge import KnowledgeStore
+
     config = _make_config(tmp_db_path)
     ks = KnowledgeStore(config)
     yield ks
@@ -60,6 +65,7 @@ def knowledge_store(tmp_db_path):
 # ---------------------------------------------------------------------------
 # add_knowledge
 # ---------------------------------------------------------------------------
+
 
 class TestAddKnowledge:
     """Test adding knowledge to the store."""
@@ -94,6 +100,7 @@ class TestAddKnowledge:
 # remember_knowledge deprecation
 # ---------------------------------------------------------------------------
 
+
 class TestRememberKnowledgeDeprecation:
     """Test that remember_knowledge is a deprecated wrapper."""
 
@@ -116,6 +123,7 @@ class TestRememberKnowledgeDeprecation:
 # ---------------------------------------------------------------------------
 # get_relevant_knowledge
 # ---------------------------------------------------------------------------
+
 
 class TestGetRelevantKnowledge:
     """Test knowledge retrieval."""
@@ -148,11 +156,13 @@ class TestGetRelevantKnowledge:
 # close() idempotency
 # ---------------------------------------------------------------------------
 
+
 class TestCloseIdempotent:
     """Test that close() can be called multiple times safely."""
 
     def test_close_once(self, tmp_db_path):
         from cortexflow.knowledge import KnowledgeStore
+
         config = _make_config(tmp_db_path)
         ks = KnowledgeStore(config)
         ks.close()
@@ -160,6 +170,7 @@ class TestCloseIdempotent:
 
     def test_close_twice_no_error(self, tmp_db_path):
         from cortexflow.knowledge import KnowledgeStore
+
         config = _make_config(tmp_db_path)
         ks = KnowledgeStore(config)
         ks.close()
@@ -168,6 +179,7 @@ class TestCloseIdempotent:
 
     def test_close_three_times_no_error(self, tmp_db_path):
         from cortexflow.knowledge import KnowledgeStore
+
         config = _make_config(tmp_db_path)
         ks = KnowledgeStore(config)
         ks.close()
@@ -180,11 +192,13 @@ class TestCloseIdempotent:
 # Context manager
 # ---------------------------------------------------------------------------
 
+
 class TestContextManager:
     """Test __enter__ and __exit__ protocol."""
 
     def test_enter_returns_self(self, tmp_db_path):
         from cortexflow.knowledge import KnowledgeStore
+
         config = _make_config(tmp_db_path)
         ks = KnowledgeStore(config)
         with ks as store:
@@ -192,6 +206,7 @@ class TestContextManager:
 
     def test_exit_calls_close(self, tmp_db_path):
         from cortexflow.knowledge import KnowledgeStore
+
         config = _make_config(tmp_db_path)
         ks = KnowledgeStore(config)
         with ks:
@@ -200,6 +215,7 @@ class TestContextManager:
 
     def test_context_manager_on_exception(self, tmp_db_path):
         from cortexflow.knowledge import KnowledgeStore
+
         config = _make_config(tmp_db_path)
         ks = KnowledgeStore(config)
         try:
@@ -213,6 +229,7 @@ class TestContextManager:
     def test_exit_returns_false(self, tmp_db_path):
         """__exit__ should return False so exceptions propagate."""
         from cortexflow.knowledge import KnowledgeStore
+
         config = _make_config(tmp_db_path)
         ks = KnowledgeStore(config)
         result = ks.__exit__(None, None, None)

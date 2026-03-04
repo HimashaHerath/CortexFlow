@@ -15,10 +15,18 @@ def test_self_reflection():
     """Test the Self-Reflection functionality."""
     parser = argparse.ArgumentParser(description="Test CortexFlow Self-Reflection")
     parser.add_argument("--model", default="llama3.2", help="Ollama model to use")
-    parser.add_argument("--host", default="http://localhost:11434", help="Ollama API host")
-    parser.add_argument("--active-tokens", type=int, default=1000, help="Active tier token limit")
-    parser.add_argument("--working-tokens", type=int, default=2000, help="Working tier token limit")
-    parser.add_argument("--archive-tokens", type=int, default=3000, help="Archive tier token limit")
+    parser.add_argument(
+        "--host", default="http://localhost:11434", help="Ollama API host"
+    )
+    parser.add_argument(
+        "--active-tokens", type=int, default=1000, help="Active tier token limit"
+    )
+    parser.add_argument(
+        "--working-tokens", type=int, default=2000, help="Working tier token limit"
+    )
+    parser.add_argument(
+        "--archive-tokens", type=int, default=3000, help="Archive tier token limit"
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     args = parser.parse_args()
 
@@ -35,7 +43,7 @@ def test_self_reflection():
         use_self_reflection=True,  # Enable Self-Reflection
         reflection_relevance_threshold=0.6,  # Minimum relevance score
         reflection_confidence_threshold=0.7,  # Minimum confidence for consistency
-        verbose_logging=args.verbose
+        verbose_logging=args.verbose,
     )
 
     context_manager = CortexFlowManager(config)
@@ -44,7 +52,7 @@ def test_self_reflection():
         # Set up system message
         context_manager.add_message(
             "system",
-            "You are a helpful AI assistant with advanced reasoning capabilities."
+            "You are a helpful AI assistant with advanced reasoning capabilities.",
         )
 
         # Add some knowledge to the system
@@ -59,7 +67,7 @@ def test_self_reflection():
             "The speed of light in vacuum is exactly 299,792,458 meters per second.",
             "The Sahara Desert covers an area of over 9 million square kilometers.",
             "Jupiter is the largest planet in our solar system.",
-            "Water covers approximately 71% of the Earth's surface."
+            "Water covers approximately 71% of the Earth's surface.",
         ]
 
         # Add facts with deliberate contradictions
@@ -138,6 +146,7 @@ def test_self_reflection():
         # Clean up
         context_manager.close()
         print("\nSelf-Reflection test completed")
+
 
 if __name__ == "__main__":
     test_self_reflection()

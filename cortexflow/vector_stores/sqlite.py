@@ -5,6 +5,7 @@ BLOBs logic that was previously embedded directly in
 ``DenseVectorSearchStrategy.search()`` inside ``cortexflow/knowledge.py``.
 It can operate with either an in-memory or on-disk SQLite database.
 """
+
 from __future__ import annotations
 
 import logging

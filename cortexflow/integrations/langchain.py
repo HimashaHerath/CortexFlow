@@ -166,9 +166,9 @@ class CortexFlowChatMessageHistory(BaseChatMessageHistory):
     @property
     def messages(self) -> list[BaseMessage]:  # noqa: D401
         """Return the conversation history as a list of ``BaseMessage``."""
-        raw_messages: list[dict[str, Any]] = getattr(
-            self.manager, "memory", None
-        ) and self.manager.memory.messages or []
+        raw_messages: list[dict[str, Any]] = (
+            getattr(self.manager, "memory", None) and self.manager.memory.messages or []
+        )
         return [_role_to_message(m["role"], m["content"]) for m in raw_messages]
 
     def add_message(self, message: BaseMessage) -> None:

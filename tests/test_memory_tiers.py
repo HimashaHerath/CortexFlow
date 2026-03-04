@@ -21,13 +21,16 @@ from cortexflow.memory import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_small_config(active=50, working=100, archive=200):
     """Create a config with very small token limits to trigger overflow."""
-    return CortexFlowConfig.from_dict({
-        "active_token_limit": active,
-        "working_token_limit": working,
-        "archive_token_limit": archive,
-    })
+    return CortexFlowConfig.from_dict(
+        {
+            "active_token_limit": active,
+            "working_token_limit": working,
+            "archive_token_limit": archive,
+        }
+    )
 
 
 def _make_segment(content, importance=5.0, segment_type="user"):
@@ -50,6 +53,7 @@ def _word_string(n):
 # ---------------------------------------------------------------------------
 # Basic tier operations
 # ---------------------------------------------------------------------------
+
 
 class TestBasicTierOperations:
     """Test fundamental MemoryTier behavior."""
@@ -124,6 +128,7 @@ class TestBasicTierOperations:
 # ConversationMemory: adding messages fills active tier
 # ---------------------------------------------------------------------------
 
+
 class TestAddMessageFillsActiveTier:
     """Test that add_message places segments into the active tier."""
 
@@ -152,6 +157,7 @@ class TestAddMessageFillsActiveTier:
 # Overflow triggers demotion to working tier
 # ---------------------------------------------------------------------------
 
+
 class TestActiveTierOverflow:
     """Test that active tier overflow demotes segments to working tier."""
 
@@ -161,7 +167,9 @@ class TestActiveTierOverflow:
         # Each message has ~5-6 tokens, active limit is 10
         # After a few messages, overflow should trigger
         for i in range(5):
-            memory.add_message("user", f"Message number {i} with some extra words here.")
+            memory.add_message(
+                "user", f"Message number {i} with some extra words here."
+            )
         # Working tier should have received demoted segments
         assert memory.working_tier.current_token_count > 0
 
@@ -171,12 +179,16 @@ class TestActiveTierOverflow:
         for i in range(10):
             memory.add_message("user", f"Overflow test message number {i} content.")
         # Active tier should not exceed its limit (much)
-        assert memory.active_tier.current_token_count <= config.memory.active_token_limit + 20
+        assert (
+            memory.active_tier.current_token_count
+            <= config.memory.active_token_limit + 20
+        )
 
 
 # ---------------------------------------------------------------------------
 # Working tier overflow cascades to archive
 # ---------------------------------------------------------------------------
+
 
 class TestWorkingTierOverflow:
     """Test that working tier overflow cascades to archive."""
@@ -185,7 +197,9 @@ class TestWorkingTierOverflow:
         config = _make_small_config(active=10, working=20, archive=500)
         memory = ConversationMemory(config)
         for i in range(15):
-            memory.add_message("user", f"Cascade test message {i} with extra words to use tokens.")
+            memory.add_message(
+                "user", f"Cascade test message {i} with extra words to use tokens."
+            )
         # Archive should have received segments
         assert memory.archive_tier.current_token_count > 0
 
@@ -193,7 +207,9 @@ class TestWorkingTierOverflow:
         config = _make_small_config(active=10, working=20, archive=500)
         memory = ConversationMemory(config)
         for i in range(20):
-            memory.add_message("user", f"Message {i} contains enough words to fill tiers.")
+            memory.add_message(
+                "user", f"Message {i} contains enough words to fill tiers."
+            )
         # At least active and one other tier should have content
         tier_counts = [
             memory.active_tier.current_token_count,
@@ -208,6 +224,7 @@ class TestWorkingTierOverflow:
 # System messages (importance >= 9.0) are never demoted
 # ---------------------------------------------------------------------------
 
+
 class TestSystemMessageProtection:
     """Test that system messages are protected from demotion."""
 
@@ -218,7 +235,10 @@ class TestSystemMessageProtection:
         memory.add_message("system", "You are a helpful assistant.")
         # Fill up with user messages to trigger overflow
         for i in range(10):
-            memory.add_message("user", f"User message {i} with some extra filler words to consume tokens quickly.")
+            memory.add_message(
+                "user",
+                f"User message {i} with some extra filler words to consume tokens quickly.",
+            )
         # System message should still be in active tier
         system_in_active = any(
             seg.segment_type == "system" for seg in memory.active_tier.segments
@@ -228,17 +248,25 @@ class TestSystemMessageProtection:
     def test_demotable_index_skips_system_segments(self):
         """_get_demotable_segment_index should skip importance >= 9.0 segments."""
         tier = ActiveTier(1000)
-        tier.add_segment(_make_segment("System msg", importance=9.5, segment_type="system"))
+        tier.add_segment(
+            _make_segment("System msg", importance=9.5, segment_type="system")
+        )
         tier.add_segment(_make_segment("User msg", importance=5.0, segment_type="user"))
-        tier.add_segment(_make_segment("Another system", importance=9.0, segment_type="system"))
+        tier.add_segment(
+            _make_segment("Another system", importance=9.0, segment_type="system")
+        )
 
         idx = ConversationMemory._get_demotable_segment_index(tier)
         assert idx == 1  # Should point to the user segment
 
     def test_only_system_segments_returns_none(self):
         tier = ActiveTier(1000)
-        tier.add_segment(_make_segment("System 1", importance=9.0, segment_type="system"))
-        tier.add_segment(_make_segment("System 2", importance=9.5, segment_type="system"))
+        tier.add_segment(
+            _make_segment("System 1", importance=9.0, segment_type="system")
+        )
+        tier.add_segment(
+            _make_segment("System 2", importance=9.5, segment_type="system")
+        )
 
         idx = ConversationMemory._get_demotable_segment_index(tier)
         assert idx is None
@@ -248,6 +276,7 @@ class TestSystemMessageProtection:
 # get_context_messages returns from all tiers
 # ---------------------------------------------------------------------------
 
+
 class TestGetContextMessages:
     """Test that get_context_messages returns from all tiers."""
 
@@ -255,7 +284,9 @@ class TestGetContextMessages:
         config = _make_small_config(active=10, working=20, archive=500)
         memory = ConversationMemory(config)
         for i in range(15):
-            memory.add_message("user", f"Context message {i} with extra padding words for tokens.")
+            memory.add_message(
+                "user", f"Context message {i} with extra padding words for tokens."
+            )
         messages = memory.get_context_messages()
         assert isinstance(messages, list)
         assert len(messages) > 0
@@ -297,6 +328,7 @@ class TestGetContextMessages:
 # Compression happens during demotion
 # ---------------------------------------------------------------------------
 
+
 class TestCompressionDuringDemotion:
     """Test that segments are compressed when demoted between tiers."""
 
@@ -330,7 +362,7 @@ class TestCompressionDuringDemotion:
             memory.add_message(
                 "user",
                 f"This is a fairly long message number {i} that contains various words "
-                f"to ensure the token count is significant enough for compression testing purposes."
+                f"to ensure the token count is significant enough for compression testing purposes.",
             )
         # Working or archive tier should have compressed segments
         all_demoted = memory.working_tier.segments + memory.archive_tier.segments
@@ -342,6 +374,7 @@ class TestCompressionDuringDemotion:
 # ---------------------------------------------------------------------------
 # Stats and clear
 # ---------------------------------------------------------------------------
+
 
 class TestStatsAndClear:
     """Test memory statistics and clear functionality."""

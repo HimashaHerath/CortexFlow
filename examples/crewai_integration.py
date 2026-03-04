@@ -2,6 +2,7 @@
 
 Requires: pip install cortexflow-llm[crewai]
 """
+
 from cortexflow import ConfigBuilder, CortexFlowManager
 from cortexflow.integrations.crewai import CortexFlowCrewStorage
 
@@ -13,7 +14,9 @@ manager = CortexFlowManager(config)
 storage = CortexFlowCrewStorage(manager)
 
 # Save knowledge through CrewAI's interface
-storage.save(key="project-info", value="CortexFlow uses cognitive-inspired architecture.")
+storage.save(
+    key="project-info", value="CortexFlow uses cognitive-inspired architecture."
+)
 storage.save(key="team-info", value="The team uses Python 3.10+ and pytest.")
 
 # Search

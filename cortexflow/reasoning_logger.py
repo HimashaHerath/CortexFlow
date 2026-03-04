@@ -4,6 +4,7 @@ Reasoning Path Logger for CortexFlow.
 This module provides functionality to log and analyze reasoning paths
 in the CortexFlow knowledge graph system.
 """
+
 from __future__ import annotations
 
 import json
@@ -33,7 +34,7 @@ class ReasoningLogger:
         log_level: str = "INFO",
         enable_file_logging: bool = True,
         log_dir: str = "logs",
-        max_path_length: int = 1000
+        max_path_length: int = 1000,
     ):
         """
         Initialize the reasoning logger.
@@ -56,14 +57,20 @@ class ReasoningLogger:
         # Create console handler
         console_handler = logging.StreamHandler()
         console_handler.setLevel(numeric_level)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
         console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
 
         # Create file handler if enabled
         if enable_file_logging:
             os.makedirs(log_dir, exist_ok=True)
-            file_handler = logging.FileHandler(os.path.join(log_dir, f"reasoning_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"))
+            file_handler = logging.FileHandler(
+                os.path.join(
+                    log_dir, f"reasoning_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+                )
+            )
             file_handler.setLevel(numeric_level)
             file_handler.setFormatter(formatter)
             self.logger.addHandler(file_handler)
@@ -85,7 +92,7 @@ class ReasoningLogger:
             cursor = conn.cursor()
 
             # Create reasoning_sessions table
-            cursor.execute('''
+            cursor.execute("""
             CREATE TABLE IF NOT EXISTS reasoning_sessions (
                 id TEXT PRIMARY KEY,
                 query TEXT,
@@ -94,10 +101,10 @@ class ReasoningLogger:
                 success BOOLEAN,
                 metadata TEXT
             )
-            ''')
+            """)
 
             # Create reasoning_steps table
-            cursor.execute('''
+            cursor.execute("""
             CREATE TABLE IF NOT EXISTS reasoning_steps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
@@ -110,10 +117,10 @@ class ReasoningLogger:
                 timestamp REAL,
                 FOREIGN KEY (session_id) REFERENCES reasoning_sessions (id)
             )
-            ''')
+            """)
 
             # Create reasoning_paths table
-            cursor.execute('''
+            cursor.execute("""
             CREATE TABLE IF NOT EXISTS reasoning_paths (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
@@ -123,12 +130,18 @@ class ReasoningLogger:
                 timestamp REAL,
                 FOREIGN KEY (session_id) REFERENCES reasoning_sessions (id)
             )
-            ''')
+            """)
 
             # Create indices for faster lookups
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_reasoning_session_id ON reasoning_sessions(id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_reasoning_step_session ON reasoning_steps(session_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_reasoning_path_session ON reasoning_paths(session_id)')
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_reasoning_session_id ON reasoning_sessions(id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_reasoning_step_session ON reasoning_steps(session_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_reasoning_path_session ON reasoning_paths(session_id)"
+            )
 
             conn.commit()
             conn.close()
@@ -154,7 +167,9 @@ class ReasoningLogger:
         self.current_path = []
 
         # Log the start of reasoning
-        self.logger.info(f"Starting reasoning session {reasoning_id} for query: {query}")
+        self.logger.info(
+            f"Starting reasoning session {reasoning_id} for query: {query}"
+        )
 
         # Store in database if enabled
         if self.db_path:
@@ -164,11 +179,16 @@ class ReasoningLogger:
 
                 # Store session info
                 cursor.execute(
-                    '''
+                    """
                     INSERT INTO reasoning_sessions (id, query, start_time, metadata)
                     VALUES (?, ?, ?, ?)
-                    ''',
-                    (reasoning_id, query, datetime.now().timestamp(), json.dumps(metadata or {}))
+                    """,
+                    (
+                        reasoning_id,
+                        query,
+                        datetime.now().timestamp(),
+                        json.dumps(metadata or {}),
+                    ),
                 )
 
                 conn.commit()
@@ -185,7 +205,7 @@ class ReasoningLogger:
         description: str,
         entities: list[str] = None,
         relations: list[str] = None,
-        confidence: float = None
+        confidence: float = None,
     ):
         """
         Log a reasoning step.
@@ -198,15 +218,21 @@ class ReasoningLogger:
             confidence: Confidence score for this step
         """
         if not self.current_reasoning_id:
-            self.logger.warning("No active reasoning session. Call start_reasoning() first.")
+            self.logger.warning(
+                "No active reasoning session. Call start_reasoning() first."
+            )
             return
 
         # Log the reasoning step
         if entities or relations:
             entity_str = f", entities: {entities}" if entities else ""
             relation_str = f", relations: {relations}" if relations else ""
-            conf_str = f", confidence: {confidence:.2f}" if confidence is not None else ""
-            self.logger.info(f"Reasoning step [{step_type}]: {description}{entity_str}{relation_str}{conf_str}")
+            conf_str = (
+                f", confidence: {confidence:.2f}" if confidence is not None else ""
+            )
+            self.logger.info(
+                f"Reasoning step [{step_type}]: {description}{entity_str}{relation_str}{conf_str}"
+            )
         else:
             self.logger.info(f"Reasoning step [{step_type}]: {description}")
 
@@ -218,7 +244,7 @@ class ReasoningLogger:
                 "entities": entities or [],
                 "relations": relations or [],
                 "confidence": confidence,
-                "timestamp": datetime.now().timestamp()
+                "timestamp": datetime.now().timestamp(),
             }
             self.current_path.append(step)
 
@@ -230,11 +256,11 @@ class ReasoningLogger:
 
                 # Store step info
                 cursor.execute(
-                    '''
+                    """
                     INSERT INTO reasoning_steps
                     (session_id, step_number, step_type, description, entities, relations, confidence, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''',
+                    """,
                     (
                         self.current_reasoning_id,
                         len(self.current_path),
@@ -243,8 +269,8 @@ class ReasoningLogger:
                         json.dumps(entities or []),
                         json.dumps(relations or []),
                         confidence,
-                        datetime.now().timestamp()
-                    )
+                        datetime.now().timestamp(),
+                    ),
                 )
 
                 conn.commit()
@@ -263,7 +289,9 @@ class ReasoningLogger:
             hop_count: Number of hops in this path
         """
         if not self.current_reasoning_id:
-            self.logger.warning("No active reasoning session. Call start_reasoning() first.")
+            self.logger.warning(
+                "No active reasoning session. Call start_reasoning() first."
+            )
             return
 
         # Calculate hop count if not provided
@@ -283,18 +311,18 @@ class ReasoningLogger:
 
                 # Store path info
                 cursor.execute(
-                    '''
+                    """
                     INSERT INTO reasoning_paths
                     (session_id, path, score, hop_count, timestamp)
                     VALUES (?, ?, ?, ?, ?)
-                    ''',
+                    """,
                     (
                         self.current_reasoning_id,
                         json.dumps(path),
                         score,
                         hop_count,
-                        datetime.now().timestamp()
-                    )
+                        datetime.now().timestamp(),
+                    ),
                 )
 
                 conn.commit()
@@ -316,7 +344,9 @@ class ReasoningLogger:
             return
 
         # Log the end of reasoning
-        self.logger.info(f"Ending reasoning session {self.current_reasoning_id}, success: {success}")
+        self.logger.info(
+            f"Ending reasoning session {self.current_reasoning_id}, success: {success}"
+        )
 
         # Store in database if enabled
         if self.db_path:
@@ -326,17 +356,17 @@ class ReasoningLogger:
 
                 # Update session info
                 cursor.execute(
-                    '''
+                    """
                     UPDATE reasoning_sessions
                     SET end_time = ?, success = ?, metadata = ?
                     WHERE id = ?
-                    ''',
+                    """,
                     (
                         datetime.now().timestamp(),
                         success,
                         json.dumps(metadata or {}),
-                        self.current_reasoning_id
-                    )
+                        self.current_reasoning_id,
+                    ),
                 )
 
                 conn.commit()
@@ -370,11 +400,11 @@ class ReasoningLogger:
 
             # Get session info
             cursor.execute(
-                '''
+                """
                 SELECT * FROM reasoning_sessions
                 WHERE id = ?
-                ''',
-                (session_id,)
+                """,
+                (session_id,),
             )
 
             session = cursor.fetchone()
@@ -387,12 +417,12 @@ class ReasoningLogger:
 
             # Get steps
             cursor.execute(
-                '''
+                """
                 SELECT * FROM reasoning_steps
                 WHERE session_id = ?
                 ORDER BY step_number
-                ''',
-                (session_id,)
+                """,
+                (session_id,),
             )
 
             steps = cursor.fetchall()
@@ -400,12 +430,12 @@ class ReasoningLogger:
 
             # Get paths
             cursor.execute(
-                '''
+                """
                 SELECT * FROM reasoning_paths
                 WHERE session_id = ?
                 ORDER BY timestamp
-                ''',
-                (session_id,)
+                """,
+                (session_id,),
             )
 
             paths = cursor.fetchall()
@@ -454,13 +484,13 @@ class ReasoningLogger:
 
             # Get recent sessions
             cursor.execute(
-                '''
+                """
                 SELECT id, query, start_time, end_time, success
                 FROM reasoning_sessions
                 ORDER BY start_time DESC
                 LIMIT ?
-                ''',
-                (limit,)
+                """,
+                (limit,),
             )
 
             sessions = cursor.fetchall()
@@ -469,12 +499,12 @@ class ReasoningLogger:
             # Get step counts for each session
             for session in sessions_list:
                 cursor.execute(
-                    '''
+                    """
                     SELECT COUNT(*) as step_count
                     FROM reasoning_steps
                     WHERE session_id = ?
-                    ''',
-                    (session["id"],)
+                    """,
+                    (session["id"],),
                 )
 
                 step_count = cursor.fetchone()
@@ -482,12 +512,12 @@ class ReasoningLogger:
 
                 # Get path counts
                 cursor.execute(
-                    '''
+                    """
                     SELECT COUNT(*) as path_count
                     FROM reasoning_paths
                     WHERE session_id = ?
-                    ''',
-                    (session["id"],)
+                    """,
+                    (session["id"],),
                 )
 
                 path_count = cursor.fetchone()
@@ -519,7 +549,7 @@ class ReasoningLogger:
             return False
 
         try:
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 json.dump(session, f, indent=2)
             return True
         except Exception as e:
@@ -556,7 +586,7 @@ class ReasoningLogger:
             "avg_confidence": 0,
             "entity_frequencies": {},
             "relation_frequencies": {},
-            "step_type_distribution": {}
+            "step_type_distribution": {},
         }
 
         # Calculate duration
@@ -568,11 +598,17 @@ class ReasoningLogger:
             path_lengths = [len(p.get("path", [])) for p in session["paths"]]
             if path_lengths:
                 analysis["max_path_length"] = max(path_lengths) if path_lengths else 0
-                analysis["avg_path_length"] = sum(path_lengths) / len(path_lengths) if path_lengths else 0
+                analysis["avg_path_length"] = (
+                    sum(path_lengths) / len(path_lengths) if path_lengths else 0
+                )
 
         # Analyze steps
         if "steps" in session:
-            confidences = [s.get("confidence") for s in session["steps"] if s.get("confidence") is not None]
+            confidences = [
+                s.get("confidence")
+                for s in session["steps"]
+                if s.get("confidence") is not None
+            ]
             if confidences:
                 analysis["max_confidence"] = max(confidences)
                 analysis["min_confidence"] = min(confidences)
@@ -599,17 +635,19 @@ class ReasoningLogger:
                 analysis["step_type_distribution"][step_type] += 1
 
         # Sort frequency dictionaries
-        analysis["entity_frequencies"] = dict(sorted(
-            analysis["entity_frequencies"].items(),
-            key=lambda x: x[1],
-            reverse=True
-        ))
+        analysis["entity_frequencies"] = dict(
+            sorted(
+                analysis["entity_frequencies"].items(), key=lambda x: x[1], reverse=True
+            )
+        )
 
-        analysis["relation_frequencies"] = dict(sorted(
-            analysis["relation_frequencies"].items(),
-            key=lambda x: x[1],
-            reverse=True
-        ))
+        analysis["relation_frequencies"] = dict(
+            sorted(
+                analysis["relation_frequencies"].items(),
+                key=lambda x: x[1],
+                reverse=True,
+            )
+        )
 
         return analysis
 
@@ -633,21 +671,16 @@ class ReasoningLogger:
 
             # Delete steps
             cursor.execute(
-                "DELETE FROM reasoning_steps WHERE session_id = ?",
-                (session_id,)
+                "DELETE FROM reasoning_steps WHERE session_id = ?", (session_id,)
             )
 
             # Delete paths
             cursor.execute(
-                "DELETE FROM reasoning_paths WHERE session_id = ?",
-                (session_id,)
+                "DELETE FROM reasoning_paths WHERE session_id = ?", (session_id,)
             )
 
             # Delete session
-            cursor.execute(
-                "DELETE FROM reasoning_sessions WHERE id = ?",
-                (session_id,)
-            )
+            cursor.execute("DELETE FROM reasoning_sessions WHERE id = ?", (session_id,))
 
             conn.commit()
             conn.close()
@@ -672,10 +705,13 @@ class ReasoningLogger:
         """
         return ReasoningContext(self, query, metadata)
 
+
 class ReasoningContext:
     """Context manager for automatic reasoning session management."""
 
-    def __init__(self, logger: ReasoningLogger, query: str, metadata: dict[str, Any] = None):
+    def __init__(
+        self, logger: ReasoningLogger, query: str, metadata: dict[str, Any] = None
+    ):
         """
         Initialize the reasoning context.
 

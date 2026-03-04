@@ -7,6 +7,7 @@ Run:
 Or programmatically:
     python examples/mcp_quickstart.py
 """
+
 import os
 
 # Configure via environment variables before importing

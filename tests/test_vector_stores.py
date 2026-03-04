@@ -7,6 +7,7 @@ Tests cover:
 - Qdrant backend (skip if not installed)
 - create_vector_store factory
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -70,6 +71,7 @@ def _make_config(backend: str = "sqlite", dimension: int = DIMENSION, **kwargs):
 # VectorSearchResult dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestVectorSearchResult:
     """Tests for the VectorSearchResult dataclass."""
 
@@ -96,6 +98,7 @@ class TestVectorSearchResult:
 # ---------------------------------------------------------------------------
 # SQLiteVectorBackend
 # ---------------------------------------------------------------------------
+
 
 class TestSQLiteVectorBackend:
     """Tests for the default SQLite-based vector store backend."""
@@ -164,7 +167,9 @@ class TestSQLiteVectorBackend:
 
     def test_search_with_metadata(self, store: SQLiteVectorBackend):
         vec = _rand_vec()
-        store.add_embedding("m1", "meta item", vec, metadata={"type": "fact", "source": "test"})
+        store.add_embedding(
+            "m1", "meta item", vec, metadata={"type": "fact", "source": "test"}
+        )
         results = store.search(vec, max_results=1)
         assert len(results) == 1
         assert results[0].type == "fact"
@@ -204,6 +209,7 @@ class TestSQLiteVectorBackend:
 # ChromaDB backend
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not CHROMADB_AVAILABLE, reason="chromadb not installed")
 class TestChromaDBBackend:
     """Tests for the ChromaDB vector store backend."""
@@ -241,6 +247,7 @@ class TestChromaDBBackend:
 # Qdrant backend
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not QDRANT_AVAILABLE, reason="qdrant-client not installed")
 class TestQdrantBackend:
     """Tests for the Qdrant vector store backend."""
@@ -273,6 +280,7 @@ class TestQdrantBackend:
 # ---------------------------------------------------------------------------
 # Factory function
 # ---------------------------------------------------------------------------
+
 
 class TestCreateVectorStore:
     """Tests for the create_vector_store factory."""

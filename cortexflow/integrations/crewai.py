@@ -33,7 +33,9 @@ except ImportError:
 # Determine the appropriate base class
 # ---------------------------------------------------------------------------
 
-_Base: type = CrewAIStorage if CREWAI_AVAILABLE and CrewAIStorage is not None else object
+_Base: type = (
+    CrewAIStorage if CREWAI_AVAILABLE and CrewAIStorage is not None else object
+)
 
 
 # ---------------------------------------------------------------------------

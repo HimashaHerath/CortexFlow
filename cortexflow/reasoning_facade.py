@@ -6,12 +6,13 @@ CortexFlowManager into a focused class.  CortexFlowManager delegates to
 an instance of ReasoningFacade for query optimization, graph
 partitioning, hop indexing, and caching.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
 
 
 class ReasoningFacade:
@@ -50,9 +51,13 @@ class ReasoningFacade:
             logger.error(f"Error generating optimized query plan: {e}")
             return {"status": "error", "message": str(e)}
 
-    def optimize_path_query(self, start_entity: str, end_entity: str,
-                       max_hops: int = 3,
-                       relation_constraints: list[str] = None) -> dict[str, Any]:
+    def optimize_path_query(
+        self,
+        start_entity: str,
+        end_entity: str,
+        max_hops: int = 3,
+        relation_constraints: list[str] = None,
+    ) -> dict[str, Any]:
         """
         Optimize a path query between entities using the query planning system.
 
@@ -74,7 +79,7 @@ class ReasoningFacade:
                 "start_entity": start_entity,
                 "end_entity": end_entity,
                 "max_hops": max_hops,
-                "relation_constraints": relation_constraints or []
+                "relation_constraints": relation_constraints or [],
             }
 
             return self.performance_optimizer.optimize_query_execution(query)
@@ -86,7 +91,9 @@ class ReasoningFacade:
     # Graph partitioning / indexing
     # ------------------------------------------------------------------
 
-    def partition_graph(self, method: str = None, partition_count: int = None) -> dict[str, Any]:
+    def partition_graph(
+        self, method: str = None, partition_count: int = None
+    ) -> dict[str, Any]:
         """
         Partition the knowledge graph for improved performance.
 
@@ -149,7 +156,10 @@ class ReasoningFacade:
             Dictionary with performance statistics
         """
         if not self.performance_optimizer:
-            return {"status": "disabled", "message": "Performance optimizer not enabled"}
+            return {
+                "status": "disabled",
+                "message": "Performance optimizer not enabled",
+            }
 
         try:
             return self.performance_optimizer.get_stats()
@@ -165,7 +175,10 @@ class ReasoningFacade:
             Dictionary with cache clearing statistics
         """
         if not self.performance_optimizer:
-            return {"status": "disabled", "message": "Performance optimizer not enabled"}
+            return {
+                "status": "disabled",
+                "message": "Performance optimizer not enabled",
+            }
 
         try:
             return self.performance_optimizer.clear_caches()
@@ -188,7 +201,9 @@ class ReasoningFacade:
             return False
 
         try:
-            self.performance_optimizer.cache_reasoning_pattern(pattern_key, pattern_result)
+            self.performance_optimizer.cache_reasoning_pattern(
+                pattern_key, pattern_result
+            )
             return True
         except Exception as e:
             logger.error(f"Error caching reasoning pattern: {e}")
@@ -202,7 +217,10 @@ class ReasoningFacade:
             Dictionary with cache statistics
         """
         if not self.performance_optimizer:
-            return {"status": "disabled", "message": "Performance optimizer not enabled"}
+            return {
+                "status": "disabled",
+                "message": "Performance optimizer not enabled",
+            }
 
         try:
             stats = self.performance_optimizer.get_stats()

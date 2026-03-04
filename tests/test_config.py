@@ -20,6 +20,7 @@ from cortexflow.config import (
 # CortexFlowConfig defaults
 # ---------------------------------------------------------------------------
 
+
 class TestCortexFlowConfigDefaults:
     """Verify that CortexFlowConfig creates sensible defaults."""
 
@@ -54,9 +55,18 @@ class TestCortexFlowConfigDefaults:
     def test_all_sections_are_dataclasses(self):
         config = CortexFlowConfig()
         section_names = [
-            "memory", "knowledge_store", "graph_rag", "ontology",
-            "metadata", "agents", "reflection", "uncertainty",
-            "performance", "llm", "classifier", "inference",
+            "memory",
+            "knowledge_store",
+            "graph_rag",
+            "ontology",
+            "metadata",
+            "agents",
+            "reflection",
+            "uncertainty",
+            "performance",
+            "llm",
+            "classifier",
+            "inference",
         ]
         for name in section_names:
             section = getattr(config, name)
@@ -68,6 +78,7 @@ class TestCortexFlowConfigDefaults:
 # ---------------------------------------------------------------------------
 # __getattr__ backward-compat proxy
 # ---------------------------------------------------------------------------
+
 
 class TestGetAttrProxy:
     """Test that flat attribute access is proxied to nested sections."""
@@ -107,6 +118,7 @@ class TestGetAttrProxy:
 # ConfigBuilder
 # ---------------------------------------------------------------------------
 
+
 class TestConfigBuilder:
     """Test the fluent ConfigBuilder API."""
 
@@ -134,9 +146,7 @@ class TestConfigBuilder:
 
     def test_with_graph_rag_enables_feature(self):
         config = (
-            ConfigBuilder()
-            .with_graph_rag(use_graph_rag=True, max_graph_hops=5)
-            .build()
+            ConfigBuilder().with_graph_rag(use_graph_rag=True, max_graph_hops=5).build()
         )
         assert config.graph_rag.use_graph_rag is True
         assert config.graph_rag.max_graph_hops == 5
@@ -153,35 +163,27 @@ class TestConfigBuilder:
     def test_with_reflection_sets_threshold(self):
         config = (
             ConfigBuilder()
-            .with_reflection(use_self_reflection=True, reflection_relevance_threshold=0.8)
+            .with_reflection(
+                use_self_reflection=True, reflection_relevance_threshold=0.8
+            )
             .build()
         )
         assert config.reflection.use_self_reflection is True
         assert config.reflection.reflection_relevance_threshold == 0.8
 
     def test_with_performance_sets_cache_size(self):
-        config = (
-            ConfigBuilder()
-            .with_performance(reasoning_cache_max_size=500)
-            .build()
-        )
+        config = ConfigBuilder().with_performance(reasoning_cache_max_size=500).build()
         assert config.performance.reasoning_cache_max_size == 500
 
     def test_with_debug_sets_flags(self):
         config = (
-            ConfigBuilder()
-            .with_debug(verbose_logging=True, debug_mode=True)
-            .build()
+            ConfigBuilder().with_debug(verbose_logging=True, debug_mode=True).build()
         )
         assert config.verbose_logging is True
         assert config.debug_mode is True
 
     def test_with_custom_config(self):
-        config = (
-            ConfigBuilder()
-            .with_custom_config({"my_key": 42})
-            .build()
-        )
+        config = ConfigBuilder().with_custom_config({"my_key": 42}).build()
         assert config.custom_config == {"my_key": 42}
 
     def test_builder_chaining_returns_self(self):
@@ -218,6 +220,7 @@ class TestConfigBuilder:
 # ---------------------------------------------------------------------------
 # from_dict / to_dict roundtrip
 # ---------------------------------------------------------------------------
+
 
 class TestDictRoundtrip:
     """Test from_dict() and to_dict() roundtrip."""
@@ -268,6 +271,7 @@ class TestDictRoundtrip:
 # ---------------------------------------------------------------------------
 # Dead flags removal verification
 # ---------------------------------------------------------------------------
+
 
 class TestDeadFlagsRemoved:
     """Verify that deprecated/dead config flags no longer exist."""

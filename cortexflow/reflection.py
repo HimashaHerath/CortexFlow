@@ -3,6 +3,7 @@ CortexFlow Reflection module.
 
 This module provides self-reflection capabilities for CortexFlow.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,7 +15,8 @@ from cortexflow.config import CortexFlowConfig
 from cortexflow.knowledge import KnowledgeStore
 from cortexflow.llm_client import create_llm_client
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
+
 
 class ReflectionEngine:
     """
@@ -47,18 +49,18 @@ class ReflectionEngine:
         self.confidence_threshold = 0.7  # Minimum confidence for answers
 
         # Configure from config if available
-        if hasattr(config, 'reflection_relevance_threshold'):
+        if hasattr(config, "reflection_relevance_threshold"):
             self.relevance_threshold = config.reflection_relevance_threshold
 
-        if hasattr(config, 'reflection_confidence_threshold'):
+        if hasattr(config, "reflection_confidence_threshold"):
             self.confidence_threshold = config.reflection_confidence_threshold
 
-        logger.info(f"Initialized ReflectionEngine with relevance threshold {self.relevance_threshold} and confidence threshold {self.confidence_threshold}")
+        logger.info(
+            f"Initialized ReflectionEngine with relevance threshold {self.relevance_threshold} and confidence threshold {self.confidence_threshold}"
+        )
 
     def verify_knowledge_relevance(
-        self,
-        query: str,
-        knowledge_items: list[dict[str, Any]]
+        self, query: str, knowledge_items: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """
         Verify the relevance of knowledge items to the query.
@@ -87,7 +89,7 @@ class ReflectionEngine:
             filtered_items = []
             removed_items = []
             for item in relevant_items:
-                if item.get('relevance_score', 0) >= self.relevance_threshold:
+                if item.get("relevance_score", 0) >= self.relevance_threshold:
                     filtered_items.append(item)
                 else:
                     removed_items.append(item)
@@ -95,15 +97,17 @@ class ReflectionEngine:
             # Log what was removed and why
             if removed_items:
                 for item in removed_items:
-                    text_preview = item.get('text', '')[:80]
-                    score = item.get('relevance_score', 0)
-                    reason = item.get('relevance_explanation', 'below threshold')
+                    text_preview = item.get("text", "")[:80]
+                    score = item.get("relevance_score", 0)
+                    reason = item.get("relevance_explanation", "below threshold")
                     logger.info(
                         f"Reflection filtered out knowledge item (score={score:.2f}, "
                         f"threshold={self.relevance_threshold}): '{text_preview}...' - {reason}"
                     )
 
-            logger.info(f"Knowledge relevance verification: {len(filtered_items)}/{len(knowledge_items)} items passed threshold")
+            logger.info(
+                f"Knowledge relevance verification: {len(filtered_items)}/{len(knowledge_items)} items passed threshold"
+            )
             return filtered_items
 
         except Exception as e:
@@ -124,19 +128,19 @@ class ReflectionEngine:
             List of claim strings extracted from the response.
         """
         # Split on sentence boundaries
-        sentences = re.split(r'(?<=[.!?])\s+', response.strip())
+        sentences = re.split(r"(?<=[.!?])\s+", response.strip())
         claims = []
         for sentence in sentences:
             sentence = sentence.strip()
             # Filter out very short sentences and non-substantive fragments
-            if len(sentence.split()) >= 4 and not sentence.startswith(('I ', 'Let me', 'Here')):
+            if len(sentence.split()) >= 4 and not sentence.startswith(
+                ("I ", "Let me", "Here")
+            ):
                 claims.append(sentence)
         return claims
 
     def _compute_kb_support_ratio(
-        self,
-        claims: list[str],
-        knowledge_items: list[dict[str, Any]]
+        self, claims: list[str], knowledge_items: list[dict[str, Any]]
     ) -> tuple[float, list[dict[str, Any]]]:
         """Compute what fraction of claims have supporting evidence in the KB.
 
@@ -157,18 +161,57 @@ class ReflectionEngine:
         if not claims:
             return 1.0, []
 
-        kb_texts = [item.get('text', '').lower() for item in knowledge_items]
+        kb_texts = [item.get("text", "").lower() for item in knowledge_items]
         supported_count = 0
         claim_details = []
 
         for claim in claims:
             claim_words = set(claim.lower().split())
             # Remove common stopwords for matching
-            stopwords = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
-                        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
-                        'could', 'should', 'may', 'might', 'can', 'shall', 'to', 'of',
-                        'in', 'for', 'on', 'with', 'at', 'by', 'from', 'it', 'this',
-                        'that', 'and', 'or', 'but', 'not', 'so', 'if', 'as'}
+            stopwords = {
+                "the",
+                "a",
+                "an",
+                "is",
+                "are",
+                "was",
+                "were",
+                "be",
+                "been",
+                "have",
+                "has",
+                "had",
+                "do",
+                "does",
+                "did",
+                "will",
+                "would",
+                "could",
+                "should",
+                "may",
+                "might",
+                "can",
+                "shall",
+                "to",
+                "of",
+                "in",
+                "for",
+                "on",
+                "with",
+                "at",
+                "by",
+                "from",
+                "it",
+                "this",
+                "that",
+                "and",
+                "or",
+                "but",
+                "not",
+                "so",
+                "if",
+                "as",
+            }
             claim_keywords = claim_words - stopwords
 
             has_support = False
@@ -183,19 +226,13 @@ class ReflectionEngine:
             if has_support:
                 supported_count += 1
 
-            claim_details.append({
-                "claim": claim[:100],
-                "has_kb_support": has_support
-            })
+            claim_details.append({"claim": claim[:100], "has_kb_support": has_support})
 
         support_ratio = supported_count / len(claims)
         return support_ratio, claim_details
 
     def check_response_consistency(
-        self,
-        query: str,
-        response: str,
-        knowledge_items: list[dict[str, Any]]
+        self, query: str, response: str, knowledge_items: list[dict[str, Any]]
     ) -> dict[str, Any]:
         """
         Check for inconsistencies between response and knowledge items.
@@ -217,7 +254,9 @@ class ReflectionEngine:
         """
         # Step 1: KB-based verification (lightweight, no LLM call)
         claims = self._extract_claims(response)
-        kb_support_ratio, claim_details = self._compute_kb_support_ratio(claims, knowledge_items)
+        kb_support_ratio, claim_details = self._compute_kb_support_ratio(
+            claims, knowledge_items
+        )
         logger.info(
             f"KB-based verification: {kb_support_ratio:.1%} of {len(claims)} "
             f"claims have knowledge base support"
@@ -232,12 +271,12 @@ class ReflectionEngine:
             consistency_result = self._parse_consistency_response(check_result)
 
             # Enrich with KB-based verification results
-            consistency_result['kb_support_ratio'] = kb_support_ratio
-            consistency_result['claim_details'] = claim_details
+            consistency_result["kb_support_ratio"] = kb_support_ratio
+            consistency_result["claim_details"] = claim_details
 
-            is_consistent = consistency_result.get('is_consistent', False)
+            is_consistent = consistency_result.get("is_consistent", False)
             if not is_consistent:
-                issues = consistency_result.get('issues', [])
+                issues = consistency_result.get("issues", [])
                 logger.warning(
                     f"Consistency check FAILED: {len(issues)} issue(s) found - "
                     f"{'; '.join(str(i) for i in issues[:3])}"
@@ -256,7 +295,7 @@ class ReflectionEngine:
                 "issues": [],
                 "reasoning": "Failed to perform LLM consistency check due to error.",
                 "kb_support_ratio": kb_support_ratio,
-                "claim_details": claim_details
+                "claim_details": claim_details,
             }
 
     def revise_response(
@@ -264,7 +303,7 @@ class ReflectionEngine:
         query: str,
         original_response: str,
         knowledge_items: list[dict[str, Any]],
-        consistency_result: dict[str, Any]
+        consistency_result: dict[str, Any],
     ) -> str:
         """
         Revise the response based on detected inconsistencies.
@@ -279,11 +318,11 @@ class ReflectionEngine:
             Revised response, or the original if no revision was needed.
         """
         # Only revise if inconsistent
-        if consistency_result.get('is_consistent', True):
+        if consistency_result.get("is_consistent", True):
             logger.debug("Response is consistent, no revision needed")
             return original_response
 
-        issues = consistency_result.get('issues', [])
+        issues = consistency_result.get("issues", [])
         logger.warning(
             f"Revising response due to {len(issues)} consistency issue(s): "
             f"{'; '.join(str(i) for i in issues[:3])}"
@@ -291,10 +330,7 @@ class ReflectionEngine:
 
         # Create a prompt for response revision
         prompt = self._create_revision_prompt(
-            query,
-            original_response,
-            knowledge_items,
-            consistency_result
+            query, original_response, knowledge_items, consistency_result
         )
 
         try:
@@ -310,15 +346,13 @@ class ReflectionEngine:
             return original_response
 
     def _create_relevance_prompt(
-        self,
-        query: str,
-        knowledge_items: list[dict[str, Any]]
+        self, query: str, knowledge_items: list[dict[str, Any]]
     ) -> str:
         """Create a prompt for knowledge relevance verification."""
         knowledge_texts = []
         for i, item in enumerate(knowledge_items):
-            text = item.get('text', '')
-            knowledge_texts.append(f"[{i+1}] {text}")
+            text = item.get("text", "")
+            knowledge_texts.append(f"[{i + 1}] {text}")
 
         knowledge_context = "\n".join(knowledge_texts)
 
@@ -350,16 +384,13 @@ Format your response as a JSON array of objects with these fields:
 RELEVANCE ASSESSMENT:"""
 
     def _create_consistency_prompt(
-        self,
-        query: str,
-        response: str,
-        knowledge_items: list[dict[str, Any]]
+        self, query: str, response: str, knowledge_items: list[dict[str, Any]]
     ) -> str:
         """Create a prompt for response consistency checking."""
         knowledge_texts = []
         for i, item in enumerate(knowledge_items):
-            text = item.get('text', '')
-            knowledge_texts.append(f"[{i+1}] {text}")
+            text = item.get("text", "")
+            knowledge_texts.append(f"[{i + 1}] {text}")
 
         knowledge_context = "\n".join(knowledge_texts)
 
@@ -392,17 +423,17 @@ CONSISTENCY ASSESSMENT:"""
         query: str,
         original_response: str,
         knowledge_items: list[dict[str, Any]],
-        consistency_result: dict[str, Any]
+        consistency_result: dict[str, Any],
     ) -> str:
         """Create a prompt for response revision."""
         knowledge_texts = []
         for i, item in enumerate(knowledge_items):
-            text = item.get('text', '')
-            knowledge_texts.append(f"[{i+1}] {text}")
+            text = item.get("text", "")
+            knowledge_texts.append(f"[{i + 1}] {text}")
 
         knowledge_context = "\n".join(knowledge_texts)
 
-        issues = consistency_result.get('issues', [])
+        issues = consistency_result.get("issues", [])
         issues_text = "\n".join([f"- {issue}" for issue in issues])
 
         return f"""As an AI assistant with self-correction capabilities, your task is to revise a response that contains inconsistencies or errors.
@@ -447,29 +478,27 @@ REVISED RESPONSE:"""
             raise
 
     def _parse_relevance_response(
-        self,
-        response: str,
-        knowledge_items: list[dict[str, Any]]
+        self, response: str, knowledge_items: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Parse the relevance assessment response."""
         try:
             # Extract JSON from response
-            json_match = re.search(r'\[\s*\{.*\}\s*\]', response, re.DOTALL)
+            json_match = re.search(r"\[\s*\{.*\}\s*\]", response, re.DOTALL)
             if json_match:
                 relevance_data = json.loads(json_match.group(0))
             else:
                 # Try to extract with more lenient parsing
                 in_json = False
                 json_lines = []
-                for line in response.split('\n'):
-                    if line.strip().startswith('['):
+                for line in response.split("\n"):
+                    if line.strip().startswith("["):
                         in_json = True
                     if in_json:
                         json_lines.append(line)
-                    if in_json and line.strip().endswith(']'):
+                    if in_json and line.strip().endswith("]"):
                         break
 
-                relevance_json = ''.join(json_lines)
+                relevance_json = "".join(json_lines)
                 relevance_data = json.loads(relevance_json)
 
             # Map relevance scores to knowledge items
@@ -479,14 +508,16 @@ REVISED RESPONSE:"""
 
                 # Find the corresponding relevance data
                 for rel_item in relevance_data:
-                    if rel_item.get('item') == i + 1:
-                        item_copy['relevance_score'] = rel_item.get('score', 0.0)
-                        item_copy['relevance_explanation'] = rel_item.get('explanation', '')
+                    if rel_item.get("item") == i + 1:
+                        item_copy["relevance_score"] = rel_item.get("score", 0.0)
+                        item_copy["relevance_explanation"] = rel_item.get(
+                            "explanation", ""
+                        )
                         break
                 else:
                     # Default if not found
-                    item_copy['relevance_score'] = 0.0
-                    item_copy['relevance_explanation'] = 'Not assessed'
+                    item_copy["relevance_score"] = 0.0
+                    item_copy["relevance_explanation"] = "Not assessed"
 
                 updated_items.append(item_copy)
 
@@ -496,7 +527,11 @@ REVISED RESPONSE:"""
             logger.error(f"Error parsing relevance response: {e}")
             # Return original items with default scores on error
             return [
-                {**item, 'relevance_score': 0.5, 'relevance_explanation': 'Error in assessment'}
+                {
+                    **item,
+                    "relevance_score": 0.5,
+                    "relevance_explanation": "Error in assessment",
+                }
                 for item in knowledge_items
             ]
 
@@ -511,15 +546,15 @@ REVISED RESPONSE:"""
                 # Try to extract with more lenient parsing
                 in_json = False
                 json_lines = []
-                for line in response.split('\n'):
-                    if line.strip().startswith('{'):
+                for line in response.split("\n"):
+                    if line.strip().startswith("{"):
                         in_json = True
                     if in_json:
                         json_lines.append(line)
-                    if in_json and line.strip().endswith('}'):
+                    if in_json and line.strip().endswith("}"):
                         break
 
-                consistency_json = ''.join(json_lines)
+                consistency_json = "".join(json_lines)
                 return json.loads(consistency_json)
 
         except Exception as e:
@@ -529,5 +564,5 @@ REVISED RESPONSE:"""
                 "is_consistent": True,
                 "confidence": 0.5,
                 "issues": [],
-                "reasoning": "Failed to parse consistency check result."
+                "reasoning": "Failed to parse consistency check result.",
             }

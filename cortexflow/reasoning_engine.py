@@ -3,6 +3,7 @@ CortexFlow Reasoning Engine module.
 
 This module provides advanced reasoning capabilities over the knowledge graph.
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,19 +16,20 @@ from cortexflow.dependency_utils import import_optional_dependency
 
 # Import graph libraries
 nx_deps = import_optional_dependency(
-    'networkx',
-    warning_message="networkx not found. Reasoning engine capabilities will be limited."
+    "networkx",
+    warning_message="networkx not found. Reasoning engine capabilities will be limited.",
 )
-NETWORKX_ENABLED = nx_deps['NETWORKX_ENABLED']
+NETWORKX_ENABLED = nx_deps["NETWORKX_ENABLED"]
 if NETWORKX_ENABLED:
-    nx = nx_deps['module']
+    nx = nx_deps["module"]
 
 from cortexflow.config import CortexFlowConfig  # noqa: E402
 from cortexflow.inference import InferenceEngine  # noqa: E402
 from cortexflow.interfaces import KnowledgeStoreInterface  # noqa: E402
 from cortexflow.uncertainty_handler import UncertaintyHandler  # noqa: E402
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
+
 
 class ReasoningStep:
     """Represents a single step in a multi-step reasoning process."""
@@ -41,7 +43,7 @@ class ReasoningStep:
         relations_used: list[str] = None,
         confidence: float = 1.0,
         explanation: str = "",
-        metadata: dict[str, Any] = None
+        metadata: dict[str, Any] = None,
     ):
         """
         Initialize a reasoning step.
@@ -75,7 +77,7 @@ class ReasoningStep:
             "relations_used": self.relations_used,
             "confidence": self.confidence,
             "explanation": self.explanation,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     @classmethod
@@ -89,12 +91,13 @@ class ReasoningStep:
             relations_used=data.get("relations_used", []),
             confidence=data.get("confidence", 1.0),
             explanation=data.get("explanation", ""),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
 
 
 class ReasoningStrategy(Enum):
     """Enum for different reasoning strategies."""
+
     FORWARD_CHAINING = "forward_chaining"
     BACKWARD_CHAINING = "backward_chaining"
     ABDUCTIVE = "abductive"
@@ -155,14 +158,16 @@ class ReasoningState:
             "start_time": self.start_time,
             "end_time": self.end_time,
             "duration": self.get_duration(),
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
 class QueryPlanner:
     """Plans and decomposes complex queries into reasoning steps."""
 
-    def __init__(self, knowledge_store: KnowledgeStoreInterface, config: CortexFlowConfig = None):
+    def __init__(
+        self, knowledge_store: KnowledgeStoreInterface, config: CortexFlowConfig = None
+    ):
         """
         Initialize the query planner.
 
@@ -172,8 +177,8 @@ class QueryPlanner:
         """
         self.knowledge_store = knowledge_store
         self.config = config or CortexFlowConfig()
-        self.inference_engine = getattr(knowledge_store, 'inference_engine', None)
-        self.graph_store = getattr(knowledge_store, 'graph_store', None)
+        self.inference_engine = getattr(knowledge_store, "inference_engine", None)
+        self.graph_store = getattr(knowledge_store, "graph_store", None)
 
     def plan_query(self, query: str) -> list[dict[str, Any]]:
         """
@@ -210,119 +215,180 @@ class QueryPlanner:
 
             # Extract relations using the graph store's relation extraction
             extracted_relations = self.graph_store.extract_relations(query)
-            relations = [r[1] for r in extracted_relations]  # r[1] is the predicate/relation
+            relations = [
+                r[1] for r in extracted_relations
+            ]  # r[1] is the predicate/relation
 
         return entities, relations
 
     def _is_causal_query(self, query: str) -> bool:
         """Check if this is a causal query."""
-        causal_indicators = ["cause", "effect", "result", "lead", "impact", "influence", "why"]
+        causal_indicators = [
+            "cause",
+            "effect",
+            "result",
+            "lead",
+            "impact",
+            "influence",
+            "why",
+        ]
         return any(indicator in query.lower() for indicator in causal_indicators)
 
     def _is_comparison_query(self, query: str) -> bool:
         """Check if this is a comparison query."""
-        comparison_indicators = ["compare", "difference", "similar", "versus", "vs", "better", "worse"]
+        comparison_indicators = [
+            "compare",
+            "difference",
+            "similar",
+            "versus",
+            "vs",
+            "better",
+            "worse",
+        ]
         return any(indicator in query.lower() for indicator in comparison_indicators)
 
     def _is_temporal_query(self, query: str) -> bool:
         """Check if this is a temporal query."""
-        temporal_indicators = ["when", "before", "after", "during", "timeline", "history", "evolution"]
+        temporal_indicators = [
+            "when",
+            "before",
+            "after",
+            "during",
+            "timeline",
+            "history",
+            "evolution",
+        ]
         return any(indicator in query.lower() for indicator in temporal_indicators)
 
-    def _plan_causal_query(self, query: str, entities: list[str], relations: list[str]) -> list[dict[str, Any]]:
+    def _plan_causal_query(
+        self, query: str, entities: list[str], relations: list[str]
+    ) -> list[dict[str, Any]]:
         """Plan steps for a causal query."""
         steps = []
 
         # Step 1: Identify relevant entities
-        steps.append({
-            "description": "Identify relevant entities and their properties",
-            "strategy": ReasoningStrategy.WEIGHTED_PATH.value,
-            "entities": entities
-        })
+        steps.append(
+            {
+                "description": "Identify relevant entities and their properties",
+                "strategy": ReasoningStrategy.WEIGHTED_PATH.value,
+                "entities": entities,
+            }
+        )
 
         # Step 2: Find causal relationships
-        steps.append({
-            "description": "Discover causal relationships between entities",
-            "strategy": ReasoningStrategy.FORWARD_CHAINING.value,
-            "focus_relations": ["causes", "leads_to", "results_in", "affects"]
-        })
+        steps.append(
+            {
+                "description": "Discover causal relationships between entities",
+                "strategy": ReasoningStrategy.FORWARD_CHAINING.value,
+                "focus_relations": ["causes", "leads_to", "results_in", "affects"],
+            }
+        )
 
         # Step 3: Evaluate strength of causal links
-        steps.append({
-            "description": "Evaluate the strength and confidence of causal relationships",
-            "strategy": ReasoningStrategy.WEIGHTED_PATH.value
-        })
+        steps.append(
+            {
+                "description": "Evaluate the strength and confidence of causal relationships",
+                "strategy": ReasoningStrategy.WEIGHTED_PATH.value,
+            }
+        )
 
         return steps
 
-    def _plan_comparison_query(self, query: str, entities: list[str], relations: list[str]) -> list[dict[str, Any]]:
+    def _plan_comparison_query(
+        self, query: str, entities: list[str], relations: list[str]
+    ) -> list[dict[str, Any]]:
         """Plan steps for a comparison query."""
         steps = []
 
         # Step 1: Retrieve properties of both entities
-        steps.append({
-            "description": "Retrieve properties of entities to be compared",
-            "strategy": ReasoningStrategy.BIDIRECTIONAL.value,
-            "entities": entities
-        })
+        steps.append(
+            {
+                "description": "Retrieve properties of entities to be compared",
+                "strategy": ReasoningStrategy.BIDIRECTIONAL.value,
+                "entities": entities,
+            }
+        )
 
         # Step 2: Find common relationships
-        steps.append({
-            "description": "Identify common relationships and attributes",
-            "strategy": ReasoningStrategy.CONSTRAINED_PATH.value
-        })
+        steps.append(
+            {
+                "description": "Identify common relationships and attributes",
+                "strategy": ReasoningStrategy.CONSTRAINED_PATH.value,
+            }
+        )
 
         # Step 3: Analyze differences
-        steps.append({
-            "description": "Analyze differences between entities",
-            "strategy": ReasoningStrategy.ABDUCTIVE.value
-        })
+        steps.append(
+            {
+                "description": "Analyze differences between entities",
+                "strategy": ReasoningStrategy.ABDUCTIVE.value,
+            }
+        )
 
         return steps
 
-    def _plan_temporal_query(self, query: str, entities: list[str], relations: list[str]) -> list[dict[str, Any]]:
+    def _plan_temporal_query(
+        self, query: str, entities: list[str], relations: list[str]
+    ) -> list[dict[str, Any]]:
         """Plan steps for a temporal query."""
         steps = []
 
         # Step a: Identify temporal markers
-        steps.append({
-            "description": "Identify temporal markers and events",
-            "strategy": ReasoningStrategy.CONSTRAINED_PATH.value,
-            "entities": entities,
-            "focus_relations": ["occurred_on", "happened_during", "started_at", "ended_at"]
-        })
+        steps.append(
+            {
+                "description": "Identify temporal markers and events",
+                "strategy": ReasoningStrategy.CONSTRAINED_PATH.value,
+                "entities": entities,
+                "focus_relations": [
+                    "occurred_on",
+                    "happened_during",
+                    "started_at",
+                    "ended_at",
+                ],
+            }
+        )
 
         # Step 2: Establish timeline
-        steps.append({
-            "description": "Establish chronological ordering of events",
-            "strategy": ReasoningStrategy.FORWARD_CHAINING.value
-        })
+        steps.append(
+            {
+                "description": "Establish chronological ordering of events",
+                "strategy": ReasoningStrategy.FORWARD_CHAINING.value,
+            }
+        )
 
         return steps
 
-    def _plan_generic_query(self, query: str, entities: list[str], relations: list[str]) -> list[dict[str, Any]]:
+    def _plan_generic_query(
+        self, query: str, entities: list[str], relations: list[str]
+    ) -> list[dict[str, Any]]:
         """Plan steps for a generic query."""
         steps = []
 
         # Step 1: Entity exploration
-        steps.append({
-            "description": "Explore relevant entities and their properties",
-            "strategy": ReasoningStrategy.BIDIRECTIONAL.value,
-            "entities": entities
-        })
+        steps.append(
+            {
+                "description": "Explore relevant entities and their properties",
+                "strategy": ReasoningStrategy.BIDIRECTIONAL.value,
+                "entities": entities,
+            }
+        )
 
         # Step 2: Relation discovery
         if relations:
-            steps.append({
-                "description": "Discover relationships between entities",
-                "strategy": ReasoningStrategy.CONSTRAINED_PATH.value,
-                "focus_relations": relations
-            })
+            steps.append(
+                {
+                    "description": "Discover relationships between entities",
+                    "strategy": ReasoningStrategy.CONSTRAINED_PATH.value,
+                    "focus_relations": relations,
+                }
+            )
         else:
-            steps.append({
-                "description": "Discover key relationships between entities",
-                "strategy": ReasoningStrategy.WEIGHTED_PATH.value
-            })
+            steps.append(
+                {
+                    "description": "Discover key relationships between entities",
+                    "strategy": ReasoningStrategy.WEIGHTED_PATH.value,
+                }
+            )
 
         return steps
 
@@ -330,7 +396,9 @@ class QueryPlanner:
 class ReasoningEngine:
     """Coordinates inference processes and multi-step reasoning."""
 
-    def __init__(self, knowledge_store: KnowledgeStoreInterface, config: CortexFlowConfig = None):
+    def __init__(
+        self, knowledge_store: KnowledgeStoreInterface, config: CortexFlowConfig = None
+    ):
         """
         Initialize the reasoning engine.
 
@@ -342,13 +410,13 @@ class ReasoningEngine:
         self.config = config or CortexFlowConfig()
 
         # Get reference to graph store and inference engine
-        self.graph_store = getattr(knowledge_store, 'graph_store', None)
-        self.inference_engine = getattr(knowledge_store, 'inference_engine', None)
+        self.graph_store = getattr(knowledge_store, "graph_store", None)
+        self.inference_engine = getattr(knowledge_store, "inference_engine", None)
         if not self.inference_engine and self.graph_store:
             self.inference_engine = InferenceEngine(knowledge_store, config)
 
         # Get reference to uncertainty handler
-        self.uncertainty_handler = getattr(knowledge_store, 'uncertainty_handler', None)
+        self.uncertainty_handler = getattr(knowledge_store, "uncertainty_handler", None)
         if not self.uncertainty_handler and self.graph_store:
             self.uncertainty_handler = UncertaintyHandler(config, self.graph_store)
 
@@ -384,16 +452,15 @@ class ReasoningEngine:
 
             # Execute each step in the plan
             for i, step_plan in enumerate(plan):
-                step_id = f"{query_id}_step_{i+1}"
-                step_description = step_plan.get("description", f"Step {i+1}")
-                strategy = step_plan.get("strategy", ReasoningStrategy.FORWARD_CHAINING.value)
+                step_id = f"{query_id}_step_{i + 1}"
+                step_description = step_plan.get("description", f"Step {i + 1}")
+                strategy = step_plan.get(
+                    "strategy", ReasoningStrategy.FORWARD_CHAINING.value
+                )
 
                 # Execute the reasoning step
                 step_result = self._execute_reasoning_step(
-                    query=query,
-                    strategy=strategy,
-                    state=state,
-                    step_plan=step_plan
+                    query=query, strategy=strategy, state=state, step_plan=step_plan
                 )
 
                 # Create and add the reasoning step
@@ -405,7 +472,7 @@ class ReasoningEngine:
                     relations_used=step_result.get("relations_used", []),
                     confidence=step_result.get("confidence", 1.0),
                     explanation=step_result.get("explanation", ""),
-                    metadata=step_result
+                    metadata=step_result,
                 )
                 state.add_step(step)
 
@@ -421,10 +488,9 @@ class ReasoningEngine:
 
         except Exception as e:
             logger.error(f"Error during reasoning: {e}")
-            state.complete({
-                "error": str(e),
-                "partial_result": self._prepare_result(state)
-            })
+            state.complete(
+                {"error": str(e), "partial_result": self._prepare_result(state)}
+            )
             return state.result
 
     def _execute_reasoning_step(
@@ -432,7 +498,7 @@ class ReasoningEngine:
         query: str,
         strategy: str,
         state: ReasoningState,
-        step_plan: dict[str, Any]
+        step_plan: dict[str, Any],
     ) -> dict[str, Any]:
         """Execute a reasoning step using the specified strategy."""
         if strategy == ReasoningStrategy.FORWARD_CHAINING.value:
@@ -451,10 +517,7 @@ class ReasoningEngine:
             return self._default_reasoning_step(query, state, step_plan)
 
     def _forward_chaining_step(
-        self,
-        query: str,
-        state: ReasoningState,
-        step_plan: dict[str, Any]
+        self, query: str, state: ReasoningState, step_plan: dict[str, Any]
     ) -> dict[str, Any]:
         """Execute a forward chaining reasoning step."""
         if not self.inference_engine:
@@ -462,7 +525,7 @@ class ReasoningEngine:
                 "error": "Inference engine not available",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform forward chaining without an inference engine."
+                "explanation": "Cannot perform forward chaining without an inference engine.",
             }
 
         # Apply forward chaining to derive new facts
@@ -472,7 +535,8 @@ class ReasoningEngine:
         # Filter to focus on specific relations if specified
         if focus_relations:
             inferred_facts = [
-                fact for fact in inferred_facts
+                fact
+                for fact in inferred_facts
                 if fact.get("relation") in focus_relations
             ]
 
@@ -485,21 +549,22 @@ class ReasoningEngine:
         # Calculate overall confidence
         confidence = 0.0
         if inferred_facts:
-            confidence = sum(fact.get("confidence", 0.0) for fact in inferred_facts) / len(inferred_facts)
+            confidence = sum(
+                fact.get("confidence", 0.0) for fact in inferred_facts
+            ) / len(inferred_facts)
 
         return {
             "inferred_facts": inferred_facts,
             "output_entities": list(set(output_entities)),
-            "relations_used": list(set(fact.get("relation", "") for fact in inferred_facts)),
+            "relations_used": list(
+                set(fact.get("relation", "") for fact in inferred_facts)
+            ),
             "confidence": confidence,
-            "explanation": f"Inferred {len(inferred_facts)} new facts using forward chaining."
+            "explanation": f"Inferred {len(inferred_facts)} new facts using forward chaining.",
         }
 
     def _backward_chaining_step(
-        self,
-        query: str,
-        state: ReasoningState,
-        step_plan: dict[str, Any]
+        self, query: str, state: ReasoningState, step_plan: dict[str, Any]
     ) -> dict[str, Any]:
         """Execute a backward chaining reasoning step."""
         if not self.inference_engine:
@@ -507,7 +572,7 @@ class ReasoningEngine:
                 "error": "Inference engine not available",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform backward chaining without an inference engine."
+                "explanation": "Cannot perform backward chaining without an inference engine.",
             }
 
         # Extract target fact from plan or state
@@ -520,7 +585,7 @@ class ReasoningEngine:
                 "error": "No target entities for backward chaining",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform backward chaining without target entities."
+                "explanation": "Cannot perform backward chaining without target entities.",
             }
 
         # Create a query fact from the first target entity
@@ -548,14 +613,11 @@ class ReasoningEngine:
             "output_entities": list(set(output_entities)),
             "relations_used": list(set(relations_used)),
             "confidence": 1.0 if success else 0.0,
-            "explanation": f"Backward chaining {'successful' if success else 'failed'} with {len(explanation)} steps."
+            "explanation": f"Backward chaining {'successful' if success else 'failed'} with {len(explanation)} steps.",
         }
 
     def _abductive_reasoning_step(
-        self,
-        query: str,
-        state: ReasoningState,
-        step_plan: dict[str, Any]
+        self, query: str, state: ReasoningState, step_plan: dict[str, Any]
     ) -> dict[str, Any]:
         """Execute an abductive reasoning step."""
         if not self.inference_engine:
@@ -563,7 +625,7 @@ class ReasoningEngine:
                 "error": "Inference engine not available",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform abductive reasoning without an inference engine."
+                "explanation": "Cannot perform abductive reasoning without an inference engine.",
             }
 
         # Extract observation from plan or state
@@ -576,14 +638,16 @@ class ReasoningEngine:
                 "error": "No target entities for abductive reasoning",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform abductive reasoning without target entities."
+                "explanation": "Cannot perform abductive reasoning without target entities.",
             }
 
         # Create an observation fact from the first target entity
         observation = {"source": "?", "relation": "?", "target": target_entities[0]}
 
         # Apply abductive reasoning
-        hypotheses = self.inference_engine.abductive_reasoning(observation, max_hypotheses=3)
+        hypotheses = self.inference_engine.abductive_reasoning(
+            observation, max_hypotheses=3
+        )
 
         # Extract entities from hypotheses
         output_entities = []
@@ -602,21 +666,20 @@ class ReasoningEngine:
         # Calculate confidence
         confidence = 0.0
         if hypotheses:
-            confidence = sum(h.get("confidence", 0.0) for h in hypotheses) / len(hypotheses)
+            confidence = sum(h.get("confidence", 0.0) for h in hypotheses) / len(
+                hypotheses
+            )
 
         return {
             "hypotheses": hypotheses,
             "output_entities": list(set(output_entities)),
             "relations_used": list(set(relations_used)),
             "confidence": confidence,
-            "explanation": f"Generated {len(hypotheses)} hypotheses using abductive reasoning."
+            "explanation": f"Generated {len(hypotheses)} hypotheses using abductive reasoning.",
         }
 
     def _bidirectional_search_step(
-        self,
-        query: str,
-        state: ReasoningState,
-        step_plan: dict[str, Any]
+        self, query: str, state: ReasoningState, step_plan: dict[str, Any]
     ) -> dict[str, Any]:
         """Execute a bidirectional search step."""
         if not self.graph_store:
@@ -624,7 +687,7 @@ class ReasoningEngine:
                 "error": "Graph store not available",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform bidirectional search without a graph store."
+                "explanation": "Cannot perform bidirectional search without a graph store.",
             }
 
         # Extract start and end entities
@@ -639,7 +702,7 @@ class ReasoningEngine:
                 "error": "Not enough entities for bidirectional search",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Need at least two entities for bidirectional search."
+                "explanation": "Need at least two entities for bidirectional search.",
             }
 
         # Get the start and end entities
@@ -648,9 +711,7 @@ class ReasoningEngine:
 
         # Execute bidirectional search
         paths = self.graph_store.bidirectional_search(
-            start_entity=start_entity,
-            end_entity=end_entity,
-            max_hops=3
+            start_entity=start_entity, end_entity=end_entity, max_hops=3
         )
 
         if not paths:
@@ -658,7 +719,7 @@ class ReasoningEngine:
                 "error": "No paths found",
                 "output_entities": entities,
                 "confidence": 0.0,
-                "explanation": f"No paths found between {start_entity} and {end_entity}."
+                "explanation": f"No paths found between {start_entity} and {end_entity}.",
             }
 
         # Extract entities and relations from paths
@@ -683,14 +744,11 @@ class ReasoningEngine:
             "relations_used": list(set(relations_used)),
             "confidence": 1.0,
             "explanation": f"Found {len(paths)} paths between {start_entity} and {end_entity}.",
-            "path_explanation": path_explanation
+            "path_explanation": path_explanation,
         }
 
     def _weighted_path_step(
-        self,
-        query: str,
-        state: ReasoningState,
-        step_plan: dict[str, Any]
+        self, query: str, state: ReasoningState, step_plan: dict[str, Any]
     ) -> dict[str, Any]:
         """Execute a weighted path search step."""
         if not self.graph_store:
@@ -698,7 +756,7 @@ class ReasoningEngine:
                 "error": "Graph store not available",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform weighted path search without a graph store."
+                "explanation": "Cannot perform weighted path search without a graph store.",
             }
 
         # Extract start and end entities
@@ -713,7 +771,7 @@ class ReasoningEngine:
                 "error": "Not enough entities for weighted path search",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Need at least two entities for weighted path search."
+                "explanation": "Need at least two entities for weighted path search.",
             }
 
         # Get the start and end entities
@@ -726,7 +784,7 @@ class ReasoningEngine:
             end_entity=end_entity,
             max_hops=3,
             importance_weight=0.6,
-            confidence_weight=0.4
+            confidence_weight=0.4,
         )
 
         if not paths:
@@ -734,7 +792,7 @@ class ReasoningEngine:
                 "error": "No paths found",
                 "output_entities": entities,
                 "confidence": 0.0,
-                "explanation": f"No paths found between {start_entity} and {end_entity}."
+                "explanation": f"No paths found between {start_entity} and {end_entity}.",
             }
 
         # Extract entities and relations from paths
@@ -759,14 +817,11 @@ class ReasoningEngine:
             "relations_used": list(set(relations_used)),
             "confidence": 1.0,
             "explanation": f"Found {len(paths)} weighted paths between {start_entity} and {end_entity}.",
-            "path_explanation": path_explanation
+            "path_explanation": path_explanation,
         }
 
     def _constrained_path_step(
-        self,
-        query: str,
-        state: ReasoningState,
-        step_plan: dict[str, Any]
+        self, query: str, state: ReasoningState, step_plan: dict[str, Any]
     ) -> dict[str, Any]:
         """Execute a constrained path search step."""
         if not self.graph_store:
@@ -774,7 +829,7 @@ class ReasoningEngine:
                 "error": "Graph store not available",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform constrained path search without a graph store."
+                "explanation": "Cannot perform constrained path search without a graph store.",
             }
 
         # Extract start and end entities
@@ -789,7 +844,7 @@ class ReasoningEngine:
                 "error": "Not enough entities for constrained path search",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Need at least two entities for constrained path search."
+                "explanation": "Need at least two entities for constrained path search.",
             }
 
         # Get the start and end entities
@@ -804,7 +859,7 @@ class ReasoningEngine:
             start_entity=start_entity,
             end_entity=end_entity,
             allowed_relations=allowed_relations,
-            max_hops=3
+            max_hops=3,
         )
 
         if not paths:
@@ -812,7 +867,7 @@ class ReasoningEngine:
                 "error": "No paths found",
                 "output_entities": entities,
                 "confidence": 0.0,
-                "explanation": f"No paths found between {start_entity} and {end_entity} with the given constraints."
+                "explanation": f"No paths found between {start_entity} and {end_entity} with the given constraints.",
             }
 
         # Extract entities and relations from paths
@@ -837,14 +892,11 @@ class ReasoningEngine:
             "relations_used": list(set(relations_used)),
             "confidence": 1.0,
             "explanation": f"Found {len(paths)} constrained paths between {start_entity} and {end_entity}.",
-            "path_explanation": path_explanation
+            "path_explanation": path_explanation,
         }
 
     def _default_reasoning_step(
-        self,
-        query: str,
-        state: ReasoningState,
-        step_plan: dict[str, Any]
+        self, query: str, state: ReasoningState, step_plan: dict[str, Any]
     ) -> dict[str, Any]:
         """Execute a default reasoning step."""
         # Extract entities
@@ -857,7 +909,7 @@ class ReasoningEngine:
                 "error": "No entities for reasoning",
                 "output_entities": [],
                 "confidence": 0.0,
-                "explanation": "Cannot perform reasoning without entities."
+                "explanation": "Cannot perform reasoning without entities.",
             }
 
         # Get entity neighbors for each entity
@@ -868,9 +920,7 @@ class ReasoningEngine:
         if self.graph_store:
             for entity in entities:
                 entity_neighbors = self.graph_store.get_entity_neighbors(
-                    entity=entity,
-                    direction="both",
-                    limit=5
+                    entity=entity, direction="both", limit=5
                 )
                 neighbors.extend(entity_neighbors)
 
@@ -886,7 +936,7 @@ class ReasoningEngine:
             "output_entities": list(set(output_entities)),
             "relations_used": list(set(relations_used)),
             "confidence": 1.0 if neighbors else 0.0,
-            "explanation": f"Explored {len(neighbors)} neighboring entities."
+            "explanation": f"Explored {len(neighbors)} neighboring entities.",
         }
 
     def _generate_path_explanation(self, path: list[dict[str, Any]]) -> str:
@@ -910,7 +960,9 @@ class ReasoningEngine:
             target = step.get("target", "unknown")
             confidence = step.get("confidence", 0.0)
 
-            explanation.append(f"{source} {relation} {target} (confidence: {confidence:.2f})")
+            explanation.append(
+                f"{source} {relation} {target} (confidence: {confidence:.2f})"
+            )
 
         return " → ".join(explanation)
 
@@ -922,7 +974,7 @@ class ReasoningEngine:
                 "confidence": 0.0,
                 "reasoning_steps": [],
                 "entities_discovered": [],
-                "success": False
+                "success": False,
             }
 
         # Collect all unique entities discovered
@@ -932,7 +984,9 @@ class ReasoningEngine:
             all_entities.update(step.output_entities)
 
         # Calculate overall confidence
-        overall_confidence = sum(step.confidence for step in state.steps) / len(state.steps)
+        overall_confidence = sum(step.confidence for step in state.steps) / len(
+            state.steps
+        )
 
         # Get the reasoning steps
         reasoning_steps = [step.to_dict() for step in state.steps]
@@ -945,7 +999,7 @@ class ReasoningEngine:
             "confidence": overall_confidence,
             "reasoning_steps": reasoning_steps,
             "entities_discovered": list(all_entities),
-            "success": True
+            "success": True,
         }
 
     def _generate_answer(self, state: ReasoningState) -> str:
@@ -980,5 +1034,5 @@ def register_reasoning_engine(knowledge_store, config=None):
         config: Configuration
     """
     reasoning_engine = ReasoningEngine(knowledge_store, config)
-    setattr(knowledge_store, 'reasoning_engine', reasoning_engine)
+    setattr(knowledge_store, "reasoning_engine", reasoning_engine)
     return reasoning_engine

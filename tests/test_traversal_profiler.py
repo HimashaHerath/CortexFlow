@@ -27,6 +27,7 @@ from cortexflow.traversal_profiler import (
 # TraversalProfile tests
 # ---------------------------------------------------------------------------
 
+
 class TestTraversalProfile:
     """Tests for the TraversalProfile data container."""
 
@@ -104,6 +105,7 @@ class TestTraversalProfile:
 # TraversalProfiler tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def profiler(tmp_path):
     """Create a TraversalProfiler that writes to a temp directory."""
@@ -161,7 +163,9 @@ class TestTraversalProfilerLifecycle:
     def test_update_traversal_stats(self, profiler):
         """update_traversal_stats sets stats on the current profile."""
         profiler.start_profile("stat_test")
-        profiler.update_traversal_stats(nodes_visited=50, edges_traversed=80, path_length=5)
+        profiler.update_traversal_stats(
+            nodes_visited=50, edges_traversed=80, path_length=5
+        )
         assert profiler.current_profile.nodes_visited == 50
         assert profiler.current_profile.edges_traversed == 80
         assert profiler.current_profile.path_length == 5
@@ -206,7 +210,9 @@ class TestOptimizationSuggestions:
     def test_excessive_exploration_suggestion(self, profiler):
         """Excessive node-to-path ratio triggers a suggestion."""
         profiler.start_profile("wide_search")
-        profiler.update_traversal_stats(nodes_visited=200, edges_traversed=300, path_length=5)
+        profiler.update_traversal_stats(
+            nodes_visited=200, edges_traversed=300, path_length=5
+        )
         profiler.stop_profile()
 
         suggestions = profiler.get_optimization_suggestions()
@@ -218,7 +224,9 @@ class TestOptimizationSuggestions:
         """Steps slower than 100ms generate a 'slow_steps' suggestion."""
         profiler.start_profile("slow_ops")
         profiler.log_traversal_step("heavy_compute", 0.5)
-        profiler.update_traversal_stats(nodes_visited=1, edges_traversed=1, path_length=1)
+        profiler.update_traversal_stats(
+            nodes_visited=1, edges_traversed=1, path_length=1
+        )
         profiler.stop_profile()
 
         suggestions = profiler.get_optimization_suggestions()
@@ -228,7 +236,9 @@ class TestOptimizationSuggestions:
     def test_no_suggestions_for_fast_traversal(self, profiler):
         """A quick, efficient traversal generates no suggestions."""
         profiler.start_profile("fast")
-        profiler.update_traversal_stats(nodes_visited=5, edges_traversed=4, path_length=3)
+        profiler.update_traversal_stats(
+            nodes_visited=5, edges_traversed=4, path_length=3
+        )
         profiler.stop_profile()
 
         suggestions = profiler.get_optimization_suggestions()
@@ -333,7 +343,11 @@ class TestProfileTraversalDecorator:
 
             @profile_traversal(name="custom_walk")
             def walk(self, start, end):
-                return {"nodes_visited": 10, "edges_traversed": 12, "path": ["A", "B", "C"]}
+                return {
+                    "nodes_visited": 10,
+                    "edges_traversed": 12,
+                    "path": ["A", "B", "C"],
+                }
 
         fg = FakeGraph()
         result = fg.walk("A", "C")
@@ -347,6 +361,7 @@ class TestProfileTraversalDecorator:
 
     def test_decorator_without_profiler(self):
         """Decorator is a no-op when no profiler is attached."""
+
         class NoProfiler:
             @profile_traversal()
             def walk(self):

@@ -5,6 +5,7 @@ Models the evolving relationship between user and AI persona across
 conversation sessions.  Tracks trust, comfort, rapport, and manages
 stage transitions based on interaction signals.
 """
+
 from __future__ import annotations
 
 import enum
@@ -57,9 +58,9 @@ class RelationshipState:
     user_id: str
     persona_id: str
     stage: RelationshipStage = RelationshipStage.INTRODUCTION
-    trust_level: float = 0.0      # 0–1
-    comfort_level: float = 0.0    # 0–1
-    rapport_score: float = 0.0    # 0–1
+    trust_level: float = 0.0  # 0–1
+    comfort_level: float = 0.0  # 0–1
+    rapport_score: float = 0.0  # 0–1
     interaction_count: int = 0
     topics_discussed: list[str] = field(default_factory=list)
     shared_experiences: list[str] = field(default_factory=list)
@@ -148,8 +149,14 @@ class RelationshipTracker:
                 return self._states[key]
             return self._load_or_create(user_id, persona_id)
 
-    def update(self, user_id: str, persona_id: str, message: str, role: str,
-               emotional_state=None) -> RelationshipState:
+    def update(
+        self,
+        user_id: str,
+        persona_id: str,
+        message: str,
+        role: str,
+        emotional_state=None,
+    ) -> RelationshipState:
         """Call on every message to update relationship metrics.
 
         Args:
@@ -206,8 +213,11 @@ class RelationshipTracker:
 
         # --- Topic tracking (keep last 50) ---
         # Simple heuristic: extract first 3 non-stopword tokens
-        tokens = [w.lower().strip(".,!?;:") for w in message.split()
-                  if len(w) > 3 and w.lower() not in _STOPWORDS]
+        tokens = [
+            w.lower().strip(".,!?;:")
+            for w in message.split()
+            if len(w) > 3 and w.lower() not in _STOPWORDS
+        ]
         for t in tokens[:3]:
             if t and t not in state.topics_discussed:
                 state.topics_discussed.append(t)
@@ -259,33 +269,49 @@ class RelationshipTracker:
         current = state.stage
 
         # Handle non-linear states first
-        if current in (RelationshipStage.STRAINED, RelationshipStage.COOLING,
-                       RelationshipStage.RECONNECTING):
+        if current in (
+            RelationshipStage.STRAINED,
+            RelationshipStage.COOLING,
+            RelationshipStage.RECONNECTING,
+        ):
             # Recovery: if trust has recovered above 0.2 and several interactions
             if state.trust_level > 0.2 and state.interaction_count > 5:
                 # Return to the highest forward stage we qualify for
-                for target in (RelationshipStage.DEEP, RelationshipStage.ESTABLISHED,
-                               RelationshipStage.DEVELOPING, RelationshipStage.ACQUAINTANCE):
-                    if (state.interaction_count >= _STAGE_THRESHOLDS.get(target, 0) and
-                            state.trust_level >= _TRUST_THRESHOLDS.get(target, 0)):
+                for target in (
+                    RelationshipStage.DEEP,
+                    RelationshipStage.ESTABLISHED,
+                    RelationshipStage.DEVELOPING,
+                    RelationshipStage.ACQUAINTANCE,
+                ):
+                    if state.interaction_count >= _STAGE_THRESHOLDS.get(
+                        target, 0
+                    ) and state.trust_level >= _TRUST_THRESHOLDS.get(target, 0):
                         self._transition(state, target)
                         return
                 self._transition(state, RelationshipStage.INTRODUCTION)
             return
 
         # Forward transitions
-        for target in (RelationshipStage.DEEP, RelationshipStage.ESTABLISHED,
-                       RelationshipStage.DEVELOPING, RelationshipStage.ACQUAINTANCE):
+        for target in (
+            RelationshipStage.DEEP,
+            RelationshipStage.ESTABLISHED,
+            RelationshipStage.DEVELOPING,
+            RelationshipStage.ACQUAINTANCE,
+        ):
             if target <= current:
                 continue
             needed_count = _STAGE_THRESHOLDS.get(target, 0)
             needed_trust = _TRUST_THRESHOLDS.get(target, 0.0)
-            if (state.interaction_count >= needed_count and
-                    state.trust_level >= needed_trust):
+            if (
+                state.interaction_count >= needed_count
+                and state.trust_level >= needed_trust
+            ):
                 self._transition(state, target)
                 return
 
-    def _transition(self, state: RelationshipState, new_stage: RelationshipStage) -> None:
+    def _transition(
+        self, state: RelationshipState, new_stage: RelationshipStage
+    ) -> None:
         old_stage = state.stage
         if old_stage == new_stage:
             return
@@ -300,7 +326,10 @@ class RelationshipTracker:
         state.transition_history.append(entry)
         logger.info(
             "Relationship %s/%s transitioned: %s → %s",
-            state.user_id, state.persona_id, old_stage.name, new_stage.name,
+            state.user_id,
+            state.persona_id,
+            old_stage.name,
+            new_stage.name,
         )
 
     def _load_or_create(self, user_id: str, persona_id: str) -> RelationshipState:
@@ -323,19 +352,63 @@ class RelationshipTracker:
                    ON CONFLICT(user_id, persona_id) DO UPDATE SET
                        state_json = excluded.state_json,
                        updated_at = excluded.updated_at""",
-                (state.user_id, state.persona_id,
-                 json.dumps(state.to_dict()), time.time()),
+                (
+                    state.user_id,
+                    state.persona_id,
+                    json.dumps(state.to_dict()),
+                    time.time(),
+                ),
             )
             self._conn.commit()
             self._states[(state.user_id, state.persona_id)] = state
 
 
 # Minimal stopword set for topic extraction
-_STOPWORDS = frozenset({
-    "the", "and", "that", "this", "with", "from", "have", "been",
-    "were", "they", "their", "what", "when", "where", "which", "about",
-    "would", "could", "should", "there", "these", "those", "then",
-    "than", "them", "some", "into", "just", "also", "like", "very",
-    "really", "your", "will", "more", "much", "only", "even",
-    "because", "does", "doing", "being", "each", "other",
-})
+_STOPWORDS = frozenset(
+    {
+        "the",
+        "and",
+        "that",
+        "this",
+        "with",
+        "from",
+        "have",
+        "been",
+        "were",
+        "they",
+        "their",
+        "what",
+        "when",
+        "where",
+        "which",
+        "about",
+        "would",
+        "could",
+        "should",
+        "there",
+        "these",
+        "those",
+        "then",
+        "than",
+        "them",
+        "some",
+        "into",
+        "just",
+        "also",
+        "like",
+        "very",
+        "really",
+        "your",
+        "will",
+        "more",
+        "much",
+        "only",
+        "even",
+        "because",
+        "does",
+        "doing",
+        "being",
+        "each",
+        "other",
+    }
+)

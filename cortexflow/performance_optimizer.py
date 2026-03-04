@@ -3,6 +3,7 @@ CortexFlow Performance Optimizer module.
 
 This module provides performance optimization capabilities for the knowledge graph in CortexFlow.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -19,32 +20,39 @@ from cortexflow.dependency_utils import import_optional_dependency
 
 # Import graph libraries
 nx_deps = import_optional_dependency(
-    'networkx',
-    warning_message="networkx not found. Graph optimization functionality will be limited."
+    "networkx",
+    warning_message="networkx not found. Graph optimization functionality will be limited.",
 )
-NETWORKX_ENABLED = nx_deps['NETWORKX_ENABLED']
+NETWORKX_ENABLED = nx_deps["NETWORKX_ENABLED"]
 if NETWORKX_ENABLED:
-    nx = nx_deps['module']
+    nx = nx_deps["module"]
 
 # Import community detection library
 community_deps = import_optional_dependency(
-    'community',
-    import_name='community_louvain',
-    warning_message="python-louvain not found. Community detection for graph partitioning will be limited."
+    "community",
+    import_name="community_louvain",
+    warning_message="python-louvain not found. Community detection for graph partitioning will be limited.",
 )
-COMMUNITY_DETECTION_ENABLED = community_deps['COMMUNITY_LOUVAIN_ENABLED']
+COMMUNITY_DETECTION_ENABLED = community_deps["COMMUNITY_LOUVAIN_ENABLED"]
 if COMMUNITY_DETECTION_ENABLED:
-    community_louvain = community_deps['module']
+    community_louvain = community_deps["module"]
 
 # Configure logging
-logger = logging.getLogger('cortexflow.performance')
+logger = logging.getLogger("cortexflow.performance")
+
 
 class ReasoningPattern:
     """
     Represents a reasoning pattern for caching purposes.
     """
 
-    def __init__(self, pattern_key: str, hop_count: int = 0, entities: list[str] = None, path: list[str] = None):
+    def __init__(
+        self,
+        pattern_key: str,
+        hop_count: int = 0,
+        entities: list[str] = None,
+        path: list[str] = None,
+    ):
         """
         Initialize a reasoning pattern.
 
@@ -76,7 +84,7 @@ class ReasoningPattern:
             "path": self.path,
             "hit_count": self.hit_count,
             "last_accessed": self.last_accessed.isoformat(),
-            "created_at": self.created_at.isoformat()
+            "created_at": self.created_at.isoformat(),
         }
 
     @classmethod
@@ -86,12 +94,13 @@ class ReasoningPattern:
             pattern_key=data["pattern_key"],
             hop_count=data["hop_count"],
             entities=data["entities"],
-            path=data["path"]
+            path=data["path"],
         )
         pattern.hit_count = data["hit_count"]
         pattern.last_accessed = datetime.fromisoformat(data["last_accessed"])
         pattern.created_at = datetime.fromisoformat(data["created_at"])
         return pattern
+
 
 class PerformanceOptimizer:
     """
@@ -119,7 +128,9 @@ class PerformanceOptimizer:
 
         # LRU cache for reasoning patterns
         self.max_cache_size = getattr(config, "max_reasoning_cache_size", 1000)
-        self.cache_expiry = getattr(config, "reasoning_cache_expiry", 3600)  # in seconds
+        self.cache_expiry = getattr(
+            config, "reasoning_cache_expiry", 3600
+        )  # in seconds
 
         # Cache hit/miss statistics
         self.stats = {
@@ -151,7 +162,10 @@ class PerformanceOptimizer:
     def _init_optimizations(self):
         """Initialize optimization features based on configuration."""
         # Apply partitioning if enabled
-        if hasattr(self.config, "use_graph_partitioning") and self.config.use_graph_partitioning:
+        if (
+            hasattr(self.config, "use_graph_partitioning")
+            and self.config.use_graph_partitioning
+        ):
             if self.graph_store and NETWORKX_ENABLED:
                 try:
                     self.partition_graph()
@@ -159,7 +173,10 @@ class PerformanceOptimizer:
                     logger.error(f"Failed to partition graph: {e}")
 
         # Create indexes if enabled
-        if hasattr(self.config, "use_multihop_indexing") and self.config.use_multihop_indexing:
+        if (
+            hasattr(self.config, "use_multihop_indexing")
+            and self.config.use_multihop_indexing
+        ):
             if self.graph_store:
                 try:
                     self.create_hop_indexes()
@@ -168,10 +185,15 @@ class PerformanceOptimizer:
 
     def _load_cached_patterns(self):
         """Load cached reasoning patterns from disk if available."""
-        if not hasattr(self.config, "persist_reasoning_cache") or not self.config.persist_reasoning_cache:
+        if (
+            not hasattr(self.config, "persist_reasoning_cache")
+            or not self.config.persist_reasoning_cache
+        ):
             return
 
-        cache_file = getattr(self.config, "reasoning_cache_file", "reasoning_patterns.json")
+        cache_file = getattr(
+            self.config, "reasoning_cache_file", "reasoning_patterns.json"
+        )
 
         try:
             if os.path.exists(cache_file):
@@ -182,7 +204,9 @@ class PerformanceOptimizer:
                     pattern = ReasoningPattern.from_dict(pattern_data)
                     self.reasoning_patterns[pattern.pattern_key] = pattern
 
-                logger.info(f"Loaded {len(self.reasoning_patterns)} reasoning patterns from {cache_file}")
+                logger.info(
+                    f"Loaded {len(self.reasoning_patterns)} reasoning patterns from {cache_file}"
+                )
         except OSError as e:
             logger.error(f"IO error loading reasoning patterns: {e}")
         except json.JSONDecodeError as e:
@@ -192,29 +216,40 @@ class PerformanceOptimizer:
 
     def _save_cached_patterns(self):
         """Save cached reasoning patterns to disk if enabled."""
-        if not hasattr(self.config, "persist_reasoning_cache") or not self.config.persist_reasoning_cache:
+        if (
+            not hasattr(self.config, "persist_reasoning_cache")
+            or not self.config.persist_reasoning_cache
+        ):
             return
 
-        cache_file = getattr(self.config, "reasoning_cache_file", "reasoning_patterns.json")
+        cache_file = getattr(
+            self.config, "reasoning_cache_file", "reasoning_patterns.json"
+        )
 
         try:
-            patterns_data = [pattern.to_dict() for pattern in self.reasoning_patterns.values()]
+            patterns_data = [
+                pattern.to_dict() for pattern in self.reasoning_patterns.values()
+            ]
 
             # Create the directory if it doesn't exist
             cache_dir = os.path.dirname(cache_file)
             if cache_dir and not os.path.exists(cache_dir):
                 os.makedirs(cache_dir, exist_ok=True)
 
-            with open(cache_file, 'w') as f:
+            with open(cache_file, "w") as f:
                 json.dump(patterns_data, f, indent=2)
 
-            logger.info(f"Saved {len(self.reasoning_patterns)} reasoning patterns to {cache_file}")
+            logger.info(
+                f"Saved {len(self.reasoning_patterns)} reasoning patterns to {cache_file}"
+            )
         except OSError as e:
             logger.error(f"IO error saving reasoning patterns: {e}")
         except Exception as e:
             logger.error(f"Failed to save reasoning patterns: {e}")
 
-    def partition_graph(self, method: str = "louvain", partition_count: int = None) -> dict[str, Any]:
+    def partition_graph(
+        self, method: str = "louvain", partition_count: int = None
+    ) -> dict[str, Any]:
         """
         Partition the knowledge graph to improve query performance.
 
@@ -227,11 +262,19 @@ class PerformanceOptimizer:
         """
         if not NETWORKX_ENABLED:
             logger.warning("NetworkX not available, graph partitioning disabled")
-            return {"partitions": 0, "status": "failed", "reason": "NetworkX not available"}
+            return {
+                "partitions": 0,
+                "status": "failed",
+                "reason": "NetworkX not available",
+            }
 
         if not self.graph_store or not hasattr(self.graph_store, "graph"):
             logger.warning("No graph store available for partitioning")
-            return {"partitions": 0, "status": "failed", "reason": "No graph store available"}
+            return {
+                "partitions": 0,
+                "status": "failed",
+                "reason": "No graph store available",
+            }
 
         start_time = time.time()
 
@@ -257,12 +300,18 @@ class PerformanceOptimizer:
 
                 # Create subgraphs for each partition
                 for partition_id in partition_ids:
-                    nodes = [node for node, comm_id in communities.items() if comm_id == partition_id]
+                    nodes = [
+                        node
+                        for node, comm_id in communities.items()
+                        if comm_id == partition_id
+                    ]
                     self.partitions[partition_id] = G.subgraph(nodes).copy()
 
             elif method == "spectral":
                 if partition_count is None:
-                    partition_count = min(10, len(G.nodes()) // 5) if len(G.nodes()) > 10 else 1
+                    partition_count = (
+                        min(10, len(G.nodes()) // 5) if len(G.nodes()) > 10 else 1
+                    )
 
                 # Use spectral clustering for partitioning
                 try:
@@ -275,9 +324,9 @@ class PerformanceOptimizer:
                     # Apply spectral clustering
                     clustering = SpectralClustering(
                         n_clusters=partition_count,
-                        affinity='precomputed',
+                        affinity="precomputed",
                         n_init=10,
-                        assign_labels='discretize'
+                        assign_labels="discretize",
                     ).fit(adj_matrix)
 
                     # Get clusters
@@ -285,16 +334,26 @@ class PerformanceOptimizer:
 
                     # Create partition mapping
                     nodes = list(G.nodes())
-                    self.partition_mapping = {nodes[i]: labels[i] for i in range(len(nodes))}
+                    self.partition_mapping = {
+                        nodes[i]: labels[i] for i in range(len(nodes))
+                    }
 
                     # Create subgraphs for each partition
                     partition_ids = set(labels)
                     for partition_id in partition_ids:
-                        partition_nodes = [nodes[i] for i in range(len(nodes)) if labels[i] == partition_id]
-                        self.partitions[partition_id] = G.subgraph(partition_nodes).copy()
+                        partition_nodes = [
+                            nodes[i]
+                            for i in range(len(nodes))
+                            if labels[i] == partition_id
+                        ]
+                        self.partitions[partition_id] = G.subgraph(
+                            partition_nodes
+                        ).copy()
 
                 except ImportError:
-                    logger.warning("scikit-learn not available, falling back to connected components")
+                    logger.warning(
+                        "scikit-learn not available, falling back to connected components"
+                    )
                     # Fall back to connected components
                     components = list(nx.weakly_connected_components(G))
                     for i, component in enumerate(components):
@@ -305,7 +364,9 @@ class PerformanceOptimizer:
             elif method == "modularity":
                 # Modularity-based partitioning using Girvan-Newman algorithm
                 if partition_count is None:
-                    partition_count = min(5, len(G.nodes()) // 10) if len(G.nodes()) > 5 else 1
+                    partition_count = (
+                        min(5, len(G.nodes()) // 10) if len(G.nodes()) > 5 else 1
+                    )
 
                 # Convert directed graph to undirected
                 G_undirected = G.to_undirected()
@@ -353,7 +414,7 @@ class PerformanceOptimizer:
                 partition_stats[partition_id] = {
                     "nodes": len(subgraph.nodes()),
                     "edges": len(subgraph.edges()),
-                    "density": nx.density(subgraph) if len(subgraph.nodes()) > 1 else 0
+                    "density": nx.density(subgraph) if len(subgraph.nodes()) > 1 else 0,
                 }
 
             end_time = time.time()
@@ -365,14 +426,16 @@ class PerformanceOptimizer:
                 "method": method,
                 "partition_stats": partition_stats,
                 "execution_time": execution_time,
-                "status": "success"
+                "status": "success",
             }
 
         except Exception as e:
             logger.error(f"Error during graph partitioning: {e}")
             return {"partitions": 0, "status": "failed", "reason": str(e)}
 
-    def create_hop_indexes(self, max_hops: int = 2, index_frequent_paths: bool = True) -> dict[str, Any]:
+    def create_hop_indexes(
+        self, max_hops: int = 2, index_frequent_paths: bool = True
+    ) -> dict[str, Any]:
         """
         Create indexes for multi-hop queries.
 
@@ -405,7 +468,7 @@ class PerformanceOptimizer:
                 "frequent_path_indexes": 0,
                 "indexed_node_types": set(),
                 "indexed_relation_types": set(),
-                "execution_time": 0.0
+                "execution_time": 0.0,
             }
 
             # Create direct relationship indexes (1-hop)
@@ -542,7 +605,9 @@ class PerformanceOptimizer:
                         continue
 
                     # Get edge type from neighbor to 2-hop neighbor
-                    edge2_type = G.get_edge_data(neighbor, two_hop_neighbor).get("type", "unknown")
+                    edge2_type = G.get_edge_data(neighbor, two_hop_neighbor).get(
+                        "type", "unknown"
+                    )
 
                     # Create path signature
                     path_key = f"{edge1_type}|{edge2_type}"
@@ -631,7 +696,9 @@ class PerformanceOptimizer:
                 self.graph_store.create_path_index(edge_types)
                 indexes_created += 1
             except Exception as e:
-                logger.warning(f"Failed to create multi-hop index for path {path_key}: {e}")
+                logger.warning(
+                    f"Failed to create multi-hop index for path {path_key}: {e}"
+                )
 
         return indexes_created
 
@@ -680,7 +747,9 @@ class PerformanceOptimizer:
                 self.graph_store.create_path_index(edge_types)
                 indexes_created += 1
             except Exception as e:
-                logger.warning(f"Failed to create index for frequent path {edge_types}: {e}")
+                logger.warning(
+                    f"Failed to create index for frequent path {edge_types}: {e}"
+                )
 
         return indexes_created
 
@@ -704,11 +773,7 @@ class PerformanceOptimizer:
         max_hops = query.get("max_hops", 3)
 
         # Default plan
-        plan = {
-            "steps": [],
-            "estimated_cost": float('inf'),
-            "strategy": "default"
-        }
+        plan = {"steps": [], "estimated_cost": float("inf"), "strategy": "default"}
 
         try:
             # Check cache first
@@ -727,30 +792,49 @@ class PerformanceOptimizer:
             use_partitioning = len(self.partitions) > 0
 
             # Determine if we should use hop indexes
-            use_hop_indexes = hasattr(self.config, "use_multihop_indexing") and self.config.use_multihop_indexing
+            use_hop_indexes = (
+                hasattr(self.config, "use_multihop_indexing")
+                and self.config.use_multihop_indexing
+            )
 
             # Path query optimization
             if query_type == "path" and start_entity and end_entity:
                 # Check if start and end are in the same partition
-                if use_partitioning and start_entity in self.partition_mapping and end_entity in self.partition_mapping:
+                if (
+                    use_partitioning
+                    and start_entity in self.partition_mapping
+                    and end_entity in self.partition_mapping
+                ):
                     start_partition = self.partition_mapping[start_entity]
                     end_partition = self.partition_mapping[end_entity]
 
                     if start_partition == end_partition:
                         # Entities in same partition, use subgraph search
                         plan["steps"] = [
-                            {"operation": "get_partition", "partition_id": start_partition},
-                            {"operation": "path_search", "algorithm": "bidirectional", "max_hops": max_hops}
+                            {
+                                "operation": "get_partition",
+                                "partition_id": start_partition,
+                            },
+                            {
+                                "operation": "path_search",
+                                "algorithm": "bidirectional",
+                                "max_hops": max_hops,
+                            },
                         ]
                         plan["strategy"] = "partition_based"
-                        plan["estimated_cost"] = 0.3  # Much lower cost when in same partition
+                        plan["estimated_cost"] = (
+                            0.3  # Much lower cost when in same partition
+                        )
                     else:
                         # Entities in different partitions
                         # Use hop indexes if available and within range
                         if use_hop_indexes and max_hops <= self.config.max_indexed_hops:
                             plan["steps"] = [
                                 {"operation": "lookup_hop_index", "max_hops": max_hops},
-                                {"operation": "verify_constraints", "constraints": relation_constraints}
+                                {
+                                    "operation": "verify_constraints",
+                                    "constraints": relation_constraints,
+                                },
                             ]
                             plan["strategy"] = "hop_index"
                             plan["estimated_cost"] = 0.5
@@ -758,8 +842,12 @@ class PerformanceOptimizer:
                             # Cross-partition search with graph abstraction for efficiency
                             plan["steps"] = [
                                 {"operation": "abstract_graph", "level": "partition"},
-                                {"operation": "path_search_abstract", "algorithm": "bidirectional", "max_hops": max_hops},
-                                {"operation": "expand_abstract_path"}
+                                {
+                                    "operation": "path_search_abstract",
+                                    "algorithm": "bidirectional",
+                                    "max_hops": max_hops,
+                                },
+                                {"operation": "expand_abstract_path"},
                             ]
                             plan["strategy"] = "cross_partition"
                             plan["estimated_cost"] = 0.7
@@ -769,14 +857,21 @@ class PerformanceOptimizer:
                     if use_hop_indexes and max_hops <= self.config.max_indexed_hops:
                         plan["steps"] = [
                             {"operation": "lookup_hop_index", "max_hops": max_hops},
-                            {"operation": "verify_constraints", "constraints": relation_constraints}
+                            {
+                                "operation": "verify_constraints",
+                                "constraints": relation_constraints,
+                            },
                         ]
                         plan["strategy"] = "hop_index"
                         plan["estimated_cost"] = 0.5
                     else:
                         # Default to bidirectional search
                         plan["steps"] = [
-                            {"operation": "path_search", "algorithm": "bidirectional", "max_hops": max_hops}
+                            {
+                                "operation": "path_search",
+                                "algorithm": "bidirectional",
+                                "max_hops": max_hops,
+                            }
                         ]
                         plan["strategy"] = "bidirectional"
                         plan["estimated_cost"] = 1.0
@@ -791,19 +886,33 @@ class PerformanceOptimizer:
                     partition_id = self.partition_mapping[start_entity]
                     partition_size = len(self.partitions[partition_id].nodes())
 
-                    if partition_size < 1000:  # Small partition, explore whole partition
+                    if (
+                        partition_size < 1000
+                    ):  # Small partition, explore whole partition
                         plan["steps"] = [
-                            {"operation": "get_partition", "partition_id": partition_id},
-                            {"operation": "filter_by_constraints", "constraints": relation_constraints}
+                            {
+                                "operation": "get_partition",
+                                "partition_id": partition_id,
+                            },
+                            {
+                                "operation": "filter_by_constraints",
+                                "constraints": relation_constraints,
+                            },
                         ]
                         plan["strategy"] = "whole_partition"
                         plan["estimated_cost"] = 0.4
                     else:
                         # Large partition, use radius-based exploration
                         plan["steps"] = [
-                            {"operation": "get_partition", "partition_id": partition_id},
+                            {
+                                "operation": "get_partition",
+                                "partition_id": partition_id,
+                            },
                             {"operation": "neighborhood_search", "radius": radius},
-                            {"operation": "filter_by_constraints", "constraints": relation_constraints}
+                            {
+                                "operation": "filter_by_constraints",
+                                "constraints": relation_constraints,
+                            },
                         ]
                         plan["strategy"] = "partition_neighborhood"
                         plan["estimated_cost"] = 0.6
@@ -811,7 +920,10 @@ class PerformanceOptimizer:
                     # No partitioning, use radius-based exploration of whole graph
                     plan["steps"] = [
                         {"operation": "neighborhood_search", "radius": radius},
-                        {"operation": "filter_by_constraints", "constraints": relation_constraints}
+                        {
+                            "operation": "filter_by_constraints",
+                            "constraints": relation_constraints,
+                        },
                     ]
                     plan["strategy"] = "radius_based"
                     plan["estimated_cost"] = 0.8
@@ -834,11 +946,15 @@ class PerformanceOptimizer:
             # Return a simple fallback plan
             return {
                 "steps": [
-                    {"operation": "path_search", "algorithm": "bidirectional", "max_hops": max_hops}
+                    {
+                        "operation": "path_search",
+                        "algorithm": "bidirectional",
+                        "max_hops": max_hops,
+                    }
                 ],
                 "strategy": "fallback",
                 "estimated_cost": 1.0,
-                "error": str(e)
+                "error": str(e),
             }
 
     def generate_pattern_key(self, pattern: dict[str, Any]) -> str:
@@ -860,7 +976,9 @@ class PerformanceOptimizer:
 
         # Add relation types
         if "relation_types" in pattern:
-            components.append("relations:" + ",".join(sorted(pattern["relation_types"])))
+            components.append(
+                "relations:" + ",".join(sorted(pattern["relation_types"]))
+            )
 
         # Add path structure
         if "path" in pattern:
@@ -939,7 +1057,7 @@ class PerformanceOptimizer:
                 pattern_key=pattern_key,
                 hop_count=pattern_data.get("hop_count", 0),
                 entities=pattern_data.get("entity_types", []),
-                path=pattern_data.get("path", [])
+                path=pattern_data.get("path", []),
             )
             self.reasoning_patterns[pattern_key] = pattern
 
@@ -953,9 +1071,11 @@ class PerformanceOptimizer:
         self.stats["optimization_time"] += 0.001  # Negligible time
 
         # Save cached patterns if persistence is enabled
-        if (pattern.hit_count % 10 == 0 and  # Save every 10 hits
-            hasattr(self.config, "persist_reasoning_cache") and
-            self.config.persist_reasoning_cache):
+        if (
+            pattern.hit_count % 10 == 0  # Save every 10 hits
+            and hasattr(self.config, "persist_reasoning_cache")
+            and self.config.persist_reasoning_cache
+        ):
             self._save_cached_patterns()
 
         return pattern_key
@@ -998,7 +1118,9 @@ class PerformanceOptimizer:
         expired_keys = []
 
         for pattern_key, pattern in self.reasoning_patterns.items():
-            if current_time - pattern.last_accessed > timedelta(seconds=self.cache_expiry):
+            if current_time - pattern.last_accessed > timedelta(
+                seconds=self.cache_expiry
+            ):
                 expired_keys.append(pattern_key)
 
         for key in expired_keys:
@@ -1011,8 +1133,7 @@ class PerformanceOptimizer:
         if len(self.reasoning_cache) > self.max_cache_size:
             # Sort patterns by last access time
             sorted_patterns = sorted(
-                self.reasoning_patterns.items(),
-                key=lambda x: x[1].last_accessed
+                self.reasoning_patterns.items(), key=lambda x: x[1].last_accessed
             )
 
             # Remove oldest entries
@@ -1062,7 +1183,7 @@ class PerformanceOptimizer:
 
         # Update stats
         end_time = time.time()
-        self.stats["optimization_time"] += (end_time - start_time)
+        self.stats["optimization_time"] += end_time - start_time
         self.stats["query_plans_generated"] += 1
 
         return optimized_query
@@ -1099,7 +1220,7 @@ class PerformanceOptimizer:
 
         return {
             "query_cache_cleared": query_cache_size,
-            "reasoning_cache_cleared": reasoning_cache_size
+            "reasoning_cache_cleared": reasoning_cache_size,
         }
 
     def get_stats(self) -> dict[str, Any]:
@@ -1111,13 +1232,11 @@ class PerformanceOptimizer:
         """
         # Calculate cache hit rates
         query_hit_rate = self._calculate_hit_rate(
-            self.stats["query_cache_hits"],
-            self.stats["query_cache_misses"]
+            self.stats["query_cache_hits"], self.stats["query_cache_misses"]
         )
 
         reasoning_hit_rate = self._calculate_hit_rate(
-            self.stats["reasoning_cache_hits"],
-            self.stats["reasoning_cache_misses"]
+            self.stats["reasoning_cache_hits"], self.stats["reasoning_cache_misses"]
         )
 
         # Get most common query patterns
@@ -1128,14 +1247,16 @@ class PerformanceOptimizer:
 
         # Get general stats
         stats = self.stats.copy()
-        stats.update({
-            "query_cache_size": len(self.query_cache),
-            "reasoning_cache_size": len(self.reasoning_cache),
-            "reasoning_patterns": len(self.reasoning_patterns),
-            "query_hit_rate": query_hit_rate,
-            "reasoning_hit_rate": reasoning_hit_rate,
-            "common_patterns": common_patterns
-        })
+        stats.update(
+            {
+                "query_cache_size": len(self.query_cache),
+                "reasoning_cache_size": len(self.reasoning_cache),
+                "reasoning_patterns": len(self.reasoning_patterns),
+                "query_hit_rate": query_hit_rate,
+                "reasoning_hit_rate": reasoning_hit_rate,
+                "common_patterns": common_patterns,
+            }
+        )
 
         return stats
 
@@ -1196,7 +1317,9 @@ class PerformanceOptimizer:
         partitions_after = len(self.partitions)
         pruned = partitions_before - partitions_after
 
-        logger.info(f"Pruned {pruned} partitions with density below {density_threshold}")
+        logger.info(
+            f"Pruned {pruned} partitions with density below {density_threshold}"
+        )
 
         return pruned
 
@@ -1204,7 +1327,10 @@ class PerformanceOptimizer:
         """Clean up resources and save state."""
         try:
             # Save cached patterns if enabled
-            if hasattr(self.config, "persist_reasoning_cache") and self.config.persist_reasoning_cache:
+            if (
+                hasattr(self.config, "persist_reasoning_cache")
+                and self.config.persist_reasoning_cache
+            ):
                 self._save_cached_patterns()
 
             # Clear caches to free memory
@@ -1219,7 +1345,7 @@ class PerformanceOptimizer:
             self.multi_hop_indexes = {}
 
             # Close any database connections
-            if hasattr(self, 'conn') and self.conn is not None:
+            if hasattr(self, "conn") and self.conn is not None:
                 self.conn.close()
                 self.conn = None
 

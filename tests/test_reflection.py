@@ -16,6 +16,7 @@ from cortexflow.reflection import ReflectionEngine
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def engine():
     """Create a ReflectionEngine with mocked LLM client."""
@@ -40,6 +41,7 @@ def engine():
 # _extract_claims
 # ---------------------------------------------------------------------------
 
+
 class TestExtractClaims:
     """Test sentence-based claim extraction."""
 
@@ -56,8 +58,10 @@ class TestExtractClaims:
         assert any("temperature" in c for c in claims)
 
     def test_filters_non_substantive_fragments(self, engine):
-        text = "I think this is interesting. Let me explain. Here is the data. " \
-               "The algorithm processes data in three distinct phases."
+        text = (
+            "I think this is interesting. Let me explain. Here is the data. "
+            "The algorithm processes data in three distinct phases."
+        )
         claims = engine._extract_claims(text)
         # "I think...", "Let me...", "Here is..." should be filtered
         substantive = [c for c in claims if "algorithm" in c]
@@ -77,12 +81,17 @@ class TestExtractClaims:
 # _compute_kb_support_ratio
 # ---------------------------------------------------------------------------
 
+
 class TestComputeKBSupportRatio:
     """Test knowledge base support ratio computation."""
 
     def test_all_claims_supported(self, engine):
         claims = ["Python is a popular programming language used worldwide."]
-        kb_items = [{"text": "Python is a popular programming language used by millions worldwide."}]
+        kb_items = [
+            {
+                "text": "Python is a popular programming language used by millions worldwide."
+            }
+        ]
         ratio, details = engine._compute_kb_support_ratio(claims, kb_items)
         assert ratio == 1.0
         assert details[0]["has_kb_support"] is True
@@ -104,7 +113,11 @@ class TestComputeKBSupportRatio:
             "Python is a popular programming language used worldwide.",
             "Jupiter orbits around the distant galaxy core.",
         ]
-        kb_items = [{"text": "Python is a popular programming language used by millions worldwide."}]
+        kb_items = [
+            {
+                "text": "Python is a popular programming language used by millions worldwide."
+            }
+        ]
         ratio, details = engine._compute_kb_support_ratio(claims, kb_items)
         assert 0.0 < ratio < 1.0
 
@@ -118,7 +131,9 @@ class TestComputeKBSupportRatio:
 
     def test_details_contain_claim_text(self, engine):
         claims = ["Machine learning enables computers to learn patterns."]
-        kb_items = [{"text": "Machine learning helps computers learn patterns from data."}]
+        kb_items = [
+            {"text": "Machine learning helps computers learn patterns from data."}
+        ]
         ratio, details = engine._compute_kb_support_ratio(claims, kb_items)
         assert "claim" in details[0]
         assert "has_kb_support" in details[0]
@@ -127,6 +142,7 @@ class TestComputeKBSupportRatio:
 # ---------------------------------------------------------------------------
 # verify_knowledge_relevance
 # ---------------------------------------------------------------------------
+
 
 class TestVerifyKnowledgeRelevance:
     """Test knowledge relevance filtering."""
@@ -137,12 +153,12 @@ class TestVerifyKnowledgeRelevance:
 
     def test_filters_items_below_threshold(self, engine):
         """Mock LLM to return low scores for some items."""
-        engine.llm_client.generate_from_prompt.return_value = '''
+        engine.llm_client.generate_from_prompt.return_value = """
         [
             {"item": 1, "score": 0.9, "explanation": "Highly relevant"},
             {"item": 2, "score": 0.2, "explanation": "Not relevant"}
         ]
-        '''
+        """
         items = [
             {"text": "Relevant knowledge about Python."},
             {"text": "Unrelated knowledge about cooking."},
@@ -153,12 +169,12 @@ class TestVerifyKnowledgeRelevance:
         assert result[0]["relevance_score"] == 0.9
 
     def test_all_items_pass_threshold(self, engine):
-        engine.llm_client.generate_from_prompt.return_value = '''
+        engine.llm_client.generate_from_prompt.return_value = """
         [
             {"item": 1, "score": 0.8, "explanation": "Relevant"},
             {"item": 2, "score": 0.7, "explanation": "Relevant"}
         ]
-        '''
+        """
         items = [
             {"text": "Item one."},
             {"text": "Item two."},
@@ -183,63 +199,76 @@ class TestVerifyKnowledgeRelevance:
 # check_response_consistency (mocked LLM)
 # ---------------------------------------------------------------------------
 
+
 class TestCheckResponseConsistency:
     """Test consistency checking with mocked LLM."""
 
     def test_consistent_response(self, engine):
-        engine.llm_client.generate_from_prompt.return_value = '''
+        engine.llm_client.generate_from_prompt.return_value = """
         {
             "is_consistent": true,
             "confidence": 0.95,
             "issues": [],
             "reasoning": "All claims supported."
         }
-        '''
+        """
         result = engine.check_response_consistency(
             query="What is Python?",
             response="Python is a popular programming language used for web development.",
-            knowledge_items=[{"text": "Python is a popular programming language used for web development and data science."}],
+            knowledge_items=[
+                {
+                    "text": "Python is a popular programming language used for web development and data science."
+                }
+            ],
         )
         assert result["is_consistent"] is True
         assert "kb_support_ratio" in result
 
     def test_inconsistent_response_has_issues(self, engine):
-        engine.llm_client.generate_from_prompt.return_value = '''
+        engine.llm_client.generate_from_prompt.return_value = """
         {
             "is_consistent": false,
             "confidence": 0.8,
             "issues": ["Claim about Python being created in 2020 is incorrect."],
             "reasoning": "Historical date is wrong."
         }
-        '''
+        """
         result = engine.check_response_consistency(
             query="When was Python created?",
             response="Python was created in 2020 by Guido van Rossum.",
-            knowledge_items=[{"text": "Python was created in 1991 by Guido van Rossum."}],
+            knowledge_items=[
+                {"text": "Python was created in 1991 by Guido van Rossum."}
+            ],
         )
         assert result["is_consistent"] is False
         assert len(result["issues"]) > 0
 
     def test_kb_support_ratio_included(self, engine):
-        engine.llm_client.generate_from_prompt.return_value = '''
+        engine.llm_client.generate_from_prompt.return_value = """
         {"is_consistent": true, "confidence": 0.9, "issues": [], "reasoning": "OK"}
-        '''
+        """
         result = engine.check_response_consistency(
             query="test",
             response="Machine learning algorithms process data efficiently.",
-            knowledge_items=[{"text": "Machine learning algorithms can process large amounts of data efficiently."}],
+            knowledge_items=[
+                {
+                    "text": "Machine learning algorithms can process large amounts of data efficiently."
+                }
+            ],
         )
         assert "kb_support_ratio" in result
         assert 0.0 <= result["kb_support_ratio"] <= 1.0
 
     def test_claim_details_included(self, engine):
-        engine.llm_client.generate_from_prompt.return_value = '''
+        engine.llm_client.generate_from_prompt.return_value = """
         {"is_consistent": true, "confidence": 0.9, "issues": [], "reasoning": "OK"}
-        '''
+        """
         result = engine.check_response_consistency(
             query="test",
             response="Neural networks learn from data. They use backpropagation for training.",
-            knowledge_items=[{"text": "Neural networks learn from data using backpropagation."}],
+            knowledge_items=[
+                {"text": "Neural networks learn from data using backpropagation."}
+            ],
         )
         assert "claim_details" in result
 
@@ -259,6 +288,7 @@ class TestCheckResponseConsistency:
 # revise_response
 # ---------------------------------------------------------------------------
 
+
 class TestReviseResponse:
     """Test response revision."""
 
@@ -273,7 +303,9 @@ class TestReviseResponse:
         assert result == original
 
     def test_inconsistent_response_is_revised(self, engine):
-        engine.llm_client.generate_from_prompt.return_value = "Revised: Python was created in 1991."
+        engine.llm_client.generate_from_prompt.return_value = (
+            "Revised: Python was created in 1991."
+        )
         result = engine.revise_response(
             query="When was Python created?",
             original_response="Python was created in 2020.",

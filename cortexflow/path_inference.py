@@ -3,12 +3,14 @@ CortexFlow Path Inference module.
 
 This module provides advanced path-based inference capabilities for the knowledge graph.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-logger = logging.getLogger('cortexflow')
+logger = logging.getLogger("cortexflow")
+
 
 class BidirectionalSearch:
     """Implements bidirectional search for efficient path finding in knowledge graphs."""
@@ -23,10 +25,7 @@ class BidirectionalSearch:
         self.graph_store = graph_store
 
     def search(
-        self,
-        start_entity: str,
-        end_entity: str,
-        max_hops: int = 3
+        self, start_entity: str, end_entity: str, max_hops: int = 3
     ) -> list[list[dict[str, Any]]]:
         """
         Find paths between start and end entities using bidirectional search.
@@ -41,7 +40,16 @@ class BidirectionalSearch:
         """
         # Early return if entities are the same
         if start_entity == end_entity:
-            return [[{"source": start_entity, "relation": "is_same_as", "target": end_entity, "confidence": 1.0}]]
+            return [
+                [
+                    {
+                        "source": start_entity,
+                        "relation": "is_same_as",
+                        "target": end_entity,
+                        "confidence": 1.0,
+                    }
+                ]
+            ]
 
         # Initialize forward and backward frontiers
         forward_frontier = {start_entity: []}
@@ -63,7 +71,7 @@ class BidirectionalSearch:
                 return self._construct_paths(
                     meeting_points=intersection,
                     forward_paths=forward_frontier,
-                    backward_paths=backward_frontier
+                    backward_paths=backward_frontier,
                 )
 
             # Expand forward frontier
@@ -71,7 +79,7 @@ class BidirectionalSearch:
                 forward_frontier = self._expand_frontier(
                     frontier=forward_frontier,
                     visited=forward_visited,
-                    direction="outgoing"
+                    direction="outgoing",
                 )
 
             # Expand backward frontier
@@ -79,7 +87,7 @@ class BidirectionalSearch:
                 backward_frontier = self._expand_frontier(
                     frontier=backward_frontier,
                     visited=backward_visited,
-                    direction="incoming"
+                    direction="incoming",
                 )
 
             # Check for intersection again
@@ -89,7 +97,7 @@ class BidirectionalSearch:
                 return self._construct_paths(
                     meeting_points=intersection,
                     forward_paths=forward_frontier,
-                    backward_paths=backward_frontier
+                    backward_paths=backward_frontier,
                 )
 
         # No paths found
@@ -99,7 +107,7 @@ class BidirectionalSearch:
         self,
         frontier: dict[str, list[dict[str, Any]]],
         visited: set[str],
-        direction: str
+        direction: str,
     ) -> dict[str, list[dict[str, Any]]]:
         """
         Expand a frontier in the search.
@@ -118,13 +126,11 @@ class BidirectionalSearch:
             # Get neighbors based on direction
             if direction == "outgoing":
                 neighbors = self.graph_store.get_entity_neighbors(
-                    entity=entity,
-                    direction="outgoing"
+                    entity=entity, direction="outgoing"
                 )
             else:
                 neighbors = self.graph_store.get_entity_neighbors(
-                    entity=entity,
-                    direction="incoming"
+                    entity=entity, direction="incoming"
                 )
 
             for neighbor in neighbors:
@@ -139,7 +145,7 @@ class BidirectionalSearch:
                         "source": entity,
                         "relation": relation,
                         "target": target_entity,
-                        "confidence": confidence
+                        "confidence": confidence,
                     }
 
                     # Add to new frontier if not visited
@@ -157,7 +163,7 @@ class BidirectionalSearch:
                         "source": source_entity,
                         "relation": relation,
                         "target": entity,
-                        "confidence": confidence
+                        "confidence": confidence,
                     }
 
                     # Add to new frontier if not visited
@@ -171,7 +177,7 @@ class BidirectionalSearch:
         self,
         meeting_points: set[str],
         forward_paths: dict[str, list[dict[str, Any]]],
-        backward_paths: dict[str, list[dict[str, Any]]]
+        backward_paths: dict[str, list[dict[str, Any]]],
     ) -> list[list[dict[str, Any]]]:
         """
         Construct full paths from meeting points.
@@ -219,7 +225,7 @@ class WeightedPathSearch:
         end_entity: str,
         max_hops: int = 3,
         importance_weight: float = 0.5,
-        confidence_weight: float = 0.5
+        confidence_weight: float = 0.5,
     ) -> list[list[dict[str, Any]]]:
         """
         Find weighted paths between start and end entities.
@@ -236,15 +242,26 @@ class WeightedPathSearch:
         """
         # Early return if entities are the same
         if start_entity == end_entity:
-            return [[{"source": start_entity, "relation": "is_same_as", "target": end_entity, "confidence": 1.0}]]
+            return [
+                [
+                    {
+                        "source": start_entity,
+                        "relation": "is_same_as",
+                        "target": end_entity,
+                        "confidence": 1.0,
+                    }
+                ]
+            ]
 
         # Initialize frontier
-        frontier = [{
-            "entity": start_entity,
-            "path": [],
-            "visited": {start_entity},
-            "total_weight": 0.0
-        }]
+        frontier = [
+            {
+                "entity": start_entity,
+                "path": [],
+                "visited": {start_entity},
+                "total_weight": 0.0,
+            }
+        ]
 
         # List to store complete paths
         complete_paths = []
@@ -274,8 +291,7 @@ class WeightedPathSearch:
 
                 # Get neighbors
                 neighbors = self.graph_store.get_entity_neighbors(
-                    entity=current_entity,
-                    direction="outgoing"
+                    entity=current_entity, direction="outgoing"
                 )
 
                 for neighbor in neighbors:
@@ -290,8 +306,7 @@ class WeightedPathSearch:
 
                     # Calculate combined weight
                     combined_weight = (
-                        importance * importance_weight +
-                        confidence * confidence_weight
+                        importance * importance_weight + confidence * confidence_weight
                     )
 
                     # Create the step
@@ -300,7 +315,7 @@ class WeightedPathSearch:
                         "relation": relation,
                         "target": target_entity,
                         "confidence": confidence,
-                        "importance": importance
+                        "importance": importance,
                     }
 
                     # Create new path
@@ -315,23 +330,26 @@ class WeightedPathSearch:
 
                     # Check if we've reached the target
                     if target_entity == end_entity:
-                        complete_paths.append({
-                            "path": new_path,
-                            "total_weight": new_total_weight
-                        })
+                        complete_paths.append(
+                            {"path": new_path, "total_weight": new_total_weight}
+                        )
 
                         # Sort and limit complete paths
                         if len(complete_paths) > max_results:
-                            complete_paths.sort(key=lambda x: x["total_weight"], reverse=True)
+                            complete_paths.sort(
+                                key=lambda x: x["total_weight"], reverse=True
+                            )
                             complete_paths = complete_paths[:max_results]
                     else:
                         # Add to new frontier
-                        new_frontier.append({
-                            "entity": target_entity,
-                            "path": new_path,
-                            "visited": new_visited,
-                            "total_weight": new_total_weight
-                        })
+                        new_frontier.append(
+                            {
+                                "entity": target_entity,
+                                "path": new_path,
+                                "visited": new_visited,
+                                "total_weight": new_total_weight,
+                            }
+                        )
 
             # Update frontier
             frontier = new_frontier
@@ -361,7 +379,7 @@ class ConstrainedPathSearch:
         end_entity: str,
         allowed_relations: list[str] | None = None,
         excluded_relations: list[str] | None = None,
-        max_hops: int = 3
+        max_hops: int = 3,
     ) -> list[list[dict[str, Any]]]:
         """
         Find paths with relation constraints.
@@ -378,14 +396,19 @@ class ConstrainedPathSearch:
         """
         # Early return if entities are the same
         if start_entity == end_entity:
-            return [[{"source": start_entity, "relation": "is_same_as", "target": end_entity, "confidence": 1.0}]]
+            return [
+                [
+                    {
+                        "source": start_entity,
+                        "relation": "is_same_as",
+                        "target": end_entity,
+                        "confidence": 1.0,
+                    }
+                ]
+            ]
 
         # Initialize frontier
-        frontier = [{
-            "entity": start_entity,
-            "path": [],
-            "visited": {start_entity}
-        }]
+        frontier = [{"entity": start_entity, "path": [], "visited": {start_entity}}]
 
         # List to store complete paths
         complete_paths = []
@@ -411,8 +434,7 @@ class ConstrainedPathSearch:
 
                 # Get neighbors
                 neighbors = self.graph_store.get_entity_neighbors(
-                    entity=current_entity,
-                    direction="outgoing"
+                    entity=current_entity, direction="outgoing"
                 )
 
                 for neighbor in neighbors:
@@ -437,7 +459,7 @@ class ConstrainedPathSearch:
                         "source": current_entity,
                         "relation": relation,
                         "target": target_entity,
-                        "confidence": confidence
+                        "confidence": confidence,
                     }
 
                     # Create new path
@@ -456,11 +478,13 @@ class ConstrainedPathSearch:
                             complete_paths = complete_paths[:max_results]
                     else:
                         # Add to new frontier
-                        new_frontier.append({
-                            "entity": target_entity,
-                            "path": new_path,
-                            "visited": new_visited
-                        })
+                        new_frontier.append(
+                            {
+                                "entity": target_entity,
+                                "path": new_path,
+                                "visited": new_visited,
+                            }
+                        )
 
             # Update frontier
             frontier = new_frontier
@@ -502,7 +526,9 @@ class PathExplainer:
             target = step.get("target", "unknown")
             confidence = step.get("confidence", 0.0)
 
-            explanation.append(f"{source} {relation} {target} (confidence: {confidence:.2f})")
+            explanation.append(
+                f"{source} {relation} {target} (confidence: {confidence:.2f})"
+            )
 
         return " → ".join(explanation)
 
@@ -538,5 +564,5 @@ def register_path_inference(graph_store):
         "bidirectional_search": bidirectional_search,
         "weighted_path_search": weighted_path_search,
         "constrained_path_search": constrained_path_search,
-        "path_explainer": path_explainer
+        "path_explainer": path_explainer,
     }

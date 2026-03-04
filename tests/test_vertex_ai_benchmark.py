@@ -19,38 +19,50 @@ from datetime import datetime
 from typing import Any
 
 # ── Colour helpers ─────────────────────────────────────────────────────────────
-GREEN  = "\033[92m"
-RED    = "\033[91m"
+GREEN = "\033[92m"
+RED = "\033[91m"
 YELLOW = "\033[93m"
-CYAN   = "\033[96m"
-RESET  = "\033[0m"
-BOLD   = "\033[1m"
+CYAN = "\033[96m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
 
-def ok(msg: str):  print(f"  {GREEN}✓{RESET} {msg}")
-def fail(msg: str): print(f"  {RED}✗{RESET} {msg}")
-def info(msg: str): print(f"  {CYAN}→{RESET} {msg}")
+
+def ok(msg: str):
+    print(f"  {GREEN}✓{RESET} {msg}")
+
+
+def fail(msg: str):
+    print(f"  {RED}✗{RESET} {msg}")
+
+
+def info(msg: str):
+    print(f"  {CYAN}→{RESET} {msg}")
+
+
 def section(title: str):
-    print(f"\n{BOLD}{CYAN}{'='*60}{RESET}")
+    print(f"\n{BOLD}{CYAN}{'=' * 60}{RESET}")
     print(f"{BOLD}{CYAN}  {title}{RESET}")
-    print(f"{BOLD}{CYAN}{'='*60}{RESET}")
+    print(f"{BOLD}{CYAN}{'=' * 60}{RESET}")
+
 
 # Shared temp dir for DB files (sqlitedict requires real paths)
 _tmp_dir = tempfile.mkdtemp(prefix="cortexflow_bench_")
 
+
 def _tmp_db(name: str) -> str:
     return os.path.join(_tmp_dir, f"{name}.db")
+
 
 # ── Result accumulator ─────────────────────────────────────────────────────────
 results: dict[str, dict[str, Any]] = {}
 
+
 def record(section_name: str, test_name: str, passed: bool, detail: str = ""):
     if section_name not in results:
         results[section_name] = {"passed": 0, "failed": 0, "tests": []}
-    results[section_name]["tests"].append({
-        "name": test_name,
-        "passed": passed,
-        "detail": detail
-    })
+    results[section_name]["tests"].append(
+        {"name": test_name, "passed": passed, "detail": detail}
+    )
     if passed:
         results[section_name]["passed"] += 1
         ok(test_name + (f"  [{detail}]" if detail else ""))
@@ -71,6 +83,7 @@ def run_section1() -> None:
         from cortexflow.config import ConfigBuilder
         from cortexflow.llm_client import VertexAIClient, create_llm_client
         from cortexflow.manager import CortexFlowManager
+
         record(SEC, "CortexFlow imports succeed", True)
     except Exception as e:
         record(SEC, "CortexFlow imports succeed", False, str(e))
@@ -88,14 +101,18 @@ def run_section1() -> None:
                 default_model="gemini-2.0-flash",
             )
             .with_knowledge_store(knowledge_store_path=_tmp_db("s1"))
-            .with_graph_rag(use_graph_rag=True, enable_multi_hop_queries=True, max_graph_hops=3)
+            .with_graph_rag(
+                use_graph_rag=True, enable_multi_hop_queries=True, max_graph_hops=3
+            )
             .build()
         )
         assert config.llm.backend == "vertex_ai"
         assert config.llm.vertex_model == "gemini-2.0-flash"
         record(SEC, "ConfigBuilder.with_vertex_ai() builds correct config", True)
     except Exception as e:
-        record(SEC, "ConfigBuilder.with_vertex_ai() builds correct config", False, str(e))
+        record(
+            SEC, "ConfigBuilder.with_vertex_ai() builds correct config", False, str(e)
+        )
         config = None
 
     # 1.3 create_llm_client returns VertexAIClient
@@ -110,9 +127,11 @@ def run_section1() -> None:
     # 1.4 __getattr__ backward-compat proxy
     if config is not None:
         try:
-            _ = config.active_token_limit   # should proxy to config.memory.active_token_limit
-            _ = config.ollama_host          # should proxy to config.llm.ollama_host
-            _ = config.use_graph_rag        # should proxy to config.graph_rag.use_graph_rag
+            _ = (
+                config.active_token_limit
+            )  # should proxy to config.memory.active_token_limit
+            _ = config.ollama_host  # should proxy to config.llm.ollama_host
+            _ = config.use_graph_rag  # should proxy to config.graph_rag.use_graph_rag
             record(SEC, "Config __getattr__ backward-compat proxy works", True)
         except AttributeError as e:
             record(SEC, "Config __getattr__ backward-compat proxy works", False, str(e))
@@ -125,7 +144,9 @@ def run_section1() -> None:
             assert mgr.knowledge_store is not None
             record(SEC, "CortexFlowManager initialises with memory tiers", True)
         except Exception as e:
-            record(SEC, "CortexFlowManager initialises with memory tiers", False, str(e))
+            record(
+                SEC, "CortexFlowManager initialises with memory tiers", False, str(e)
+            )
             mgr = None
 
     # 1.6 add_knowledge ingestion
@@ -133,10 +154,15 @@ def run_section1() -> None:
         try:
             ids = mgr.add_knowledge(
                 "Python is a high-level programming language created by Guido van Rossum.",
-                source="test"
+                source="test",
             )
             assert ids, "No IDs returned"
-            record(SEC, "add_knowledge() ingests a fact and returns IDs", True, f"ids={ids[:3]}")
+            record(
+                SEC,
+                "add_knowledge() ingests a fact and returns IDs",
+                True,
+                f"ids={ids[:3]}",
+            )
         except Exception as e:
             record(SEC, "add_knowledge() ingests a fact and returns IDs", False, str(e))
 
@@ -182,7 +208,7 @@ def run_section2() -> None:
                 SEC,
                 f"extract_facts: '{sent[:50]}…'",
                 isinstance(facts, list),
-                f"{len(facts)} facts extracted"
+                f"{len(facts)} facts extracted",
             )
         except Exception as e:
             record(SEC, f"extract_facts: '{sent[:50]}…'", False, str(e))
@@ -195,7 +221,7 @@ def run_section2() -> None:
             SEC,
             "add_knowledge + get_facts_about('Einstein')",
             isinstance(facts, list),
-            f"{len(facts)} facts"
+            f"{len(facts)} facts",
         )
     except Exception as e:
         record(SEC, "add_knowledge + get_facts_about('Einstein')", False, str(e))
@@ -219,7 +245,9 @@ def run_section3() -> None:
                 location=os.environ.get("VERTEX_LOCATION", "global"),
                 api_key=os.environ.get("VERTEX_API_KEY", ""),
             )
-            .with_knowledge_store(knowledge_store_path=_tmp_db("s3"), retrieval_type="hybrid")
+            .with_knowledge_store(
+                knowledge_store_path=_tmp_db("s3"), retrieval_type="hybrid"
+            )
             .build()
         )
         ks = KnowledgeStore(config)
@@ -248,7 +276,7 @@ def run_section3() -> None:
             SEC,
             "Knowledge items stored in DB",
             len(rows) >= len(facts),
-            f"{len(rows)} items in DB"
+            f"{len(rows)} items in DB",
         )
     except Exception as e:
         record(SEC, "Knowledge items stored in DB", False, str(e))
@@ -269,15 +297,15 @@ def run_section3() -> None:
                 record(
                     SEC,
                     f"Retrieval: '{query}' (needs sentence-transformers/rank_bm25)",
-                    True,   # not a real failure — known dep limitation
-                    "0 hits — ML retrieval deps not installed (expected)"
+                    True,  # not a real failure — known dep limitation
+                    "0 hits — ML retrieval deps not installed (expected)",
                 )
             else:
                 record(
                     SEC,
                     f"Retrieval: '{query}'",
                     found,
-                    f"{len(hits)} hits, keyword_found={found}"
+                    f"{len(hits)} hits, keyword_found={found}",
                 )
         except Exception as e:
             record(SEC, f"Retrieval: '{query}'", False, str(e))
@@ -308,7 +336,9 @@ def run_section4() -> tuple[Any, Any]:
                 default_model="gemini-2.0-flash",
             )
             .with_knowledge_store(knowledge_store_path=_tmp_db("s4"))
-            .with_graph_rag(use_graph_rag=True, enable_multi_hop_queries=True, max_graph_hops=3)
+            .with_graph_rag(
+                use_graph_rag=True, enable_multi_hop_queries=True, max_graph_hops=3
+            )
             .build()
         )
         record(SEC, "Config built for Vertex AI", True)
@@ -319,9 +349,16 @@ def run_section4() -> tuple[Any, Any]:
     # 4.1 Direct generate_from_prompt
     try:
         client = create_llm_client(config)
-        response = client.generate_from_prompt("What is 2 + 2? Reply with just the number.")
+        response = client.generate_from_prompt(
+            "What is 2 + 2? Reply with just the number."
+        )
         passed = response and not response.startswith("Error:")
-        record(SEC, "VertexAIClient.generate_from_prompt()", passed, f"response='{response[:80]}'")
+        record(
+            SEC,
+            "VertexAIClient.generate_from_prompt()",
+            passed,
+            f"response='{response[:80]}'",
+        )
     except Exception as e:
         record(SEC, "VertexAIClient.generate_from_prompt()", False, str(e))
 
@@ -334,28 +371,49 @@ def run_section4() -> tuple[Any, Any]:
         ]
         response = client.generate(messages)
         passed = response and "paris" in response.lower()
-        record(SEC, "VertexAIClient.generate() with system+user messages", passed, f"'{response[:80]}'")
+        record(
+            SEC,
+            "VertexAIClient.generate() with system+user messages",
+            passed,
+            f"'{response[:80]}'",
+        )
     except Exception as e:
-        record(SEC, "VertexAIClient.generate() with system+user messages", False, str(e))
+        record(
+            SEC, "VertexAIClient.generate() with system+user messages", False, str(e)
+        )
 
     # 4.3 generate_stream() yields chunks
     try:
         client = create_llm_client(config)
         messages = [{"role": "user", "content": "Count 1 to 5, one number per word."}]
         chunks = list(client.generate_stream(messages))
-        passed = len(chunks) > 0 and any(c and not c.startswith("Error:") for c in chunks)
-        record(SEC, "VertexAIClient.generate_stream() yields chunks", passed, f"{len(chunks)} chunks")
+        passed = len(chunks) > 0 and any(
+            c and not c.startswith("Error:") for c in chunks
+        )
+        record(
+            SEC,
+            "VertexAIClient.generate_stream() yields chunks",
+            passed,
+            f"{len(chunks)} chunks",
+        )
     except Exception as e:
         record(SEC, "VertexAIClient.generate_stream() yields chunks", False, str(e))
 
     # 4.4 CortexFlowManager.generate_response() end-to-end
     try:
         mgr = CortexFlowManager(config)
-        mgr.add_knowledge("The speed of light is approximately 299,792,458 metres per second.")
+        mgr.add_knowledge(
+            "The speed of light is approximately 299,792,458 metres per second."
+        )
         mgr.add_message("user", "What is the speed of light?")
         response = mgr.generate_response()
         passed = response and not response.startswith("Error:")
-        record(SEC, "CortexFlowManager.generate_response() end-to-end", passed, f"'{response[:100]}'")
+        record(
+            SEC,
+            "CortexFlowManager.generate_response() end-to-end",
+            passed,
+            f"'{response[:100]}'",
+        )
     except Exception as e:
         record(SEC, "CortexFlowManager.generate_response() end-to-end", False, str(e))
         mgr = None
@@ -384,7 +442,9 @@ def run_section5(config=None) -> dict[str, float]:
                 default_model="gemini-2.0-flash",
             )
             .with_knowledge_store(knowledge_store_path=_tmp_db("s5"))
-            .with_graph_rag(use_graph_rag=True, enable_multi_hop_queries=True, max_graph_hops=3)
+            .with_graph_rag(
+                use_graph_rag=True, enable_multi_hop_queries=True, max_graph_hops=3
+            )
             .build()
         )
 
@@ -442,7 +502,11 @@ def run_section5(config=None) -> dict[str, float]:
             matched = [kw for kw in expected_kws if kw.lower() in response_lower]
             precision = len(matched) / len(expected_kws) if expected_kws else 1.0
             recall = len(matched) / len(expected_kws) if expected_kws else 1.0
-            f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+            f1 = (
+                (2 * precision * recall / (precision + recall))
+                if (precision + recall) > 0
+                else 0.0
+            )
 
             all_p.append(precision)
             all_r.append(recall)
@@ -452,11 +516,13 @@ def run_section5(config=None) -> dict[str, float]:
                 SEC,
                 f"GraphRAG: {desc}",
                 f1 > 0,
-                f"P={precision:.2f} R={recall:.2f} F1={f1:.2f} response='{response[:80]}'"
+                f"P={precision:.2f} R={recall:.2f} F1={f1:.2f} response='{response[:80]}'",
             )
         except Exception as e:
             record(SEC, f"GraphRAG: {desc}", False, str(e))
-            all_p.append(0.0); all_r.append(0.0); all_f1.append(0.0)
+            all_p.append(0.0)
+            all_r.append(0.0)
+            all_f1.append(0.0)
 
     if all_f1:
         summary = {
@@ -500,7 +566,9 @@ def run_section6(config=None) -> None:
                 default_model="gemini-2.0-flash",
             )
             .with_knowledge_store(knowledge_store_path=_tmp_db("s6"))
-            .with_graph_rag(use_graph_rag=True, enable_multi_hop_queries=True, max_graph_hops=5)
+            .with_graph_rag(
+                use_graph_rag=True, enable_multi_hop_queries=True, max_graph_hops=5
+            )
             .build()
         )
 
@@ -518,8 +586,22 @@ def run_section6(config=None) -> None:
         "Silicon Valley is in California.",
     ]
 
-    expected_path = ["python", "guido van rossum", "google", "mountain view", "silicon valley", "california"]
-    expected_entities = ["python", "guido van rossum", "google", "mountain view", "silicon valley", "california"]
+    expected_path = [
+        "python",
+        "guido van rossum",
+        "google",
+        "mountain view",
+        "silicon valley",
+        "california",
+    ]
+    expected_entities = [
+        "python",
+        "guido van rossum",
+        "google",
+        "mountain view",
+        "silicon valley",
+        "california",
+    ]
 
     for fact in chain_facts:
         try:
@@ -528,7 +610,10 @@ def run_section6(config=None) -> None:
             pass
 
     try:
-        mgr.add_message("user", "Trace the connection from Python to California via Guido van Rossum and Google.")
+        mgr.add_message(
+            "user",
+            "Trace the connection from Python to California via Guido van Rossum and Google.",
+        )
         response = mgr.generate_response()
         response_lower = response.lower()
 
@@ -546,9 +631,11 @@ def run_section6(config=None) -> None:
             SEC,
             "5-hop chain: Python → Guido → Google → Mountain View → Silicon Valley → California",
             scores["entity_coverage"] > 0,
-            f"entity_coverage={scores['entity_coverage']:.2f} composite={scores['composite_score']:.2f}"
+            f"entity_coverage={scores['entity_coverage']:.2f} composite={scores['composite_score']:.2f}",
         )
-        info(f"Multi-hop scores: {json.dumps({k: round(v, 3) for k, v in scores.items()})}")
+        info(
+            f"Multi-hop scores: {json.dumps({k: round(v, 3) for k, v in scores.items()})}"
+        )
 
     except Exception as e:
         record(SEC, "5-hop chain reasoning", False, str(e))
@@ -599,10 +686,17 @@ def run_section7() -> None:
             pass
 
     try:
-        mgr.add_message("user", "Tell me about Japan's capital, population and currency.")
+        mgr.add_message(
+            "user", "Tell me about Japan's capital, population and currency."
+        )
         response = mgr.generate_response()
         passed = response and not response.startswith("Error:") and len(response) > 20
-        record(SEC, "Chain of Agents generates response about Japan", passed, f"'{response[:120]}'")
+        record(
+            SEC,
+            "Chain of Agents generates response about Japan",
+            passed,
+            f"'{response[:120]}'",
+        )
     except Exception as e:
         record(SEC, "Chain of Agents generates response about Japan", False, str(e))
 
@@ -656,10 +750,15 @@ def run_section8() -> None:
             SEC,
             "Self-reflection generates response despite contradictory facts",
             passed,
-            f"'{response[:120]}'"
+            f"'{response[:120]}'",
         )
     except Exception as e:
-        record(SEC, "Self-reflection generates response despite contradictory facts", False, str(e))
+        record(
+            SEC,
+            "Self-reflection generates response despite contradictory facts",
+            False,
+            str(e),
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -682,7 +781,9 @@ def run_section9(graphrag_summary: dict[str, float]) -> None:
     total = total_passed + total_failed
     rate = total_passed / total * 100 if total else 0
     colour = GREEN if rate >= 80 else (YELLOW if rate >= 50 else RED)
-    print(f"\n  {BOLD}{colour}Overall: {total_passed}/{total} passed ({rate:.1f}%){RESET}")
+    print(
+        f"\n  {BOLD}{colour}Overall: {total_passed}/{total} passed ({rate:.1f}%){RESET}"
+    )
 
     if graphrag_summary:
         print(f"\n  {CYAN}GraphRAG Metrics:{RESET}")

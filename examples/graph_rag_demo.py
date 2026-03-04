@@ -13,8 +13,7 @@ from cortexflow.config import CortexFlowConfig
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 # Test data with connected facts for knowledge graph
@@ -32,7 +31,6 @@ TEST_KNOWLEDGE = [
     "PyTorch is a machine learning framework developed by Facebook.",
     "Facebook was founded by Mark Zuckerberg in 2004.",
     "Facebook uses Python for many of its services and tools.",
-
     # Geography domain - explicit relationships
     "San Francisco is located in California.",
     "California is a state in the western United States.",
@@ -45,7 +43,6 @@ TEST_KNOWLEDGE = [
     "Mountain View is a city in Silicon Valley.",
     "Facebook's headquarters are located in Menlo Park, California.",
     "Menlo Park is a city in Silicon Valley.",
-
     # Connections between domains - explicit relationships
     "Many technology companies like Google and Facebook have offices in California.",
     "Python is widely used by Silicon Valley companies for development.",
@@ -54,6 +51,7 @@ TEST_KNOWLEDGE = [
     "Guido van Rossum worked at Google's Silicon Valley campus.",
     "Python is the most popular programming language in Silicon Valley.",
 ]
+
 
 def test_graph_rag():
     """Test GraphRAG functionality."""
@@ -70,24 +68,22 @@ def test_graph_rag():
         graph_weight=0.3,
         enable_multi_hop_queries=True,
         max_graph_hops=3,
-        default_model="gemma3:1b"
+        default_model="gemma3:1b",
     )
 
     # Initialize manager
     manager = CortexFlowManager(config)
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("Testing GraphRAG Functionality")
-    print("="*80)
+    print("=" * 80)
 
     # Add knowledge to the system
     print("\nAdding knowledge to the system...")
     for i, knowledge in enumerate(TEST_KNOWLEDGE):
-        print(f"[{i+1}/{len(TEST_KNOWLEDGE)}] Adding: {knowledge}")
+        print(f"[{i + 1}/{len(TEST_KNOWLEDGE)}] Adding: {knowledge}")
         manager.knowledge_store.remember_explicit(
-            text=knowledge,
-            source="test_data",
-            confidence=0.9
+            text=knowledge, source="test_data", confidence=0.9
         )
 
     # Print graph statistics
@@ -103,7 +99,7 @@ def test_graph_rag():
         "What is Python?",
         "Who created Python?",
         "Where is Google's headquarters?",
-        "What is in California?"
+        "What is in California?",
     ]
 
     for query in single_hop_queries:
@@ -111,7 +107,7 @@ def test_graph_rag():
         results = manager.knowledge_store.get_relevant_knowledge(query, max_results=3)
         print("Results:")
         for i, result in enumerate(results):
-            print(f"  {i+1}. {result['text']}")
+            print(f"  {i + 1}. {result['text']}")
 
     # Test multi-hop queries
     print("\nTesting multi-hop queries:")
@@ -119,7 +115,7 @@ def test_graph_rag():
         "What is the connection between Python and Google?",
         "How are Silicon Valley and Python related?",
         "What connects Facebook and machine learning?",
-        "Is there a connection between California and Guido van Rossum?"
+        "Is there a connection between California and Guido van Rossum?",
     ]
 
     for query in multi_hop_queries:
@@ -130,11 +126,15 @@ def test_graph_rag():
         print("Graph search details:")
         graph_results = manager.knowledge_store._graph_search(query, max_results=5)
         for i, result in enumerate(graph_results):
-            print(f"  {i+1}. {result.get('text', '')} [Score: {result.get('score', 0):.2f}, Type: {result.get('type', 'unknown')}]")
+            print(
+                f"  {i + 1}. {result.get('text', '')} [Score: {result.get('score', 0):.2f}, Type: {result.get('type', 'unknown')}]"
+            )
 
         print("Final results:")
         for i, result in enumerate(results):
-            print(f"  {i+1}. {result['text']} [Type: {result.get('type', 'unknown')}]")
+            print(
+                f"  {i + 1}. {result['text']} [Type: {result.get('type', 'unknown')}]"
+            )
 
     # Test with Ollama integration if available
     print("\nTesting with Ollama integration:")
@@ -155,14 +155,16 @@ def test_graph_rag():
         test_questions = [
             "Who created Python and where did they work?",
             "What machine learning frameworks were developed by big tech companies?",
-            "Tell me about the connection between California and technology companies"
+            "Tell me about the connection between California and technology companies",
         ]
 
         for question in test_questions:
             print(f"\nQUESTION: {question}")
 
             # Get relevant knowledge using GraphRAG
-            context = manager.knowledge_store.get_relevant_knowledge(question, max_results=5)
+            context = manager.knowledge_store.get_relevant_knowledge(
+                question, max_results=5
+            )
             context_text = "\n".join([item["text"] for item in context])
 
             # Build prompt for Ollama
@@ -181,8 +183,12 @@ def test_graph_rag():
             try:
                 response = requests.post(
                     f"{config.ollama_host}/api/generate",
-                    json={"model": config.default_model, "prompt": prompt, "stream": False},
-                    timeout=30
+                    json={
+                        "model": config.default_model,
+                        "prompt": prompt,
+                        "stream": False,
+                    },
+                    timeout=30,
                 )
 
                 if response.status_code == 200:
@@ -212,20 +218,18 @@ def test_graph_rag():
         # Test path queries
         print("\nPath queries:")
         if person_entities and len(person_entities) >= 2:
-            person1 = person_entities[0]['entity']
-            person2 = person_entities[-1]['entity']
+            person1 = person_entities[0]["entity"]
+            person2 = person_entities[-1]["entity"]
             print(f"Finding paths between {person1} and {person2}:")
 
             paths = graph_store.path_query(
-                start_entity=person1,
-                end_entity=person2,
-                max_hops=3
+                start_entity=person1, end_entity=person2, max_hops=3
             )
 
             if paths:
                 for i, path in enumerate(paths):
                     path_text = manager.knowledge_store._format_path_as_text(path)
-                    print(f"  Path {i+1}: {path_text}")
+                    print(f"  Path {i + 1}: {path_text}")
             else:
                 print("  No paths found")
 
@@ -233,6 +237,7 @@ def test_graph_rag():
     manager.close()
 
     print("\nTest completed.")
+
 
 if __name__ == "__main__":
     test_graph_rag()

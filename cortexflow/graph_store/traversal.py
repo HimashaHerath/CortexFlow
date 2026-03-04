@@ -4,6 +4,7 @@ Graph traversal and path-finding methods.
 Includes path_query, weighted_path_query, bidirectional_search,
 constrained_path_search, and graph abstraction utilities.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -22,6 +23,7 @@ MAX_PATHS_TO_ENUMERATE = 100
 # via multiple inheritance (see store.py).
 # ---------------------------------------------------------------------------
 
+
 class TraversalMixin:
     """Methods for path finding, bidirectional search, and graph abstraction.
 
@@ -36,7 +38,9 @@ class TraversalMixin:
     # The constant is also available as a class attribute for backward compat
     MAX_PATHS_TO_ENUMERATE = MAX_PATHS_TO_ENUMERATE
 
-    def path_query(self, start_entity: str, end_entity: str, max_hops: int = 3) -> list[list[dict[str, Any]]]:
+    def path_query(
+        self, start_entity: str, end_entity: str, max_hops: int = 3
+    ) -> list[list[dict[str, Any]]]:
         """
         Find paths between two entities in the graph.
 
@@ -69,14 +73,18 @@ class TraversalMixin:
             cursor = conn.cursor()
 
             # Get source entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (start_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (start_entity,)
+            )
             source_row = cursor.fetchone()
 
             if source_row:
                 source_id = source_row[0]
 
             # Get target entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (end_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (end_entity,)
+            )
             target_row = cursor.fetchone()
 
             if target_row:
@@ -103,7 +111,9 @@ class TraversalMixin:
                 # Find simple paths with a hard cap via islice to avoid
                 # unbounded enumeration on dense graphs.
                 simple_paths = itertools.islice(
-                    nx.all_simple_paths(self.graph, source_id, target_id, cutoff=max_hops),
+                    nx.all_simple_paths(
+                        self.graph, source_id, target_id, cutoff=max_hops
+                    ),
                     self.MAX_PATHS_TO_ENUMERATE,
                 )
 
@@ -117,8 +127,8 @@ class TraversalMixin:
 
                         node_info = {
                             "id": node_id,
-                            "entity": node_details.get('entity', 'Unknown'),
-                            "type": node_details.get('entity_type', 'unknown')
+                            "entity": node_details.get("entity", "Unknown"),
+                            "type": node_details.get("entity_type", "unknown"),
                         }
 
                         # Add relation to next node if not the last node
@@ -128,9 +138,9 @@ class TraversalMixin:
 
                             if edge_data:
                                 relation_info = {
-                                    "type": edge_data.get('relation', 'is_related_to'),
-                                    "weight": edge_data.get('weight', 1.0),
-                                    "confidence": edge_data.get('confidence', 0.5)
+                                    "type": edge_data.get("relation", "is_related_to"),
+                                    "weight": edge_data.get("weight", 1.0),
+                                    "confidence": edge_data.get("confidence", 0.5),
                                 }
                                 node_info["next_relation"] = relation_info
 
@@ -148,9 +158,14 @@ class TraversalMixin:
             logging.error(f"Error in path query: {e}")
             return []
 
-    def weighted_path_query(self, start_entity: str, end_entity: str,
-                          max_hops: int = 3, importance_weight: float = 0.6,
-                          confidence_weight: float = 0.4) -> list[list[dict[str, Any]]]:
+    def weighted_path_query(
+        self,
+        start_entity: str,
+        end_entity: str,
+        max_hops: int = 3,
+        importance_weight: float = 0.6,
+        confidence_weight: float = 0.4,
+    ) -> list[list[dict[str, Any]]]:
         """
         Find weighted paths between entities considering relation importance and confidence.
 
@@ -185,14 +200,18 @@ class TraversalMixin:
             cursor = conn.cursor()
 
             # Get source entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (start_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (start_entity,)
+            )
             source_row = cursor.fetchone()
 
             if source_row:
                 source_id = source_row[0]
 
             # Get target entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (end_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (end_entity,)
+            )
             target_row = cursor.fetchone()
 
             if target_row:
@@ -215,23 +234,27 @@ class TraversalMixin:
             # Copy edges with inverted weights
             for u, v, data in self.graph.edges(data=True):
                 # Calculate combined weight based on importance and confidence
-                edge_weight = data.get('weight', 0.5)
-                edge_confidence = data.get('confidence', 0.5)
+                edge_weight = data.get("weight", 0.5)
+                edge_confidence = data.get("confidence", 0.5)
 
                 # Normalize weights to 0-1 range
                 norm_weight = min(max(edge_weight, 0.1), 1.0)
                 norm_confidence = min(max(edge_confidence, 0.1), 1.0)
 
                 # Calculate combined weight
-                combined_weight = (importance_weight * norm_weight) + (confidence_weight * norm_confidence)
+                combined_weight = (importance_weight * norm_weight) + (
+                    confidence_weight * norm_confidence
+                )
 
                 # Invert weight for shortest path algorithm (higher weight/confidence = shorter path)
-                inverted_weight = 1.0 / combined_weight if combined_weight > 0 else float('inf')
+                inverted_weight = (
+                    1.0 / combined_weight if combined_weight > 0 else float("inf")
+                )
 
                 # Create a copy of the data without the weight to avoid conflict
                 edge_data = data.copy()
-                if 'weight' in edge_data:
-                    del edge_data['weight']
+                if "weight" in edge_data:
+                    del edge_data["weight"]
 
                 # Add edge with inverted weight
                 weighted_graph.add_edge(u, v, weight=inverted_weight, **edge_data)
@@ -239,7 +262,9 @@ class TraversalMixin:
             # Find k shortest paths
             try:
                 # Get k-shortest paths using Dijkstra
-                for path in nx.shortest_simple_paths(weighted_graph, source_id, target_id, weight='weight'):
+                for path in nx.shortest_simple_paths(
+                    weighted_graph, source_id, target_id, weight="weight"
+                ):
                     # Check max hops
                     if len(path) > max_hops + 1:
                         break
@@ -254,8 +279,8 @@ class TraversalMixin:
 
                         node_info = {
                             "id": node_id,
-                            "entity": node_details.get('entity', 'Unknown'),
-                            "type": node_details.get('entity_type', 'unknown')
+                            "entity": node_details.get("entity", "Unknown"),
+                            "type": node_details.get("entity_type", "unknown"),
                         }
 
                         # Add relation to next node if not the last node
@@ -264,27 +289,31 @@ class TraversalMixin:
                             edge_data = self.graph.get_edge_data(node_id, next_node)
 
                             if edge_data:
-                                edge_weight = edge_data.get('weight', 0.5)
-                                edge_confidence = edge_data.get('confidence', 0.5)
+                                edge_weight = edge_data.get("weight", 0.5)
+                                edge_confidence = edge_data.get("confidence", 0.5)
 
                                 relation_info = {
-                                    "type": edge_data.get('relation', 'is_related_to'),
+                                    "type": edge_data.get("relation", "is_related_to"),
                                     "weight": edge_weight,
-                                    "confidence": edge_confidence
+                                    "confidence": edge_confidence,
                                 }
                                 node_info["next_relation"] = relation_info
 
                                 path_total_weight += edge_weight
-                                path_min_confidence = min(path_min_confidence, edge_confidence)
+                                path_min_confidence = min(
+                                    path_min_confidence, edge_confidence
+                                )
 
                         formatted_path.append(node_info)
 
                     # Add path metadata
                     formatted_path_with_meta = {
                         "path": formatted_path,
-                        "avg_weight": path_total_weight / (len(path) - 1) if len(path) > 1 else 0,
+                        "avg_weight": path_total_weight / (len(path) - 1)
+                        if len(path) > 1
+                        else 0,
                         "min_confidence": path_min_confidence,
-                        "path_length": len(path) - 1
+                        "path_length": len(path) - 1,
                     }
 
                     weighted_paths.append(formatted_path_with_meta)
@@ -305,7 +334,9 @@ class TraversalMixin:
             logging.error(f"Error in weighted path query: {e}")
             return []
 
-    def bidirectional_search(self, start_entity: str, end_entity: str, max_hops: int = 3) -> list[list[dict[str, Any]]]:
+    def bidirectional_search(
+        self, start_entity: str, end_entity: str, max_hops: int = 3
+    ) -> list[list[dict[str, Any]]]:
         """
         Find paths between entities using bidirectional search for efficiency.
 
@@ -338,14 +369,18 @@ class TraversalMixin:
             cursor = conn.cursor()
 
             # Get source entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (start_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (start_entity,)
+            )
             source_row = cursor.fetchone()
 
             if source_row:
                 source_id = source_row[0]
 
             # Get target entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (end_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (end_entity,)
+            )
             target_row = cursor.fetchone()
 
             if target_row:
@@ -356,7 +391,9 @@ class TraversalMixin:
 
             # Return empty if entities not found
             if not source_id or not target_id:
-                logging.warning(f"Could not find entities: {start_entity} or {end_entity}")
+                logging.warning(
+                    f"Could not find entities: {start_entity} or {end_entity}"
+                )
                 return []
 
             # Check for direct connection through a common node
@@ -370,7 +407,7 @@ class TraversalMixin:
                     for connector in common:
                         # Get details about the connector node
                         connector_details = self.get_entity_metadata(connector)
-                        connector_name = connector_details.get('entity', 'Unknown')
+                        connector_name = connector_details.get("entity", "Unknown")
 
                         # Create a simple path through the common node
                         formatted_path = []
@@ -379,17 +416,17 @@ class TraversalMixin:
                         source_details = self.get_entity_metadata(source_id)
                         source_node = {
                             "id": source_id,
-                            "entity": source_details.get('entity', 'Unknown'),
-                            "type": source_details.get('entity_type', 'unknown')
+                            "entity": source_details.get("entity", "Unknown"),
+                            "type": source_details.get("entity_type", "unknown"),
                         }
 
                         # Get edge data for source to connector
                         if self.graph.has_edge(source_id, connector):
                             edge_data = self.graph.get_edge_data(source_id, connector)
                             relation_info = {
-                                "type": edge_data.get('relation', 'is_related_to'),
-                                "weight": edge_data.get('weight', 1.0),
-                                "confidence": edge_data.get('confidence', 0.5)
+                                "type": edge_data.get("relation", "is_related_to"),
+                                "weight": edge_data.get("weight", 1.0),
+                                "confidence": edge_data.get("confidence", 0.5),
                             }
                             source_node["next_relation"] = relation_info
                         else:
@@ -397,8 +434,8 @@ class TraversalMixin:
                             edge_data = self.graph.get_edge_data(connector, source_id)
                             relation_info = {
                                 "type": f"inverse_{edge_data.get('relation', 'is_related_to')}",
-                                "weight": edge_data.get('weight', 1.0),
-                                "confidence": edge_data.get('confidence', 0.5)
+                                "weight": edge_data.get("weight", 1.0),
+                                "confidence": edge_data.get("confidence", 0.5),
                             }
                             source_node["next_relation"] = relation_info
 
@@ -408,16 +445,16 @@ class TraversalMixin:
                         connector_node = {
                             "id": connector,
                             "entity": connector_name,
-                            "type": connector_details.get('entity_type', 'unknown')
+                            "type": connector_details.get("entity_type", "unknown"),
                         }
 
                         # Get edge data for connector to target
                         if self.graph.has_edge(connector, target_id):
                             edge_data = self.graph.get_edge_data(connector, target_id)
                             relation_info = {
-                                "type": edge_data.get('relation', 'is_related_to'),
-                                "weight": edge_data.get('weight', 1.0),
-                                "confidence": edge_data.get('confidence', 0.5)
+                                "type": edge_data.get("relation", "is_related_to"),
+                                "weight": edge_data.get("weight", 1.0),
+                                "confidence": edge_data.get("confidence", 0.5),
                             }
                             connector_node["next_relation"] = relation_info
                         else:
@@ -425,8 +462,8 @@ class TraversalMixin:
                             edge_data = self.graph.get_edge_data(target_id, connector)
                             relation_info = {
                                 "type": f"inverse_{edge_data.get('relation', 'is_related_to')}",
-                                "weight": edge_data.get('weight', 1.0),
-                                "confidence": edge_data.get('confidence', 0.5)
+                                "weight": edge_data.get("weight", 1.0),
+                                "confidence": edge_data.get("confidence", 0.5),
                             }
                             connector_node["next_relation"] = relation_info
 
@@ -436,8 +473,8 @@ class TraversalMixin:
                         target_details = self.get_entity_metadata(target_id)
                         target_node = {
                             "id": target_id,
-                            "entity": target_details.get('entity', 'Unknown'),
-                            "type": target_details.get('entity_type', 'unknown')
+                            "entity": target_details.get("entity", "Unknown"),
+                            "type": target_details.get("entity_type", "unknown"),
                         }
                         formatted_path.append(target_node)
 
@@ -453,7 +490,9 @@ class TraversalMixin:
 
             # If no direct connection through common neighbors, use bidirectional BFS
             # Implementation of bidirectional BFS
-            max_distance = max_hops // 2 + max_hops % 2  # Split max hops between forward and backward searches
+            max_distance = (
+                max_hops // 2 + max_hops % 2
+            )  # Split max hops between forward and backward searches
 
             # Forward search from source
             forward_paths = {source_id: [[source_id]]}
@@ -480,7 +519,9 @@ class TraversalMixin:
                             if neighbor not in forward_visited:
                                 new_forward_paths.setdefault(neighbor, [])
                                 for path in paths_to_node:
-                                    new_forward_paths[neighbor].append(path + [neighbor])
+                                    new_forward_paths[neighbor].append(
+                                        path + [neighbor]
+                                    )
                                 forward_visited.add(neighbor)
 
                                 # Check for intersection
@@ -499,7 +540,9 @@ class TraversalMixin:
                             if neighbor not in backward_visited:
                                 new_backward_paths.setdefault(neighbor, [])
                                 for path in paths_to_node:
-                                    new_backward_paths[neighbor].append([neighbor] + path)
+                                    new_backward_paths[neighbor].append(
+                                        [neighbor] + path
+                                    )
                                 backward_visited.add(neighbor)
 
                                 # Check for intersection
@@ -542,10 +585,14 @@ class TraversalMixin:
 
             # If no paths found, try a direct connection search
             if not complete_paths:
-                logging.info("No paths found using bidirectional BFS, trying direct path search")
+                logging.info(
+                    "No paths found using bidirectional BFS, trying direct path search"
+                )
                 try:
                     # Look for direct paths using a higher max_hops
-                    for path in nx.all_simple_paths(self.graph, source_id, target_id, cutoff=max_hops):
+                    for path in nx.all_simple_paths(
+                        self.graph, source_id, target_id, cutoff=max_hops
+                    ):
                         complete_paths.append(path)
                         # Only take the first few paths
                         if len(complete_paths) >= 3:
@@ -563,8 +610,8 @@ class TraversalMixin:
 
                     node_info = {
                         "id": node_id,
-                        "entity": node_details.get('entity', 'Unknown'),
-                        "type": node_details.get('entity_type', 'unknown')
+                        "entity": node_details.get("entity", "Unknown"),
+                        "type": node_details.get("entity_type", "unknown"),
                     }
 
                     # Add relation to next node if not the last node
@@ -574,9 +621,9 @@ class TraversalMixin:
 
                         if edge_data:
                             relation_info = {
-                                "type": edge_data.get('relation', 'is_related_to'),
-                                "weight": edge_data.get('weight', 1.0),
-                                "confidence": edge_data.get('confidence', 0.5)
+                                "type": edge_data.get("relation", "is_related_to"),
+                                "weight": edge_data.get("weight", 1.0),
+                                "confidence": edge_data.get("confidence", 0.5),
                             }
                             node_info["next_relation"] = relation_info
 
@@ -586,12 +633,16 @@ class TraversalMixin:
 
             # If we still haven't found a path, try a common connection through intermediate nodes
             if not paths:
-                logging.info("No direct paths found, looking for connections through intermediate nodes")
+                logging.info(
+                    "No direct paths found, looking for connections through intermediate nodes"
+                )
                 # Find all nodes that connect to the source
                 source_connections = set()
                 try:
                     for node in self.graph.nodes():
-                        if nx.has_path(self.graph, source_id, node) or nx.has_path(self.graph, node, source_id):
+                        if nx.has_path(self.graph, source_id, node) or nx.has_path(
+                            self.graph, node, source_id
+                        ):
                             source_connections.add(node)
                 except Exception as e:
                     logging.error(f"Error finding source connections: {e}")
@@ -600,7 +651,9 @@ class TraversalMixin:
                 target_connections = set()
                 try:
                     for node in self.graph.nodes():
-                        if nx.has_path(self.graph, target_id, node) or nx.has_path(self.graph, node, target_id):
+                        if nx.has_path(self.graph, target_id, node) or nx.has_path(
+                            self.graph, node, target_id
+                        ):
                             target_connections.add(node)
                 except Exception as e:
                     logging.error(f"Error finding target connections: {e}")
@@ -614,14 +667,21 @@ class TraversalMixin:
                     # Try to find a path from source to connector
                     source_to_connector = None
                     try:
-                        source_to_connector = next(nx.all_simple_paths(
-                            self.graph, source_id, connector, cutoff=max_hops//2
-                        ))
+                        source_to_connector = next(
+                            nx.all_simple_paths(
+                                self.graph, source_id, connector, cutoff=max_hops // 2
+                            )
+                        )
                     except (nx.NetworkXNoPath, StopIteration):
                         try:
-                            source_to_connector = next(nx.all_simple_paths(
-                                self.graph, connector, source_id, cutoff=max_hops//2
-                            ))
+                            source_to_connector = next(
+                                nx.all_simple_paths(
+                                    self.graph,
+                                    connector,
+                                    source_id,
+                                    cutoff=max_hops // 2,
+                                )
+                            )
                             # Reverse the path
                             source_to_connector = list(reversed(source_to_connector))
                         except (nx.NetworkXNoPath, StopIteration):
@@ -630,14 +690,21 @@ class TraversalMixin:
                     # Try to find a path from connector to target
                     connector_to_target = None
                     try:
-                        connector_to_target = next(nx.all_simple_paths(
-                            self.graph, connector, target_id, cutoff=max_hops//2
-                        ))
+                        connector_to_target = next(
+                            nx.all_simple_paths(
+                                self.graph, connector, target_id, cutoff=max_hops // 2
+                            )
+                        )
                     except (nx.NetworkXNoPath, StopIteration):
                         try:
-                            connector_to_target = next(nx.all_simple_paths(
-                                self.graph, target_id, connector, cutoff=max_hops//2
-                            ))
+                            connector_to_target = next(
+                                nx.all_simple_paths(
+                                    self.graph,
+                                    target_id,
+                                    connector,
+                                    cutoff=max_hops // 2,
+                                )
+                            )
                             # Reverse the path
                             connector_to_target = list(reversed(connector_to_target))
                         except (nx.NetworkXNoPath, StopIteration):
@@ -660,8 +727,8 @@ class TraversalMixin:
 
                             node_info = {
                                 "id": node_id,
-                                "entity": node_details.get('entity', 'Unknown'),
-                                "type": node_details.get('entity_type', 'unknown')
+                                "entity": node_details.get("entity", "Unknown"),
+                                "type": node_details.get("entity_type", "unknown"),
                             }
 
                             # Add relation to next node if not the last node
@@ -671,9 +738,11 @@ class TraversalMixin:
 
                                 if edge_data:
                                     relation_info = {
-                                        "type": edge_data.get('relation', 'is_related_to'),
-                                        "weight": edge_data.get('weight', 1.0),
-                                        "confidence": edge_data.get('confidence', 0.5)
+                                        "type": edge_data.get(
+                                            "relation", "is_related_to"
+                                        ),
+                                        "weight": edge_data.get("weight", 1.0),
+                                        "confidence": edge_data.get("confidence", 0.5),
                                     }
                                     node_info["next_relation"] = relation_info
 
@@ -687,10 +756,14 @@ class TraversalMixin:
             logging.error(f"Error in bidirectional search: {e}")
             return []
 
-    def constrained_path_search(self, start_entity: str, end_entity: str,
-                              allowed_relations: list[str] = None,
-                              forbidden_relations: list[str] = None,
-                              max_hops: int = 3) -> list[list[dict[str, Any]]]:
+    def constrained_path_search(
+        self,
+        start_entity: str,
+        end_entity: str,
+        allowed_relations: list[str] = None,
+        forbidden_relations: list[str] = None,
+        max_hops: int = 3,
+    ) -> list[list[dict[str, Any]]]:
         """
         Find paths with constraints on relation types.
 
@@ -725,14 +798,18 @@ class TraversalMixin:
             cursor = conn.cursor()
 
             # Get source entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (start_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (start_entity,)
+            )
             source_row = cursor.fetchone()
 
             if source_row:
                 source_id = source_row[0]
 
             # Get target entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (end_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (end_entity,)
+            )
             target_row = cursor.fetchone()
 
             if target_row:
@@ -754,7 +831,7 @@ class TraversalMixin:
 
             # Copy edges that meet constraints
             for u, v, data in self.graph.edges(data=True):
-                relation = data.get('relation', '')
+                relation = data.get("relation", "")
 
                 # Skip forbidden relations
                 if forbidden_relations and relation in forbidden_relations:
@@ -767,7 +844,9 @@ class TraversalMixin:
             # Find paths in constrained graph
             try:
                 # Find all simple paths (can be slow for large graphs)
-                simple_paths = nx.all_simple_paths(constrained_graph, source_id, target_id, cutoff=max_hops)
+                simple_paths = nx.all_simple_paths(
+                    constrained_graph, source_id, target_id, cutoff=max_hops
+                )
 
                 # Convert paths to our format
                 for path in list(simple_paths)[:5]:  # Limit to top 5 paths
@@ -779,8 +858,8 @@ class TraversalMixin:
 
                         node_info = {
                             "id": node_id,
-                            "entity": node_details.get('entity', 'Unknown'),
-                            "type": node_details.get('entity_type', 'unknown')
+                            "entity": node_details.get("entity", "Unknown"),
+                            "type": node_details.get("entity_type", "unknown"),
                         }
 
                         # Add relation to next node if not the last node
@@ -790,9 +869,9 @@ class TraversalMixin:
 
                             if edge_data:
                                 relation_info = {
-                                    "type": edge_data.get('relation', 'is_related_to'),
-                                    "weight": edge_data.get('weight', 1.0),
-                                    "confidence": edge_data.get('confidence', 0.5)
+                                    "type": edge_data.get("relation", "is_related_to"),
+                                    "weight": edge_data.get("weight", 1.0),
+                                    "confidence": edge_data.get("confidence", 0.5),
                                 }
                                 node_info["next_relation"] = relation_info
 
@@ -810,9 +889,12 @@ class TraversalMixin:
             logging.error(f"Error in constrained path search: {e}")
             return []
 
-    def contract_graph(self, min_edge_weight: float = 0.2,
-                      min_confidence: float = 0.3,
-                      combine_parallel_edges: bool = True) -> dict[str, Any]:
+    def contract_graph(
+        self,
+        min_edge_weight: float = 0.2,
+        min_confidence: float = 0.3,
+        combine_parallel_edges: bool = True,
+    ) -> dict[str, Any]:
         """
         Contract the graph to handle large knowledge graphs efficiently.
         Removes low-weight/confidence edges and combines parallel edges.
@@ -835,7 +917,7 @@ class TraversalMixin:
             "original_edges": self.graph.number_of_edges(),
             "removed_edges": 0,
             "combined_edges": 0,
-            "success": True
+            "success": True,
         }
 
         try:
@@ -848,8 +930,8 @@ class TraversalMixin:
 
             # Filter edges by weight and confidence
             for u, v, data in self.graph.edges(data=True):
-                edge_weight = data.get('weight', 0.5)
-                edge_confidence = data.get('confidence', 0.5)
+                edge_weight = data.get("weight", 0.5)
+                edge_confidence = data.get("confidence", 0.5)
 
                 if edge_weight >= min_edge_weight and edge_confidence >= min_confidence:
                     contracted_graph.add_edge(u, v, **data)
@@ -872,16 +954,16 @@ class TraversalMixin:
                             "relations": [],
                             "weight": 0,
                             "confidence": 0,
-                            "is_combined": True
+                            "is_combined": True,
                         }
 
                         for key, data in edges:
-                            relation = data.get('relation', '')
+                            relation = data.get("relation", "")
                             if relation and relation not in combined_data["relations"]:
                                 combined_data["relations"].append(relation)
 
-                            combined_data["weight"] += data.get('weight', 0.5)
-                            combined_data["confidence"] += data.get('confidence', 0.5)
+                            combined_data["weight"] += data.get("weight", 0.5)
+                            combined_data["confidence"] += data.get("confidence", 0.5)
 
                         # Average the weight and confidence
                         combined_data["weight"] /= len(edges)
@@ -889,7 +971,9 @@ class TraversalMixin:
 
                         # Create a combined relation description
                         if combined_data["relations"]:
-                            combined_data["relation"] = " & ".join(combined_data["relations"])
+                            combined_data["relation"] = " & ".join(
+                                combined_data["relations"]
+                            )
                         else:
                             combined_data["relation"] = "related_to"
 
@@ -914,8 +998,9 @@ class TraversalMixin:
             logging.error(f"Error contracting graph: {e}")
             return {"success": False, "reason": str(e)}
 
-    def create_graph_abstraction(self, community_resolution: float = 1.0,
-                               min_community_size: int = 3) -> dict[str, Any]:
+    def create_graph_abstraction(
+        self, community_resolution: float = 1.0, min_community_size: int = 3
+    ) -> dict[str, Any]:
         """
         Create a hierarchical abstraction of the graph using community detection.
         Useful for navigating and querying large knowledge graphs.
@@ -936,15 +1021,20 @@ class TraversalMixin:
         try:
             import community as community_louvain
         except ImportError:
-            logging.warning("python-louvain package not found. Install it for graph abstraction.")
-            return {"success": False, "reason": "Required package 'python-louvain' not installed"}
+            logging.warning(
+                "python-louvain package not found. Install it for graph abstraction."
+            )
+            return {
+                "success": False,
+                "reason": "Required package 'python-louvain' not installed",
+            }
 
         abstraction_stats = {
             "original_nodes": self.graph.number_of_nodes(),
             "original_edges": self.graph.number_of_edges(),
             "communities": 0,
             "supernodes": 0,
-            "success": True
+            "success": True,
         }
 
         try:
@@ -952,9 +1042,9 @@ class TraversalMixin:
             undirected_graph = self.graph.to_undirected()
 
             # Detect communities using Louvain method
-            partition = community_louvain.best_partition(undirected_graph,
-                                                        resolution=community_resolution,
-                                                        random_state=42)
+            partition = community_louvain.best_partition(
+                undirected_graph, resolution=community_resolution, random_state=42
+            )
 
             # Count communities
             communities = {}
@@ -984,19 +1074,23 @@ class TraversalMixin:
                     entity_types = {}
                     for node in nodes:
                         node_metadata = self.get_entity_metadata(node)
-                        node_type = node_metadata.get('entity_type', 'unknown')
+                        node_type = node_metadata.get("entity_type", "unknown")
                         entity_types[node_type] = entity_types.get(node_type, 0) + 1
 
                     # Get most common entity type
-                    common_type = max(entity_types.items(), key=lambda x: x[1])[0] if entity_types else "mixed"
+                    common_type = (
+                        max(entity_types.items(), key=lambda x: x[1])[0]
+                        if entity_types
+                        else "mixed"
+                    )
 
                     supernode_attrs = {
                         "is_supernode": True,
                         "community_id": community_id,
                         "size": len(nodes),
-                        "representative": rep_metadata.get('entity', 'Unknown'),
+                        "representative": rep_metadata.get("entity", "Unknown"),
                         "entity_type": common_type,
-                        "members": nodes  # Store member nodes for expansion
+                        "members": nodes,  # Store member nodes for expansion
                     }
 
                     abstracted_graph.add_node(supernode_id, **supernode_attrs)
@@ -1019,13 +1113,19 @@ class TraversalMixin:
                         continue
 
                 # Determine source node or supernode
-                if u_community is not None and len(communities[u_community]) >= min_community_size:
+                if (
+                    u_community is not None
+                    and len(communities[u_community]) >= min_community_size
+                ):
                     source = f"community_{u_community}"
                 else:
                     source = u
 
                 # Determine target node or supernode
-                if v_community is not None and len(communities[v_community]) >= min_community_size:
+                if (
+                    v_community is not None
+                    and len(communities[v_community]) >= min_community_size
+                ):
                     target = f"community_{v_community}"
                 else:
                     target = v
@@ -1034,14 +1134,19 @@ class TraversalMixin:
                 if abstracted_graph.has_edge(source, target):
                     # Update existing edge
                     edge_data = abstracted_graph.get_edge_data(source, target)
-                    edge_data["weight"] = edge_data.get("weight", 0) + data.get("weight", 1.0)
+                    edge_data["weight"] = edge_data.get("weight", 0) + data.get(
+                        "weight", 1.0
+                    )
                     edge_data["count"] = edge_data.get("count", 0) + 1
                 else:
                     # Add new edge
-                    abstracted_graph.add_edge(source, target,
-                                             weight=data.get("weight", 1.0),
-                                             relation=data.get("relation", "related_to"),
-                                             count=1)
+                    abstracted_graph.add_edge(
+                        source,
+                        target,
+                        weight=data.get("weight", 1.0),
+                        relation=data.get("relation", "related_to"),
+                        count=1,
+                    )
 
             # Normalize edge weights for abstracted graph
             for u, v, data in abstracted_graph.edges(data=True):
@@ -1055,8 +1160,10 @@ class TraversalMixin:
             # Update stats
             abstraction_stats["abstracted_nodes"] = abstracted_graph.number_of_nodes()
             abstraction_stats["abstracted_edges"] = abstracted_graph.number_of_edges()
-            abstraction_stats["compression_ratio"] = (abstraction_stats["original_nodes"] /
-                                                     abstraction_stats["abstracted_nodes"])
+            abstraction_stats["compression_ratio"] = (
+                abstraction_stats["original_nodes"]
+                / abstraction_stats["abstracted_nodes"]
+            )
 
             return abstraction_stats
 
@@ -1064,8 +1171,9 @@ class TraversalMixin:
             logging.error(f"Error creating graph abstraction: {e}")
             return {"success": False, "reason": str(e)}
 
-    def path_query_with_abstraction(self, start_entity: str, end_entity: str,
-                                  max_hops: int = 5) -> list[list[dict[str, Any]]]:
+    def path_query_with_abstraction(
+        self, start_entity: str, end_entity: str, max_hops: int = 5
+    ) -> list[list[dict[str, Any]]]:
         """
         Find paths between entities using graph abstraction for efficiency.
 
@@ -1078,11 +1186,15 @@ class TraversalMixin:
             List of paths (each path is a list of node dictionaries)
         """
         # Check if abstraction is available
-        if not hasattr(self, 'abstracted_graph') or self.abstracted_graph is None:
-            logging.warning("Graph abstraction not available. Creating one with default settings.")
+        if not hasattr(self, "abstracted_graph") or self.abstracted_graph is None:
+            logging.warning(
+                "Graph abstraction not available. Creating one with default settings."
+            )
             abstraction_result = self.create_graph_abstraction()
             if not abstraction_result.get("success", False):
-                logging.warning("Failed to create abstraction. Falling back to regular path query.")
+                logging.warning(
+                    "Failed to create abstraction. Falling back to regular path query."
+                )
                 return self.path_query(start_entity, end_entity, max_hops)
 
         paths = []
@@ -1101,14 +1213,18 @@ class TraversalMixin:
             cursor = conn.cursor()
 
             # Get source entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (start_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (start_entity,)
+            )
             source_row = cursor.fetchone()
 
             if source_row:
                 source_id = source_row[0]
 
             # Get target entity ID
-            cursor.execute('SELECT id FROM graph_entities WHERE entity = ?', (end_entity,))
+            cursor.execute(
+                "SELECT id FROM graph_entities WHERE entity = ?", (end_entity,)
+            )
             target_row = cursor.fetchone()
 
             if target_row:
@@ -1150,7 +1266,9 @@ class TraversalMixin:
 
                 # Find paths in this community
                 try:
-                    simple_paths = nx.all_simple_paths(subgraph, source_id, target_id, cutoff=max_hops)
+                    simple_paths = nx.all_simple_paths(
+                        subgraph, source_id, target_id, cutoff=max_hops
+                    )
 
                     # Convert paths to our format
                     for path in list(simple_paths)[:5]:  # Limit to top 5 paths
@@ -1162,8 +1280,8 @@ class TraversalMixin:
 
                             node_info = {
                                 "id": node_id,
-                                "entity": node_details.get('entity', 'Unknown'),
-                                "type": node_details.get('entity_type', 'unknown')
+                                "entity": node_details.get("entity", "Unknown"),
+                                "type": node_details.get("entity_type", "unknown"),
                             }
 
                             # Add relation to next node if not the last node
@@ -1173,9 +1291,11 @@ class TraversalMixin:
 
                                 if edge_data:
                                     relation_info = {
-                                        "type": edge_data.get('relation', 'is_related_to'),
-                                        "weight": edge_data.get('weight', 1.0),
-                                        "confidence": edge_data.get('confidence', 0.5)
+                                        "type": edge_data.get(
+                                            "relation", "is_related_to"
+                                        ),
+                                        "weight": edge_data.get("weight", 1.0),
+                                        "confidence": edge_data.get("confidence", 0.5),
                                     }
                                     node_info["next_relation"] = relation_info
 
@@ -1191,12 +1311,14 @@ class TraversalMixin:
 
             # Find paths in abstracted graph
             try:
-                abstracted_paths = list(nx.all_simple_paths(
-                    self.abstracted_graph,
-                    abstracted_source,
-                    abstracted_target,
-                    cutoff=max_hops//2
-                ))[:3]  # Limit to top 3 abstracted paths
+                abstracted_paths = list(
+                    nx.all_simple_paths(
+                        self.abstracted_graph,
+                        abstracted_source,
+                        abstracted_target,
+                        cutoff=max_hops // 2,
+                    )
+                )[:3]  # Limit to top 3 abstracted paths
 
                 # Expand abstracted paths to detailed paths
                 for abst_path in abstracted_paths:
@@ -1208,23 +1330,31 @@ class TraversalMixin:
                         next_node = abst_path[i + 1]
 
                         # Determine actual nodes to connect
-                        if isinstance(current, str) and current.startswith("community_"):
+                        if isinstance(current, str) and current.startswith(
+                            "community_"
+                        ):
                             if i == 0:  # Source community
                                 start_node = source_id
                             else:
                                 # Use representative node or random member
                                 comm_id = int(current.split("_")[1])
-                                start_node = self.community_metadata[comm_id].get("members", [])[0]
+                                start_node = self.community_metadata[comm_id].get(
+                                    "members", []
+                                )[0]
                         else:
                             start_node = current
 
-                        if isinstance(next_node, str) and next_node.startswith("community_"):
+                        if isinstance(next_node, str) and next_node.startswith(
+                            "community_"
+                        ):
                             if i == len(abst_path) - 2:  # Target community
                                 end_node = target_id
                             else:
                                 # Use representative node or random member
                                 comm_id = int(next_node.split("_")[1])
-                                end_node = self.community_metadata[comm_id].get("members", [])[0]
+                                end_node = self.community_metadata[comm_id].get(
+                                    "members", []
+                                )[0]
                         else:
                             end_node = next_node
 
@@ -1235,7 +1365,9 @@ class TraversalMixin:
                     for start, end in segments:
                         try:
                             # Find a single path for this segment
-                            segment_path = next(nx.all_simple_paths(self.graph, start, end, cutoff=2))
+                            segment_path = next(
+                                nx.all_simple_paths(self.graph, start, end, cutoff=2)
+                            )
                             segment_paths.append(segment_path)
                         except (nx.NetworkXNoPath, StopIteration):
                             # No path exists for this segment
@@ -1244,7 +1376,9 @@ class TraversalMixin:
                                 # Find common neighbors
                                 start_neighbors = set(self.graph.successors(start))
                                 end_neighbors = set(self.graph.predecessors(end))
-                                common_neighbors = start_neighbors.intersection(end_neighbors)
+                                common_neighbors = start_neighbors.intersection(
+                                    end_neighbors
+                                )
 
                                 if common_neighbors:
                                     # Use first common neighbor
@@ -1256,7 +1390,9 @@ class TraversalMixin:
                                     segment_paths = []
                                     break
                             except Exception as e:
-                                logging.warning(f"Error finding segment path via common neighbors: {e}")
+                                logging.warning(
+                                    f"Error finding segment path via common neighbors: {e}"
+                                )
                                 segment_paths = []
                                 break
 
@@ -1277,8 +1413,8 @@ class TraversalMixin:
 
                             node_info = {
                                 "id": node_id,
-                                "entity": node_details.get('entity', 'Unknown'),
-                                "type": node_details.get('entity_type', 'unknown')
+                                "entity": node_details.get("entity", "Unknown"),
+                                "type": node_details.get("entity_type", "unknown"),
                             }
 
                             # Add relation to next node if not the last node
@@ -1288,9 +1424,11 @@ class TraversalMixin:
 
                                 if edge_data:
                                     relation_info = {
-                                        "type": edge_data.get('relation', 'is_related_to'),
-                                        "weight": edge_data.get('weight', 1.0),
-                                        "confidence": edge_data.get('confidence', 0.5)
+                                        "type": edge_data.get(
+                                            "relation", "is_related_to"
+                                        ),
+                                        "weight": edge_data.get("weight", 1.0),
+                                        "confidence": edge_data.get("confidence", 0.5),
                                     }
                                     node_info["next_relation"] = relation_info
 
@@ -1304,7 +1442,9 @@ class TraversalMixin:
 
             # If no paths found, fall back to regular path query
             if not paths:
-                logging.info("No paths found using abstraction, falling back to regular path query")
+                logging.info(
+                    "No paths found using abstraction, falling back to regular path query"
+                )
                 return self.path_query(start_entity, end_entity, max_hops)
 
             return paths

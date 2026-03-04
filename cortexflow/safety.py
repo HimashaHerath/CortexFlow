@@ -1,4 +1,5 @@
 """Safety pipeline for CortexFlow -- content filtering and boundary enforcement."""
+
 from __future__ import annotations
 
 import logging
@@ -12,6 +13,7 @@ logger = logging.getLogger("cortexflow")
 
 class SafetyLevel(Enum):
     """Safety check result levels."""
+
     SAFE = "safe"
     WARNING = "warning"
     BLOCKED = "blocked"
@@ -20,6 +22,7 @@ class SafetyLevel(Enum):
 @dataclass
 class SafetyResult:
     """Result of a safety check."""
+
     level: SafetyLevel
     reason: str = ""
     original_content: str = ""
@@ -30,6 +33,7 @@ class SafetyResult:
 @dataclass
 class SafetyRule:
     """A configurable safety rule."""
+
     name: str
     description: str
     pattern: str | None = None  # regex pattern
@@ -57,19 +61,22 @@ class SafetyPipeline:
             self._add_boundary_rules()
         if custom_blocked_patterns:
             for i, pat in enumerate(custom_blocked_patterns):
-                self._rules.append(SafetyRule(
-                    name=f"custom_{i}",
-                    description=f"Custom blocked pattern: {pat[:30]}",
-                    pattern=pat,
-                    level=SafetyLevel.BLOCKED,
-                ))
+                self._rules.append(
+                    SafetyRule(
+                        name=f"custom_{i}",
+                        description=f"Custom blocked pattern: {pat[:30]}",
+                        pattern=pat,
+                        level=SafetyLevel.BLOCKED,
+                    )
+                )
 
         # Compile all regex patterns
         for rule in self._rules:
             if rule.pattern:
                 try:
                     self._compiled_patterns[rule.name] = re.compile(
-                        rule.pattern, re.IGNORECASE,
+                        rule.pattern,
+                        re.IGNORECASE,
                     )
                 except re.error as e:
                     logger.warning(f"Invalid regex in safety rule '{rule.name}': {e}")
@@ -80,57 +87,61 @@ class SafetyPipeline:
 
     def _add_pii_rules(self) -> None:
         """Add built-in PII detection rules."""
-        self._rules.extend([
-            SafetyRule(
-                name="email",
-                description="Email address detection",
-                pattern=r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-                level=SafetyLevel.WARNING,
-            ),
-            SafetyRule(
-                name="phone",
-                description="Phone number detection",
-                pattern=r"\b(?:\+?1[-.]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b",
-                level=SafetyLevel.WARNING,
-            ),
-            SafetyRule(
-                name="ssn",
-                description="SSN detection",
-                pattern=r"\b\d{3}[-]?\d{2}[-]?\d{4}\b",
-                level=SafetyLevel.BLOCKED,
-                replacement="[REDACTED-SSN]",
-            ),
-            SafetyRule(
-                name="credit_card",
-                description="Credit card number detection",
-                pattern=r"\b(?:\d{4}[-\s]?){3}\d{4}\b",
-                level=SafetyLevel.BLOCKED,
-                replacement="[REDACTED-CC]",
-            ),
-        ])
+        self._rules.extend(
+            [
+                SafetyRule(
+                    name="email",
+                    description="Email address detection",
+                    pattern=r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+                    level=SafetyLevel.WARNING,
+                ),
+                SafetyRule(
+                    name="phone",
+                    description="Phone number detection",
+                    pattern=r"\b(?:\+?1[-.]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b",
+                    level=SafetyLevel.WARNING,
+                ),
+                SafetyRule(
+                    name="ssn",
+                    description="SSN detection",
+                    pattern=r"\b\d{3}[-]?\d{2}[-]?\d{4}\b",
+                    level=SafetyLevel.BLOCKED,
+                    replacement="[REDACTED-SSN]",
+                ),
+                SafetyRule(
+                    name="credit_card",
+                    description="Credit card number detection",
+                    pattern=r"\b(?:\d{4}[-\s]?){3}\d{4}\b",
+                    level=SafetyLevel.BLOCKED,
+                    replacement="[REDACTED-CC]",
+                ),
+            ]
+        )
 
     def _add_boundary_rules(self) -> None:
         """Add boundary enforcement rules for companion AI."""
-        self._rules.extend([
-            SafetyRule(
-                name="impersonation_request",
-                description="Request to impersonate real person",
-                pattern=r"\b(?:pretend|act|roleplay)\s+(?:to be|as|like)\s+(?:a real|an? actual)\b",
-                level=SafetyLevel.WARNING,
-            ),
-            SafetyRule(
-                name="medical_advice",
-                description="Request for medical diagnosis",
-                pattern=r"\b(?:diagnose|prescription|what medicine|what drug)\s+(?:should I|do I|for my)\b",
-                level=SafetyLevel.WARNING,
-            ),
-            SafetyRule(
-                name="legal_advice",
-                description="Request for legal counsel",
-                pattern=r"\b(?:legal advice|am I guilty|sue them|file a lawsuit)\b",
-                level=SafetyLevel.WARNING,
-            ),
-        ])
+        self._rules.extend(
+            [
+                SafetyRule(
+                    name="impersonation_request",
+                    description="Request to impersonate real person",
+                    pattern=r"\b(?:pretend|act|roleplay)\s+(?:to be|as|like)\s+(?:a real|an? actual)\b",
+                    level=SafetyLevel.WARNING,
+                ),
+                SafetyRule(
+                    name="medical_advice",
+                    description="Request for medical diagnosis",
+                    pattern=r"\b(?:diagnose|prescription|what medicine|what drug)\s+(?:should I|do I|for my)\b",
+                    level=SafetyLevel.WARNING,
+                ),
+                SafetyRule(
+                    name="legal_advice",
+                    description="Request for legal counsel",
+                    pattern=r"\b(?:legal advice|am I guilty|sue them|file a lawsuit)\b",
+                    level=SafetyLevel.WARNING,
+                ),
+            ]
+        )
 
     # ------------------------------------------------------------------
     # Core API
@@ -158,12 +169,19 @@ class SafetyPipeline:
                 triggered.append(rule.name)
                 reasons.append(rule.description)
 
-                if self._level_severity(rule.level) > self._level_severity(highest_level):
+                if self._level_severity(rule.level) > self._level_severity(
+                    highest_level
+                ):
                     highest_level = rule.level
 
-                if rule.replacement and rule.pattern and rule.name in self._compiled_patterns:
+                if (
+                    rule.replacement
+                    and rule.pattern
+                    and rule.name in self._compiled_patterns
+                ):
                     filtered = self._compiled_patterns[rule.name].sub(
-                        rule.replacement, filtered,
+                        rule.replacement,
+                        filtered,
                     )
 
         return SafetyResult(
@@ -180,7 +198,8 @@ class SafetyPipeline:
         if rule.pattern:
             try:
                 self._compiled_patterns[rule.name] = re.compile(
-                    rule.pattern, re.IGNORECASE,
+                    rule.pattern,
+                    re.IGNORECASE,
                 )
             except re.error as e:
                 logger.warning(f"Invalid regex in safety rule '{rule.name}': {e}")

@@ -15,7 +15,7 @@ import time
 from typing import Any
 
 # Add the parent directory to sys.path to import the cortexflow module
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from cortexflow import CortexFlowConfig, CortexFlowManager
 
@@ -25,6 +25,7 @@ def print_separator(title: str):
     print("\n" + "=" * 80)
     print(f" {title} ".center(80, "="))
     print("=" * 80 + "\n")
+
 
 def print_result(title: str, data: Any):
     """Print results in a formatted way."""
@@ -39,6 +40,7 @@ def print_result(title: str, data: Any):
         print(f"  {data}")
     print()
 
+
 def demonstrate_belief_revision(manager: CortexFlowManager):
     """Demonstrate belief revision when contradictory information arrives."""
     print_separator("1. Belief Revision with Contradictory Information")
@@ -48,7 +50,7 @@ def demonstrate_belief_revision(manager: CortexFlowManager):
     manager.remember_knowledge(
         "Mount Everest is 8,848 meters tall.",
         source="geography_textbook",
-        confidence=0.9
+        confidence=0.9,
     )
 
     print("Waiting 2 seconds before adding contradictory information...")
@@ -57,9 +59,7 @@ def demonstrate_belief_revision(manager: CortexFlowManager):
     # Add contradictory information with a different source
     print("Adding contradictory information...")
     manager.remember_knowledge(
-        "Mount Everest is 8,849 meters tall.",
-        source="recent_survey",
-        confidence=0.85
+        "Mount Everest is 8,849 meters tall.", source="recent_survey", confidence=0.85
     )
 
     # Auto-detection and resolution should happen after adding the knowledge
@@ -81,7 +81,7 @@ def demonstrate_belief_revision(manager: CortexFlowManager):
     manager.remember_knowledge(
         "The Nile River is 6,650 kilometers long.",
         source="old_encyclopedia",
-        confidence=0.7
+        confidence=0.7,
     )
 
     time.sleep(1)
@@ -89,7 +89,7 @@ def demonstrate_belief_revision(manager: CortexFlowManager):
     manager.remember_knowledge(
         "The Nile River is 6,695 kilometers long.",
         source="geographic_society",
-        confidence=0.8
+        confidence=0.8,
     )
 
     # Find contradictions
@@ -113,6 +113,7 @@ def demonstrate_belief_revision(manager: CortexFlowManager):
     else:
         print("No contradictions found to demonstrate different resolution strategies.")
 
+
 def demonstrate_uncertainty_representation(manager: CortexFlowManager):
     """Demonstrate explicit uncertainty representation."""
     print_separator("2. Explicit Uncertainty Representation")
@@ -120,21 +121,17 @@ def demonstrate_uncertainty_representation(manager: CortexFlowManager):
     # Add knowledge with different confidence levels
     print("Adding knowledge with different confidence levels...")
     manager.remember_knowledge(
-        "Jupiter has 79 known moons.",
-        source="astronomy_website",
-        confidence=0.9
+        "Jupiter has 79 known moons.", source="astronomy_website", confidence=0.9
     )
 
     manager.remember_knowledge(
         "The average surface temperature of Venus is around 462°C.",
         source="nasa_data",
-        confidence=0.95
+        confidence=0.95,
     )
 
     manager.remember_knowledge(
-        "There might be water on Mars.",
-        source="research_paper",
-        confidence=0.6
+        "There might be water on Mars.", source="research_paper", confidence=0.6
     )
 
     # Add a probability distribution for uncertain values
@@ -144,7 +141,7 @@ def demonstrate_uncertainty_representation(manager: CortexFlowManager):
     manager.remember_knowledge(
         "The global average temperature will rise by 1.5-4.5°C by 2100.",
         source="climate_model",
-        confidence=0.7
+        confidence=0.7,
     )
 
     # Get the entity and relation IDs (this is simplified and depends on implementation)
@@ -158,13 +155,14 @@ def demonstrate_uncertainty_representation(manager: CortexFlowManager):
         distribution_type="discrete",
         distribution_data={
             "values": ["1.5°C", "2.0°C", "2.5°C", "3.0°C", "3.5°C", "4.0°C", "4.5°C"],
-            "probabilities": [0.1, 0.15, 0.2, 0.25, 0.15, 0.1, 0.05]
-        }
+            "probabilities": [0.1, 0.15, 0.2, 0.25, 0.15, 0.1, 0.05],
+        },
     )
 
     # Retrieve and display the probability distribution
     distribution = manager.get_probability_distribution(entity_id, relation_id)
     print_result("Probability Distribution", distribution)
+
 
 def demonstrate_source_reliability(manager: CortexFlowManager):
     """Demonstrate conflict resolution based on source reliability."""
@@ -179,7 +177,9 @@ def demonstrate_source_reliability(manager: CortexFlowManager):
 
     # Display reliability scores
     print("\nSource reliability scores:")
-    print(f"  scientific_journal: {manager.get_source_reliability('scientific_journal')}")
+    print(
+        f"  scientific_journal: {manager.get_source_reliability('scientific_journal')}"
+    )
     print(f"  news_article: {manager.get_source_reliability('news_article')}")
     print(f"  social_media: {manager.get_source_reliability('social_media')}")
     print(f"  expert_opinion: {manager.get_source_reliability('expert_opinion')}")
@@ -189,7 +189,7 @@ def demonstrate_source_reliability(manager: CortexFlowManager):
     manager.remember_knowledge(
         "Coffee consumption reduces the risk of heart disease.",
         source="scientific_journal",
-        confidence=0.8
+        confidence=0.8,
     )
 
     time.sleep(1)
@@ -197,7 +197,7 @@ def demonstrate_source_reliability(manager: CortexFlowManager):
     manager.remember_knowledge(
         "Coffee consumption increases the risk of heart disease.",
         source="social_media",
-        confidence=0.7
+        confidence=0.7,
     )
 
     # The system should automatically prefer the scientific journal's information
@@ -210,6 +210,7 @@ def demonstrate_source_reliability(manager: CortexFlowManager):
     revisions = manager.get_belief_revision_history()
     print_result("Belief Revision History (most recent first)", revisions[:3])
 
+
 def demonstrate_incomplete_information(manager: CortexFlowManager):
     """Demonstrate reasoning with incomplete information."""
     print_separator("4. Reasoning with Incomplete Information")
@@ -217,7 +218,7 @@ def demonstrate_incomplete_information(manager: CortexFlowManager):
     # Set up a query that requires multiple pieces of information
     query = {
         "question": "What is the capital of France and its population?",
-        "required_fields": ["capital", "population"]
+        "required_fields": ["capital", "population"],
     }
 
     # Case 1: Complete information available
@@ -228,7 +229,7 @@ def demonstrate_incomplete_information(manager: CortexFlowManager):
             "population": "2.2 million",
             "answer": "The capital of France is Paris with a population of 2.2 million in the city proper.",
             "confidence": 0.9,
-            "source": "geographic_database"
+            "source": "geographic_database",
         }
     ]
 
@@ -242,15 +243,15 @@ def demonstrate_incomplete_information(manager: CortexFlowManager):
             "capital": "Paris",
             "answer": "The capital of France is Paris.",
             "confidence": 0.95,
-            "source": "geographic_database"
+            "source": "geographic_database",
         },
         {
             "country": "France",
             "continent": "Europe",
             "answer": "France is a country in Western Europe.",
             "confidence": 0.9,
-            "source": "geographic_database"
-        }
+            "source": "geographic_database",
+        },
     ]
 
     result = manager.reason_with_incomplete_information(query, partial_knowledge)
@@ -263,12 +264,13 @@ def demonstrate_incomplete_information(manager: CortexFlowManager):
             "continent": "Europe",
             "answer": "France is in Europe.",
             "confidence": 0.9,
-            "source": "geographic_database"
+            "source": "geographic_database",
         }
     ]
 
     result = manager.reason_with_incomplete_information(query, limited_knowledge)
     print_result("Reasoning Result (Limited Information)", result)
+
 
 def main():
     """Main function to run the demonstration."""
@@ -282,7 +284,7 @@ def main():
         confidence_threshold=0.7,
         uncertainty_representation="confidence",
         reason_with_incomplete_info=True,
-        knowledge_store_path=":memory:"  # Use in-memory database for the demo
+        knowledge_store_path=":memory:",  # Use in-memory database for the demo
     )
 
     manager = CortexFlowManager(config)
@@ -307,9 +309,12 @@ def main():
     print_separator("End of Demonstration")
     print("The CortexFlow system now includes robust mechanisms for:")
     print("1. Revising beliefs when contradictory information arrives")
-    print("2. Representing uncertainty with confidence scores and probability distributions")
+    print(
+        "2. Representing uncertainty with confidence scores and probability distributions"
+    )
     print("3. Resolving conflicts based on source reliability and recency")
     print("4. Reasoning with incomplete information")
+
 
 if __name__ == "__main__":
     main()

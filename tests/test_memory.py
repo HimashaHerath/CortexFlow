@@ -22,7 +22,7 @@ class TestContextSegment:
             importance=0.5,
             timestamp=time.time(),
             token_count=10,
-            segment_type="user"
+            segment_type="user",
         )
 
         assert segment.content == "Test content"
@@ -39,7 +39,7 @@ class TestContextSegment:
             timestamp=time.time(),
             token_count=15,
             segment_type="assistant",
-            metadata=custom_metadata
+            metadata=custom_metadata,
         )
 
         assert segment_with_metadata.metadata == custom_metadata
@@ -53,7 +53,7 @@ class TestContextSegment:
             importance=0.5,
             timestamp=now - 60,  # 60 seconds ago
             token_count=10,
-            segment_type="user"
+            segment_type="user",
         )
 
         # The age should be approximately 60 seconds
@@ -81,7 +81,7 @@ class TestMemoryTier:
             importance=0.5,
             timestamp=time.time(),
             token_count=30,
-            segment_type="user"
+            segment_type="user",
         )
 
         segment2 = ContextSegment(
@@ -89,7 +89,7 @@ class TestMemoryTier:
             importance=0.7,
             timestamp=time.time(),
             token_count=40,
-            segment_type="assistant"
+            segment_type="assistant",
         )
 
         segment3 = ContextSegment(
@@ -97,7 +97,7 @@ class TestMemoryTier:
             importance=0.9,
             timestamp=time.time(),
             token_count=50,
-            segment_type="user"
+            segment_type="user",
         )
 
         # Add segments and check results
@@ -124,7 +124,7 @@ class TestMemoryTier:
             importance=0.5,
             timestamp=time.time(),
             token_count=30,
-            segment_type="user"
+            segment_type="user",
         )
 
         segment2 = ContextSegment(
@@ -132,7 +132,7 @@ class TestMemoryTier:
             importance=0.7,
             timestamp=time.time(),
             token_count=40,
-            segment_type="assistant"
+            segment_type="assistant",
         )
 
         tier.add_segment(segment1)
@@ -152,21 +152,25 @@ class TestMemoryTier:
         tier = MemoryTier("test_tier", 100)
 
         # Add test segments
-        tier.add_segment(ContextSegment(
-            content="Segment 1",
-            importance=0.5,
-            timestamp=time.time(),
-            token_count=10,
-            segment_type="user"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Segment 1",
+                importance=0.5,
+                timestamp=time.time(),
+                token_count=10,
+                segment_type="user",
+            )
+        )
 
-        tier.add_segment(ContextSegment(
-            content="Segment 2",
-            importance=0.7,
-            timestamp=time.time(),
-            token_count=10,
-            segment_type="assistant"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Segment 2",
+                importance=0.7,
+                timestamp=time.time(),
+                token_count=10,
+                segment_type="assistant",
+            )
+        )
 
         # Check the concatenated content
         assert tier.get_content() == "Segment 1\nSegment 2"
@@ -176,29 +180,35 @@ class TestMemoryTier:
         tier = MemoryTier("test_tier", 200)
 
         # Add test segments with different importance values
-        tier.add_segment(ContextSegment(
-            content="Low importance",
-            importance=0.3,
-            timestamp=time.time(),
-            token_count=10,
-            segment_type="user"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Low importance",
+                importance=0.3,
+                timestamp=time.time(),
+                token_count=10,
+                segment_type="user",
+            )
+        )
 
-        tier.add_segment(ContextSegment(
-            content="Medium importance",
-            importance=0.6,
-            timestamp=time.time(),
-            token_count=10,
-            segment_type="assistant"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Medium importance",
+                importance=0.6,
+                timestamp=time.time(),
+                token_count=10,
+                segment_type="assistant",
+            )
+        )
 
-        tier.add_segment(ContextSegment(
-            content="High importance",
-            importance=0.9,
-            timestamp=time.time(),
-            token_count=10,
-            segment_type="user"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="High importance",
+                importance=0.9,
+                timestamp=time.time(),
+                token_count=10,
+                segment_type="user",
+            )
+        )
 
         # Filter by importance threshold
         high_importance = tier.get_segments_by_importance(0.7)
@@ -221,29 +231,35 @@ class TestMemoryTier:
         # Add test segments with different importance values
         now = time.time()
 
-        tier.add_segment(ContextSegment(
-            content="Medium importance, older",
-            importance=0.5,
-            timestamp=now - 100,  # Older
-            token_count=10,
-            segment_type="user"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Medium importance, older",
+                importance=0.5,
+                timestamp=now - 100,  # Older
+                token_count=10,
+                segment_type="user",
+            )
+        )
 
-        tier.add_segment(ContextSegment(
-            content="Low importance, newer",
-            importance=0.3,
-            timestamp=now - 50,  # Newer
-            token_count=10,
-            segment_type="assistant"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Low importance, newer",
+                importance=0.3,
+                timestamp=now - 50,  # Newer
+                token_count=10,
+                segment_type="assistant",
+            )
+        )
 
-        tier.add_segment(ContextSegment(
-            content="High importance, newest",
-            importance=0.9,
-            timestamp=now,  # Newest
-            token_count=10,
-            segment_type="user"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="High importance, newest",
+                importance=0.9,
+                timestamp=now,  # Newest
+                token_count=10,
+                segment_type="user",
+            )
+        )
 
         # Should return the index of the lowest importance segment
         least_important_index = tier.get_least_important_segment()
@@ -254,13 +270,15 @@ class TestMemoryTier:
         tier = MemoryTier("test_tier", 100)
 
         # Add a segment
-        tier.add_segment(ContextSegment(
-            content="Test segment",
-            importance=0.5,
-            timestamp=time.time(),
-            token_count=30,
-            segment_type="user"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Test segment",
+                importance=0.5,
+                timestamp=time.time(),
+                token_count=30,
+                segment_type="user",
+            )
+        )
 
         # Check the actual implementation behavior
         # It seems the implementation doesn't allow increases either, just check current behavior
@@ -281,26 +299,30 @@ class TestMemoryTier:
         assert tier.fullness_ratio == 0.0
 
         # Add segments to partially fill the tier
-        tier.add_segment(ContextSegment(
-            content="Test segment",
-            importance=0.5,
-            timestamp=time.time(),
-            token_count=60,
-            segment_type="user"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Test segment",
+                importance=0.5,
+                timestamp=time.time(),
+                token_count=60,
+                segment_type="user",
+            )
+        )
 
         assert not tier.is_full
         assert tier.available_tokens == 40
         assert tier.fullness_ratio == 0.6
 
         # Fill the tier completely
-        tier.add_segment(ContextSegment(
-            content="Another segment",
-            importance=0.7,
-            timestamp=time.time(),
-            token_count=40,
-            segment_type="assistant"
-        ))
+        tier.add_segment(
+            ContextSegment(
+                content="Another segment",
+                importance=0.7,
+                timestamp=time.time(),
+                token_count=40,
+                segment_type="assistant",
+            )
+        )
 
         assert tier.is_full
         assert tier.available_tokens == 0
@@ -318,21 +340,25 @@ class TestSpecializedTiers:
         # Add test segments with different timestamps
         now = time.time()
 
-        active.add_segment(ContextSegment(
-            content="Older segment",
-            importance=0.5,
-            timestamp=now - 100,  # Older
-            token_count=10,
-            segment_type="user"
-        ))
+        active.add_segment(
+            ContextSegment(
+                content="Older segment",
+                importance=0.5,
+                timestamp=now - 100,  # Older
+                token_count=10,
+                segment_type="user",
+            )
+        )
 
-        active.add_segment(ContextSegment(
-            content="Newer segment",
-            importance=0.7,
-            timestamp=now,  # Newer
-            token_count=10,
-            segment_type="assistant"
-        ))
+        active.add_segment(
+            ContextSegment(
+                content="Newer segment",
+                importance=0.7,
+                timestamp=now,  # Newer
+                token_count=10,
+                segment_type="assistant",
+            )
+        )
 
         # ActiveTier should order by recency (newest first)
         content = active.get_content()
@@ -345,21 +371,25 @@ class TestSpecializedTiers:
         assert working.name == "working"
 
         # Add test segments with different importance values
-        working.add_segment(ContextSegment(
-            content="Less important",
-            importance=0.4,
-            timestamp=time.time(),
-            token_count=10,
-            segment_type="user"
-        ))
+        working.add_segment(
+            ContextSegment(
+                content="Less important",
+                importance=0.4,
+                timestamp=time.time(),
+                token_count=10,
+                segment_type="user",
+            )
+        )
 
-        working.add_segment(ContextSegment(
-            content="More important",
-            importance=0.8,
-            timestamp=time.time(),
-            token_count=10,
-            segment_type="assistant"
-        ))
+        working.add_segment(
+            ContextSegment(
+                content="More important",
+                importance=0.8,
+                timestamp=time.time(),
+                token_count=10,
+                segment_type="assistant",
+            )
+        )
 
         # WorkingTier should order by importance (most important first)
         content = working.get_content()
@@ -374,21 +404,25 @@ class TestSpecializedTiers:
         now = time.time()
 
         # Add test segments with different importance and timestamps
-        archive.add_segment(ContextSegment(
-            content="Newer, less important",
-            importance=0.3,
-            timestamp=now,  # Newer
-            token_count=10,
-            segment_type="user"
-        ))
+        archive.add_segment(
+            ContextSegment(
+                content="Newer, less important",
+                importance=0.3,
+                timestamp=now,  # Newer
+                token_count=10,
+                segment_type="user",
+            )
+        )
 
-        archive.add_segment(ContextSegment(
-            content="Older, more important",
-            importance=0.7,
-            timestamp=now - 100,  # Older
-            token_count=10,
-            segment_type="assistant"
-        ))
+        archive.add_segment(
+            ContextSegment(
+                content="Older, more important",
+                importance=0.7,
+                timestamp=now - 100,  # Older
+                token_count=10,
+                segment_type="assistant",
+            )
+        )
 
         # ArchiveTier should order by importance and then recency
         content = archive.get_content()
@@ -401,11 +435,11 @@ class TestConversationMemory:
 
     def test_init(self):
         """Test ConversationMemory initialization"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -417,11 +451,11 @@ class TestConversationMemory:
 
     def test_update_tier_limits(self):
         """Test updating memory tier limits"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -443,11 +477,11 @@ class TestConversationMemory:
 
     def test_add_message(self):
         """Test adding messages to memory"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -477,11 +511,11 @@ class TestConversationMemory:
 
     def test_get_context_messages(self):
         """Test getting context messages"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -503,11 +537,11 @@ class TestConversationMemory:
 
     def test_get_messages_by_role(self):
         """Test filtering messages by role"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -539,11 +573,11 @@ class TestConversationMemory:
 
     def test_get_last_message(self):
         """Test getting the last message"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -561,11 +595,11 @@ class TestConversationMemory:
 
     def test_get_conversation_summary(self):
         """Test getting conversation summary"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -586,11 +620,11 @@ class TestConversationMemory:
 
     def test_clear_memory(self):
         """Test clearing memory"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -612,11 +646,11 @@ class TestConversationMemory:
 
     def test_serialization(self):
         """Test serialization and deserialization"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 
@@ -648,11 +682,11 @@ class TestConversationMemory:
 
     def test_memory_tiers(self):
         """Test memory tier initialization and behavior"""
-        config = CortexFlowConfig(memory=MemoryConfig(
-            active_token_limit=100,
-            working_token_limit=200,
-            archive_token_limit=300
-        ))
+        config = CortexFlowConfig(
+            memory=MemoryConfig(
+                active_token_limit=100, working_token_limit=200, archive_token_limit=300
+            )
+        )
 
         memory = ConversationMemory(config)
 

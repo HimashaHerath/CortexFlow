@@ -20,6 +20,7 @@ from cortexflow.cli import main, run_analyze, run_chat
 # Argument parsing tests
 # ---------------------------------------------------------------------------
 
+
 class TestArgumentParsing:
     """Tests for CLI argument parsing behavior."""
 
@@ -36,12 +37,19 @@ class TestArgumentParsing:
     @patch("cortexflow.cli.run_chat")
     def test_chat_custom_args(self, mock_run_chat):
         """'chat' subcommand passes custom arguments correctly."""
-        with patch("sys.argv", [
-            "cortexflow", "chat",
-            "--model", "gemma3",
-            "--host", "http://myhost:11434",
-            "--db", "/tmp/test.db"  # noqa: S108
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "cortexflow",
+                "chat",
+                "--model",
+                "gemma3",
+                "--host",
+                "http://myhost:11434",
+                "--db",
+                "/tmp/test.db",  # noqa: S108
+            ],
+        ):
             main()
         args = mock_run_chat.call_args[0][0]
         assert args.model == "gemma3"
@@ -90,6 +98,7 @@ class TestNoCommand:
 # run_chat tests
 # ---------------------------------------------------------------------------
 
+
 class TestRunChat:
     """Tests for the run_chat function."""
 
@@ -97,12 +106,16 @@ class TestRunChat:
     @patch("cortexflow.cli.CortexFlowManager")
     @patch("builtins.input", side_effect=["exit"])
     @patch("builtins.print")
-    def test_chat_exit_immediately(self, mock_print, mock_input, mock_manager_cls, mock_config_cls):
+    def test_chat_exit_immediately(
+        self, mock_print, mock_input, mock_manager_cls, mock_config_cls
+    ):
         """Typing 'exit' immediately ends the chat loop."""
         mock_manager = MagicMock()
         mock_manager_cls.return_value = mock_manager
 
-        args = argparse.Namespace(model="llama3", host="http://localhost:11434", db=":memory:")
+        args = argparse.Namespace(
+            model="llama3", host="http://localhost:11434", db=":memory:"
+        )
         run_chat(args)
 
         mock_manager.close.assert_called_once()
@@ -111,20 +124,22 @@ class TestRunChat:
     @patch("cortexflow.cli.CortexFlowManager")
     @patch("builtins.input", side_effect=["stats", "quit"])
     @patch("builtins.print")
-    def test_chat_stats_command(self, mock_print, mock_input, mock_manager_cls, mock_config_cls):
+    def test_chat_stats_command(
+        self, mock_print, mock_input, mock_manager_cls, mock_config_cls
+    ):
         """Typing 'stats' calls manager.get_stats()."""
         mock_manager = MagicMock()
         mock_manager.get_stats.return_value = {
             "memory": {
                 "message_count": 5,
-                "tiers": {
-                    "active": {"used": 100, "limit": 4096, "fullness": 0.02}
-                }
+                "tiers": {"active": {"used": 100, "limit": 4096, "fullness": 0.02}},
             }
         }
         mock_manager_cls.return_value = mock_manager
 
-        args = argparse.Namespace(model="llama3", host="http://localhost:11434", db=":memory:")
+        args = argparse.Namespace(
+            model="llama3", host="http://localhost:11434", db=":memory:"
+        )
         run_chat(args)
 
         mock_manager.get_stats.assert_called_once()
@@ -133,13 +148,17 @@ class TestRunChat:
     @patch("cortexflow.cli.CortexFlowManager")
     @patch("builtins.input", side_effect=["hello world", "q"])
     @patch("builtins.print")
-    def test_chat_generates_response(self, mock_print, mock_input, mock_manager_cls, mock_config_cls):
+    def test_chat_generates_response(
+        self, mock_print, mock_input, mock_manager_cls, mock_config_cls
+    ):
         """A normal message triggers generate_response_stream or generate_response."""
         mock_manager = MagicMock()
         mock_manager.generate_response_stream.return_value = iter(["Hello", " back!"])
         mock_manager_cls.return_value = mock_manager
 
-        args = argparse.Namespace(model="llama3", host="http://localhost:11434", db=":memory:")
+        args = argparse.Namespace(
+            model="llama3", host="http://localhost:11434", db=":memory:"
+        )
         run_chat(args)
 
         mock_manager.generate_response_stream.assert_called_once_with("hello world")
@@ -148,14 +167,20 @@ class TestRunChat:
     @patch("cortexflow.cli.CortexFlowManager")
     @patch("builtins.input", side_effect=["hello", "exit"])
     @patch("builtins.print")
-    def test_chat_fallback_to_non_streaming(self, mock_print, mock_input, mock_manager_cls, mock_config_cls):
+    def test_chat_fallback_to_non_streaming(
+        self, mock_print, mock_input, mock_manager_cls, mock_config_cls
+    ):
         """Falls back to generate_response when streaming raises AttributeError."""
         mock_manager = MagicMock()
-        mock_manager.generate_response_stream.side_effect = AttributeError("no streaming")
+        mock_manager.generate_response_stream.side_effect = AttributeError(
+            "no streaming"
+        )
         mock_manager.generate_response.return_value = "Fallback response"
         mock_manager_cls.return_value = mock_manager
 
-        args = argparse.Namespace(model="llama3", host="http://localhost:11434", db=":memory:")
+        args = argparse.Namespace(
+            model="llama3", host="http://localhost:11434", db=":memory:"
+        )
         run_chat(args)
 
         mock_manager.generate_response.assert_called_once_with("hello")
@@ -164,6 +189,7 @@ class TestRunChat:
 # ---------------------------------------------------------------------------
 # run_analyze tests
 # ---------------------------------------------------------------------------
+
 
 class TestRunAnalyze:
     """Tests for the run_analyze function."""
@@ -178,8 +204,13 @@ class TestRunAnalyze:
             "memory": {
                 "message_count": 42,
                 "tiers": {
-                    "active": {"used": 500, "limit": 4096, "segment_count": 3, "fullness": 0.12}
-                }
+                    "active": {
+                        "used": 500,
+                        "limit": 4096,
+                        "segment_count": 3,
+                        "fullness": 0.12,
+                    }
+                },
             }
         }
         # Ensure hasattr checks work on mock

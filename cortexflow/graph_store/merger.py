@@ -4,6 +4,7 @@ GraphMerger -- intelligent merging of new information into the knowledge graph.
 Handles conflict detection, resolution strategies, and taxonomic relationship
 discovery.
 """
+
 from __future__ import annotations
 
 import json
@@ -29,7 +30,11 @@ class GraphMerger:
             graph_store: The GraphStore instance to work with
         """
         self.graph_store = graph_store
-        self.conn = graph_store.conn if graph_store.conn else sqlite3.connect(graph_store.db_path)
+        self.conn = (
+            graph_store.conn
+            if graph_store.conn
+            else sqlite3.connect(graph_store.db_path)
+        )
         self.cursor = self.conn.cursor()
 
         # Track statistics
@@ -41,13 +46,20 @@ class GraphMerger:
             "relations_updated": 0,
             "relations_inferred": 0,
             "conflicts_detected": 0,
-            "conflicts_resolved": 0
+            "conflicts_resolved": 0,
         }
 
-    def merge_entity(self, entity: str, entity_type: str = None, metadata: dict[str, Any] = None,
-                    provenance: str = None, confidence: float = 0.8,
-                    temporal_start: str = None, temporal_end: str = None,
-                    extraction_method: str = None) -> int:
+    def merge_entity(
+        self,
+        entity: str,
+        entity_type: str = None,
+        metadata: dict[str, Any] = None,
+        provenance: str = None,
+        confidence: float = 0.8,
+        temporal_start: str = None,
+        temporal_end: str = None,
+        extraction_method: str = None,
+    ) -> int:
         """
         Intelligently merge an entity with existing entities, handling duplicates and conflicts.
 
@@ -65,30 +77,37 @@ class GraphMerger:
             ID of the merged entity
         """
         # Check for exact match
-        self.cursor.execute('SELECT id, entity_type, metadata, confidence FROM graph_entities WHERE entity = ?', (entity,))
+        self.cursor.execute(
+            "SELECT id, entity_type, metadata, confidence FROM graph_entities WHERE entity = ?",
+            (entity,),
+        )
         exact_match = self.cursor.fetchone()
 
         # Check for fuzzy matches if no exact match
         fuzzy_matches = []
         if not exact_match and FUZZY_MATCHING_ENABLED:
-            self.cursor.execute('SELECT id, entity, entity_type, metadata, confidence FROM graph_entities')
+            self.cursor.execute(
+                "SELECT id, entity, entity_type, metadata, confidence FROM graph_entities"
+            )
             all_entities = self.cursor.fetchall()
 
             # Find potential matches using fuzzy string matching
             for row in all_entities:
                 similarity = fuzz.ratio(entity.lower(), row[1].lower())
                 if similarity >= 85:  # Threshold for fuzzy matching
-                    fuzzy_matches.append({
-                        'id': row[0],
-                        'entity': row[1],
-                        'entity_type': row[2],
-                        'metadata': json.loads(row[3]) if row[3] else {},
-                        'confidence': row[4],
-                        'similarity': similarity
-                    })
+                    fuzzy_matches.append(
+                        {
+                            "id": row[0],
+                            "entity": row[1],
+                            "entity_type": row[2],
+                            "metadata": json.loads(row[3]) if row[3] else {},
+                            "confidence": row[4],
+                            "similarity": similarity,
+                        }
+                    )
 
             # Sort by similarity
-            fuzzy_matches.sort(key=lambda x: x['similarity'], reverse=True)
+            fuzzy_matches.sort(key=lambda x: x["similarity"], reverse=True)
 
         if exact_match:
             entity_id = exact_match[0]
@@ -101,7 +120,9 @@ class GraphMerger:
                 try:
                     existing_metadata = json.loads(existing_metadata_str)
                 except (TypeError, json.JSONDecodeError) as e:
-                    logging.warning(f"Failed to parse existing entity metadata, defaulting to empty: {e}")
+                    logging.warning(
+                        f"Failed to parse existing entity metadata, defaulting to empty: {e}"
+                    )
                     existing_metadata = {}
             else:
                 existing_metadata = {}
@@ -120,7 +141,9 @@ class GraphMerger:
                     if key not in existing_metadata:
                         merged_metadata[key] = value
                         should_update = True
-                    elif isinstance(value, list) and isinstance(existing_metadata[key], list):
+                    elif isinstance(value, list) and isinstance(
+                        existing_metadata[key], list
+                    ):
                         # Merge lists
                         combined = list(set(existing_metadata[key] + value))
                         if len(combined) > len(existing_metadata[key]):
@@ -146,7 +169,7 @@ class GraphMerger:
                         temporal_start=temporal_start,
                         temporal_end=temporal_end,
                         extraction_method=extraction_method,
-                        changed_by="graph_merger"
+                        changed_by="graph_merger",
                     )
                     self.stats["entities_updated"] += 1
                 except Exception as e:
@@ -157,38 +180,46 @@ class GraphMerger:
         elif fuzzy_matches:
             # Use the best fuzzy match
             best_match = fuzzy_matches[0]
-            entity_id = best_match['id']
+            entity_id = best_match["id"]
 
             # Also update the entity with any new metadata
-            merged_metadata = dict(best_match['metadata'])  # Start with existing metadata
+            merged_metadata = dict(
+                best_match["metadata"]
+            )  # Start with existing metadata
 
             if metadata:
                 # Merge metadata
                 for key, value in metadata.items():
                     if key not in merged_metadata:
                         merged_metadata[key] = value
-                    elif isinstance(value, list) and isinstance(merged_metadata[key], list):
+                    elif isinstance(value, list) and isinstance(
+                        merged_metadata[key], list
+                    ):
                         merged_metadata[key] = list(set(merged_metadata[key] + value))
-                    elif confidence > best_match['confidence']:
+                    elif confidence > best_match["confidence"]:
                         merged_metadata[key] = value
 
             # Add the current entity name as an alias
-            merged_metadata['aliases'] = list(set(merged_metadata.get('aliases', []) + [entity]))
+            merged_metadata["aliases"] = list(
+                set(merged_metadata.get("aliases", []) + [entity])
+            )
 
             # Track entity merger event
-            merged_metadata['merged_with'] = merged_metadata.get('merged_with', []) + [{
-                'entity': entity,
-                'similarity': best_match['similarity'],
-                'timestamp': time.time(),
-                'provenance': provenance
-            }]
+            merged_metadata["merged_with"] = merged_metadata.get("merged_with", []) + [
+                {
+                    "entity": entity,
+                    "similarity": best_match["similarity"],
+                    "timestamp": time.time(),
+                    "provenance": provenance,
+                }
+            ]
 
             # Add as an alias to the best match
             try:
                 self.graph_store.add_entity_alias(
                     entity_id=entity_id,
                     alias=entity,
-                    confidence=confidence * (best_match['similarity'] / 100.0)
+                    confidence=confidence * (best_match["similarity"] / 100.0),
                 )
             except Exception as e:
                 logging.warning(f"Couldn't add alias, but continuing: {e}")
@@ -196,15 +227,15 @@ class GraphMerger:
             # Update the entity with merged metadata
             try:
                 self.graph_store.add_entity(
-                    entity=best_match['entity'],
-                    entity_type=entity_type or best_match['entity_type'],
+                    entity=best_match["entity"],
+                    entity_type=entity_type or best_match["entity_type"],
                     metadata=merged_metadata,
                     provenance=provenance,
-                    confidence=max(confidence, best_match['confidence']),
+                    confidence=max(confidence, best_match["confidence"]),
                     temporal_start=temporal_start,
                     temporal_end=temporal_end,
                     extraction_method=extraction_method,
-                    changed_by="graph_merger"
+                    changed_by="graph_merger",
                 )
             except Exception as e:
                 logging.error(f"Error updating entity with merged metadata: {e}")
@@ -224,7 +255,7 @@ class GraphMerger:
                     temporal_start=temporal_start,
                     temporal_end=temporal_end,
                     extraction_method=extraction_method,
-                    changed_by="graph_merger"
+                    changed_by="graph_merger",
                 )
                 self.stats["entities_added"] += 1
                 return entity_id
@@ -232,11 +263,19 @@ class GraphMerger:
                 logging.error(f"Error adding new entity: {e}")
                 return -1
 
-    def merge_relation(self, source_entity: str, relation_type: str, target_entity: str,
-                      weight: float = 1.0, metadata: dict[str, Any] = None,
-                      provenance: str = None, confidence: float = 0.5,
-                      temporal_start: str = None, temporal_end: str = None,
-                      extraction_method: str = None) -> bool:
+    def merge_relation(
+        self,
+        source_entity: str,
+        relation_type: str,
+        target_entity: str,
+        weight: float = 1.0,
+        metadata: dict[str, Any] = None,
+        provenance: str = None,
+        confidence: float = 0.5,
+        temporal_start: str = None,
+        temporal_end: str = None,
+        extraction_method: str = None,
+    ) -> bool:
         """
         Intelligently merge a relation with existing relations, handling duplicates and conflicts.
 
@@ -260,22 +299,25 @@ class GraphMerger:
             entity=source_entity,
             provenance=provenance,
             confidence=confidence,
-            extraction_method=extraction_method
+            extraction_method=extraction_method,
         )
 
         target_id = self.merge_entity(
             entity=target_entity,
             provenance=provenance,
             confidence=confidence,
-            extraction_method=extraction_method
+            extraction_method=extraction_method,
         )
 
         # Check if relation already exists
-        self.cursor.execute('''
+        self.cursor.execute(
+            """
             SELECT id, weight, metadata, confidence
             FROM graph_relationships
             WHERE source_id = ? AND target_id = ? AND relation_type = ?
-        ''', (source_id, target_id, relation_type))
+        """,
+            (source_id, target_id, relation_type),
+        )
         existing = self.cursor.fetchone()
 
         if existing:
@@ -304,8 +346,12 @@ class GraphMerger:
                                 self.stats["conflicts_detected"] += 1
 
                                 # If both are lists, merge them
-                                if isinstance(metadata[key], list) and isinstance(existing_metadata[key], list):
-                                    existing_metadata[key] = list(set(existing_metadata[key] + metadata[key]))
+                                if isinstance(metadata[key], list) and isinstance(
+                                    existing_metadata[key], list
+                                ):
+                                    existing_metadata[key] = list(
+                                        set(existing_metadata[key] + metadata[key])
+                                    )
                                     self.stats["conflicts_resolved"] += 1
                                 elif confidence > existing_confidence:
                                     existing_metadata[key] = metadata[key]
@@ -329,7 +375,7 @@ class GraphMerger:
                     temporal_start=temporal_start,
                     temporal_end=temporal_end,
                     extraction_method=extraction_method,
-                    changed_by="graph_merger"
+                    changed_by="graph_merger",
                 )
                 self.stats["relations_updated"] += 1
             else:
@@ -349,7 +395,7 @@ class GraphMerger:
                 temporal_start=temporal_start,
                 temporal_end=temporal_end,
                 extraction_method=extraction_method,
-                changed_by="graph_merger"
+                changed_by="graph_merger",
             )
             self.stats["relations_added"] += 1
             return result
@@ -362,7 +408,7 @@ class GraphMerger:
             Number of taxonomic relationships discovered
         """
         # Find all entities
-        self.cursor.execute('SELECT id, entity, entity_type FROM graph_entities')
+        self.cursor.execute("SELECT id, entity, entity_type FROM graph_entities")
         all_entities = self.cursor.fetchall()
 
         # Build entity type index
@@ -385,26 +431,42 @@ class GraphMerger:
             if len(words) > 1:
                 for other_row in all_entities:
                     other_id, other_text, other_type = other_row
-                    if other_id != ent_id and len(other_text.split()) == 1 and other_text.lower() in words:
+                    if (
+                        other_id != ent_id
+                        and len(other_text.split()) == 1
+                        and other_text.lower() in words
+                    ):
                         # Check if this looks like an is_a relationship
                         # If entity type matches, it's more likely to be an is_a relationship
                         if ent_type == other_text:
                             self._add_taxonomic_relation(
-                                ent_id, ent_text, other_id, other_text, "instance_of",
-                                confidence=0.85, provenance="taxonomic_discovery"
+                                ent_id,
+                                ent_text,
+                                other_id,
+                                other_text,
+                                "instance_of",
+                                confidence=0.85,
+                                provenance="taxonomic_discovery",
                             )
                             discovered += 1
                         else:
                             self._add_taxonomic_relation(
-                                ent_id, ent_text, other_id, other_text, "is_a",
-                                confidence=0.7, provenance="taxonomic_discovery"
+                                ent_id,
+                                ent_text,
+                                other_id,
+                                other_text,
+                                "is_a",
+                                confidence=0.7,
+                                provenance="taxonomic_discovery",
                             )
                             discovered += 1
 
         # Discover instance_of relationships from entity types
         for ent_type, type_entities in type_index.items():
             # Find if the type exists as an entity
-            self.cursor.execute('SELECT id, entity FROM graph_entities WHERE entity = ?', (ent_type,))
+            self.cursor.execute(
+                "SELECT id, entity FROM graph_entities WHERE entity = ?", (ent_type,)
+            )
             type_entity = self.cursor.fetchone()
 
             if type_entity:
@@ -412,8 +474,13 @@ class GraphMerger:
                 # Add instance_of relationship for all entities of this type
                 for ent_id, ent_text in type_entities:
                     self._add_taxonomic_relation(
-                        ent_id, ent_text, type_id, type_text, "instance_of",
-                        confidence=0.9, provenance="type_based_taxonomy"
+                        ent_id,
+                        ent_text,
+                        type_id,
+                        type_text,
+                        "instance_of",
+                        confidence=0.9,
+                        provenance="type_based_taxonomy",
                     )
                     discovered += 1
             else:
@@ -424,23 +491,35 @@ class GraphMerger:
                     metadata={"automatic": True, "is_type": True},
                     confidence=0.85,
                     extraction_method="taxonomic_discovery",
-                    changed_by="graph_merger"
+                    changed_by="graph_merger",
                 )
 
                 # Add instance_of relationship for all entities of this type
                 for ent_id, ent_text in type_entities:
                     self._add_taxonomic_relation(
-                        ent_id, ent_text, type_id, ent_type, "instance_of",
-                        confidence=0.85, provenance="type_based_taxonomy"
+                        ent_id,
+                        ent_text,
+                        type_id,
+                        ent_type,
+                        "instance_of",
+                        confidence=0.85,
+                        provenance="type_based_taxonomy",
                     )
                     discovered += 1
 
         self.stats["relations_inferred"] += discovered
         return discovered
 
-    def _add_taxonomic_relation(self, source_id: int, source_text: str,
-                              target_id: int, target_text: str, relation_type: str,
-                              confidence: float, provenance: str) -> bool:
+    def _add_taxonomic_relation(
+        self,
+        source_id: int,
+        source_text: str,
+        target_id: int,
+        target_text: str,
+        relation_type: str,
+        confidence: float,
+        provenance: str,
+    ) -> bool:
         """
         Helper method to add a taxonomic relationship if it doesn't exist.
 
@@ -457,10 +536,13 @@ class GraphMerger:
             True if relation was added
         """
         # Check if this relation already exists
-        self.cursor.execute('''
+        self.cursor.execute(
+            """
             SELECT id FROM graph_relationships
             WHERE source_id = ? AND target_id = ? AND relation_type = ?
-        ''', (source_id, target_id, relation_type))
+        """,
+            (source_id, target_id, relation_type),
+        )
 
         if not self.cursor.fetchone():
             # Add the relation
@@ -472,7 +554,7 @@ class GraphMerger:
                 provenance=provenance,
                 extraction_method="taxonomic_inference",
                 changed_by="graph_merger",
-                metadata={"automatic": True, "taxonomic": True}
+                metadata={"automatic": True, "taxonomic": True},
             )
             return True
 
@@ -499,14 +581,14 @@ class GraphMerger:
         processed_entities = {}
         for entity in entities:
             entity_id = self.merge_entity(
-                entity=entity['text'],
-                entity_type=entity['type'],
-                metadata=entity.get('metadata', {}),
+                entity=entity["text"],
+                entity_type=entity["type"],
+                metadata=entity.get("metadata", {}),
                 provenance=source,
-                confidence=entity.get('confidence', 0.8),
-                extraction_method=entity.get('source', 'text_extraction')
+                confidence=entity.get("confidence", 0.8),
+                extraction_method=entity.get("source", "text_extraction"),
             )
-            processed_entities[entity['text']] = entity_id
+            processed_entities[entity["text"]] = entity_id
 
         # Merge relations
         processed_relations = 0
@@ -517,14 +599,11 @@ class GraphMerger:
                 target_entity=obj,
                 provenance=source,
                 confidence=0.7,  # Default confidence for extracted relations
-                extraction_method='text_extraction'
+                extraction_method="text_extraction",
             ):
                 processed_relations += 1
 
-        return {
-            "entities": len(processed_entities),
-            "relations": processed_relations
-        }
+        return {"entities": len(processed_entities), "relations": processed_relations}
 
     def detect_conflicts(self) -> list[dict[str, Any]]:
         """
@@ -537,7 +616,7 @@ class GraphMerger:
 
         # Find relationship conflicts (contradictory relationships)
         # e.g., A is_a B and B is_a A (cycle in taxonomy)
-        self.cursor.execute('''
+        self.cursor.execute("""
             SELECT r1.source_id, r1.target_id, r1.relation_type, r1.id,
                    r2.source_id, r2.target_id, r2.relation_type, r2.id
             FROM graph_relationships r1
@@ -546,26 +625,32 @@ class GraphMerger:
                                        AND r1.relation_type = r2.relation_type
             WHERE r1.relation_type IN ('is_a', 'subclass_of', 'instance_of')
               AND r1.source_id < r2.target_id  -- Avoid duplicates
-        ''')
+        """)
 
         for row in self.cursor.fetchall():
             # Get entity names
-            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[0],))
+            self.cursor.execute(
+                "SELECT entity FROM graph_entities WHERE id = ?", (row[0],)
+            )
             source1 = self.cursor.fetchone()[0]
 
-            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[1],))
+            self.cursor.execute(
+                "SELECT entity FROM graph_entities WHERE id = ?", (row[1],)
+            )
             target1 = self.cursor.fetchone()[0]
 
-            conflicts.append({
-                'type': 'cycle',
-                'description': f"Taxonomic cycle detected: {source1} {row[2]} {target1} and {target1} {row[6]} {source1}",
-                'relation_ids': [row[3], row[7]],
-                'entities': [source1, target1],
-                'relation_type': row[2]
-            })
+            conflicts.append(
+                {
+                    "type": "cycle",
+                    "description": f"Taxonomic cycle detected: {source1} {row[2]} {target1} and {target1} {row[6]} {source1}",
+                    "relation_ids": [row[3], row[7]],
+                    "entities": [source1, target1],
+                    "relation_type": row[2],
+                }
+            )
 
         # Find attribute conflicts (different values for the same attribute)
-        self.cursor.execute('''
+        self.cursor.execute("""
             SELECT r1.source_id, r1.relation_type, r1.target_id, r1.confidence, r1.id,
                    r2.target_id, r2.confidence, r2.id
             FROM graph_relationships r1
@@ -574,30 +659,38 @@ class GraphMerger:
                                        AND r1.target_id != r2.target_id
             WHERE r1.relation_type LIKE 'has_%'
               AND r1.id < r2.id  -- Avoid duplicates
-        ''')
+        """)
 
         for row in self.cursor.fetchall():
             # Get entity names
-            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[0],))
+            self.cursor.execute(
+                "SELECT entity FROM graph_entities WHERE id = ?", (row[0],)
+            )
             source = self.cursor.fetchone()[0]
 
-            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[2],))
+            self.cursor.execute(
+                "SELECT entity FROM graph_entities WHERE id = ?", (row[2],)
+            )
             target1 = self.cursor.fetchone()[0]
 
-            self.cursor.execute('SELECT entity FROM graph_entities WHERE id = ?', (row[5],))
+            self.cursor.execute(
+                "SELECT entity FROM graph_entities WHERE id = ?", (row[5],)
+            )
             target2 = self.cursor.fetchone()[0]
 
-            conflicts.append({
-                'type': 'attribute',
-                'description': f"Attribute conflict: {source} {row[1]} {target1} (confidence: {row[3]}) vs {source} {row[1]} {target2} (confidence: {row[6]})",
-                'relation_ids': [row[4], row[7]],
-                'entities': [source, target1, target2],
-                'relation_type': row[1]
-            })
+            conflicts.append(
+                {
+                    "type": "attribute",
+                    "description": f"Attribute conflict: {source} {row[1]} {target1} (confidence: {row[3]}) vs {source} {row[1]} {target2} (confidence: {row[6]})",
+                    "relation_ids": [row[4], row[7]],
+                    "entities": [source, target1, target2],
+                    "relation_type": row[1],
+                }
+            )
 
         return conflicts
 
-    def resolve_conflicts(self, conflict_resolution: str = 'confidence') -> int:
+    def resolve_conflicts(self, conflict_resolution: str = "confidence") -> int:
         """
         Automatically resolve detected conflicts in the knowledge graph.
 
@@ -614,63 +707,75 @@ class GraphMerger:
         resolved = 0
 
         for conflict in conflicts:
-            if conflict['type'] == 'cycle':
+            if conflict["type"] == "cycle":
                 # For taxonomy cycles, keep the relation with higher confidence or recency
-                self.cursor.execute('''
+                self.cursor.execute(
+                    """
                     SELECT id, confidence, timestamp, provenance FROM graph_relationships
                     WHERE id IN (?, ?)
-                ''', (conflict['relation_ids'][0], conflict['relation_ids'][1]))
+                """,
+                    (conflict["relation_ids"][0], conflict["relation_ids"][1]),
+                )
 
                 relations = self.cursor.fetchall()
 
-                if conflict_resolution == 'confidence':
+                if conflict_resolution == "confidence":
                     # Keep the relation with higher confidence
                     if relations[0][1] >= relations[1][1]:
                         relation_to_remove = relations[1][0]
                     else:
                         relation_to_remove = relations[0][0]
 
-                elif conflict_resolution == 'recency':
+                elif conflict_resolution == "recency":
                     # Keep the more recent relation
                     if relations[0][2] >= relations[1][2]:
                         relation_to_remove = relations[1][0]
                     else:
                         relation_to_remove = relations[0][0]
 
-                elif conflict_resolution == 'provenance':
+                elif conflict_resolution == "provenance":
                     # Keep the relation from more reliable source
                     # This is a placeholder - implement source reliability logic
                     relation_to_remove = relations[1][0]
 
                 # Delete the relation to be removed
-                self.cursor.execute('''
+                self.cursor.execute(
+                    """
                     DELETE FROM graph_relationships WHERE id = ?
-                ''', (relation_to_remove,))
+                """,
+                    (relation_to_remove,),
+                )
 
                 resolved += 1
 
-            elif conflict['type'] == 'attribute':
+            elif conflict["type"] == "attribute":
                 # For attribute conflicts, keep the attribute with higher confidence
-                self.cursor.execute('''
+                self.cursor.execute(
+                    """
                     SELECT id, confidence FROM graph_relationships
                     WHERE id IN (?, ?)
-                ''', (conflict['relation_ids'][0], conflict['relation_ids'][1]))
+                """,
+                    (conflict["relation_ids"][0], conflict["relation_ids"][1]),
+                )
 
                 relations = self.cursor.fetchall()
 
-                if conflict_resolution == 'confidence':
+                if conflict_resolution == "confidence":
                     # Keep the relation with higher confidence
                     if relations[0][1] >= relations[1][1]:
                         relation_to_remove = relations[1][0]
                     else:
                         relation_to_remove = relations[0][0]
 
-                elif conflict_resolution == 'recency':
+                elif conflict_resolution == "recency":
                     # Similar logic as above
-                    self.cursor.execute('''
+                    self.cursor.execute(
+                        """
                         SELECT id, timestamp FROM graph_relationships
                         WHERE id IN (?, ?)
-                    ''', (conflict['relation_ids'][0], conflict['relation_ids'][1]))
+                    """,
+                        (conflict["relation_ids"][0], conflict["relation_ids"][1]),
+                    )
 
                     recency_data = self.cursor.fetchall()
                     if recency_data[0][1] >= recency_data[1][1]:
@@ -678,14 +783,17 @@ class GraphMerger:
                     else:
                         relation_to_remove = recency_data[0][0]
 
-                elif conflict_resolution == 'provenance':
+                elif conflict_resolution == "provenance":
                     # Placeholder for source reliability
                     relation_to_remove = relations[1][0]
 
                 # Delete the relation to be removed
-                self.cursor.execute('''
+                self.cursor.execute(
+                    """
                     DELETE FROM graph_relationships WHERE id = ?
-                ''', (relation_to_remove,))
+                """,
+                    (relation_to_remove,),
+                )
 
                 resolved += 1
 

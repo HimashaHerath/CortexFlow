@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Check if spaCy model is available
 try:
     import spacy
+
     spacy.load("en_core_web_sm")
     HAS_SPACY_MODEL = True
 except Exception:
@@ -58,17 +59,14 @@ def test_entity_linking():
         metadata={
             "aliases": ["Einstein", "A. Einstein"],
             "birth_year": 1879,
-            "death_year": 1955
-        }
+            "death_year": 1955,
+        },
     )
 
     graph.add_entity(
         entity="Python",
         entity_type="PROGRAMMING_LANGUAGE",
-        metadata={
-            "creator": "Guido van Rossum",
-            "year": 1991
-        }
+        metadata={"creator": "Guido van Rossum", "year": 1991},
     )
 
     graph.add_entity_alias(einstein_id, "Father of Relativity")
