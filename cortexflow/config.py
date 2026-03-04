@@ -30,7 +30,7 @@ class KnowledgeStoreConfig:
     """Knowledge store configuration settings."""
     knowledge_store_path: str = "cortexflow.db"
     retrieval_type: str = "hybrid"
-    trust_marker: str = "📚" 
+    trust_marker: str = "📚"
     use_reranking: bool = True
     rerank_top_k: int = 15
     vector_model: str = "all-MiniLM-L6-v2"
@@ -129,10 +129,91 @@ class InferenceConfig:
     abductive_reasoning_enabled: bool = True
     max_abductive_hypotheses: int = 5
 
+
+# ---- Companion AI config sections (Phase 1-3) ----
+
+@dataclass
+class SessionConfig:
+    """Session management configuration."""
+    enable_sessions: bool = False
+    default_user_id: str = "default"
+    session_ttl: int = 86400  # seconds
+    max_sessions_per_user: int = 10
+    session_db_path: str = ":memory:"
+
+@dataclass
+class EmotionConfig:
+    """Emotion tracking configuration."""
+    use_emotion_tracking: bool = False
+    emotion_detector: str = "rule"  # "rule" or "llm"
+    emotion_window_size: int = 20
+    emotion_influence_on_response: float = 0.5
+
+@dataclass
+class PersonaConfig:
+    """Persona management configuration."""
+    use_personas: bool = False
+    default_persona_id: str | None = None
+    persona_db_path: str = ":memory:"
+
+@dataclass
+class RelationshipConfig:
+    """Relationship tracking configuration."""
+    use_relationship_tracking: bool = False
+    relationship_db_path: str = ":memory:"
+
+@dataclass
+class EventConfig:
+    """Event system configuration."""
+    use_events: bool = False
+
+
+# ---- Phase 4: Temporal & Episodic config sections ----
+
+@dataclass
+class TemporalConfig:
+    """Temporal fact management configuration."""
+    use_temporal_facts: bool = False
+    temporal_db_path: str = ":memory:"
+
+@dataclass
+class EpisodicConfig:
+    """Episodic memory configuration."""
+    use_episodic_memory: bool = False
+    episodic_db_path: str = ":memory:"
+    auto_summarize_on_session_close: bool = True
+
+
+@dataclass
+class SafetyConfig:
+    """Safety pipeline configuration."""
+    use_safety_pipeline: bool = False
+    enable_pii_detection: bool = True
+    enable_boundary_enforcement: bool = True
+    custom_blocked_patterns: list[str] = field(default_factory=list)
+    block_on_safety_violation: bool = False  # If True, block message entirely
+
+
+@dataclass
+class VectorStoreConfig:
+    """Vector store backend configuration."""
+    backend: str = "sqlite"  # "sqlite", "chromadb", "qdrant"
+    collection_name: str = "cortexflow"
+    # ChromaDB settings
+    chromadb_host: str | None = None
+    chromadb_port: int | None = None
+    chromadb_path: str | None = None  # persistence path
+    # Qdrant settings
+    qdrant_url: str | None = None
+    qdrant_api_key: str | None = None
+    qdrant_path: str | None = None  # local persistence path
+    embedding_dimension: int = 384
+
+
 @dataclass
 class CortexFlowConfig:
     """Configuration for CortexFlow."""
-    
+
     # Configuration sections
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     knowledge_store: KnowledgeStoreConfig = field(default_factory=KnowledgeStoreConfig)
@@ -146,14 +227,33 @@ class CortexFlowConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     classifier: ClassifierConfig = field(default_factory=ClassifierConfig)
     inference: InferenceConfig = field(default_factory=InferenceConfig)
-    
+
+    # Companion AI sections (all disabled by default for backward compat)
+    session: SessionConfig = field(default_factory=SessionConfig)
+    emotion: EmotionConfig = field(default_factory=EmotionConfig)
+    persona: PersonaConfig = field(default_factory=PersonaConfig)
+    relationship: RelationshipConfig = field(default_factory=RelationshipConfig)
+
+    # Event system
+    events: EventConfig = field(default_factory=EventConfig)
+
+    # Temporal & Episodic memory
+    temporal: TemporalConfig = field(default_factory=TemporalConfig)
+    episodic: EpisodicConfig = field(default_factory=EpisodicConfig)
+
+    # Safety pipeline
+    safety: SafetyConfig = field(default_factory=SafetyConfig)
+
+    # Vector store backend
+    vector_store: VectorStoreConfig = field(default_factory=VectorStoreConfig)
+
     # Debug and logging settings
     verbose_logging: bool = False
     debug_mode: bool = False
-    
+
     # Optional custom configuration
     custom_config: dict[str, Any] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         """Initialize any derived settings after creation."""
         # Ensure path is absolute
@@ -177,10 +277,12 @@ class CortexFlowConfig:
             'memory', 'knowledge_store', 'graph_rag', 'ontology', 'metadata',
             'agents', 'reflection', 'uncertainty', 'performance', 'llm',
             'classifier', 'inference',
+            'session', 'emotion', 'persona', 'relationship',
+            'events', 'temporal', 'episodic', 'safety', 'vector_store',
         ):
             section_cls = {f.name: f for f in fields(cls)}[section_name].default_factory  # type: ignore[union-attr]
             for f in fields(section_cls):
-                # First-write wins — earlier sections have priority (matches old behavior)
+                # First-write wins -- earlier sections have priority (matches old behavior)
                 if f.name not in mapping:
                     mapping[f.name] = section_name
         cls._FIELD_MAP = mapping
@@ -230,6 +332,15 @@ class CortexFlowConfig:
             "llm": LLMConfig,
             "classifier": ClassifierConfig,
             "inference": InferenceConfig,
+            "session": SessionConfig,
+            "emotion": EmotionConfig,
+            "persona": PersonaConfig,
+            "relationship": RelationshipConfig,
+            "events": EventConfig,
+            "temporal": TemporalConfig,
+            "episodic": EpisodicConfig,
+            "safety": SafetyConfig,
+            "vector_store": VectorStoreConfig,
         }
 
         # Create top-level config dict with just the top-level items
@@ -246,11 +357,12 @@ class CortexFlowConfig:
                 top_config_dict[section_name] = config_class(**section_dict)
 
         return cls(**top_config_dict)
-    
+
     # Fields that must never appear in logs or serialized output
     _SENSITIVE_FIELDS = frozenset({
         "vertex_api_key",
         "vertex_credentials_path",
+        "qdrant_api_key",
     })
 
     def to_dict(self, *, redact: bool = False) -> dict[str, Any]:
@@ -291,7 +403,7 @@ class CortexFlowConfig:
 
 class ConfigBuilder:
     """Builder class for CortexFlowConfig to allow fluent configuration."""
-    
+
     def __init__(self):
         self._memory = MemoryConfig()
         self._knowledge_store = KnowledgeStoreConfig()
@@ -305,10 +417,19 @@ class ConfigBuilder:
         self._llm = LLMConfig()
         self._classifier = ClassifierConfig()
         self._inference = InferenceConfig()
+        self._session = SessionConfig()
+        self._emotion = EmotionConfig()
+        self._persona = PersonaConfig()
+        self._relationship = RelationshipConfig()
+        self._events = EventConfig()
+        self._temporal = TemporalConfig()
+        self._episodic = EpisodicConfig()
+        self._safety = SafetyConfig()
+        self._vector_store = VectorStoreConfig()
         self._verbose_logging = False
         self._debug_mode = False
         self._custom_config = {}
-    
+
     def _set_section(self, section_name: str, **kwargs) -> 'ConfigBuilder':
         """Apply keyword arguments to the named config section."""
         section = getattr(self, section_name)
@@ -380,11 +501,55 @@ class ConfigBuilder:
         """Configure inference engine settings."""
         return self._set_section('_inference', **kwargs)
 
+    def with_sessions(self, **kwargs) -> 'ConfigBuilder':
+        """Enable and configure session management."""
+        self._session.enable_sessions = True
+        return self._set_section('_session', **kwargs)
+
+    def with_emotions(self, **kwargs) -> 'ConfigBuilder':
+        """Enable and configure emotion tracking."""
+        self._emotion.use_emotion_tracking = True
+        return self._set_section('_emotion', **kwargs)
+
+    def with_persona(self, **kwargs) -> 'ConfigBuilder':
+        """Enable and configure persona management."""
+        self._persona.use_personas = True
+        return self._set_section('_persona', **kwargs)
+
+    def with_relationship(self, **kwargs) -> 'ConfigBuilder':
+        """Enable and configure relationship tracking."""
+        self._relationship.use_relationship_tracking = True
+        return self._set_section('_relationship', **kwargs)
+
+    def with_events(self, **kwargs) -> 'ConfigBuilder':
+        """Enable and configure event system."""
+        self._events.use_events = True
+        return self._set_section('_events', **kwargs)
+
+    def with_temporal(self, **kwargs) -> 'ConfigBuilder':
+        """Enable and configure temporal fact management."""
+        self._temporal.use_temporal_facts = True
+        return self._set_section('_temporal', **kwargs)
+
+    def with_episodic(self, **kwargs) -> 'ConfigBuilder':
+        """Enable and configure episodic memory."""
+        self._episodic.use_episodic_memory = True
+        return self._set_section('_episodic', **kwargs)
+
+    def with_safety(self, **kwargs) -> 'ConfigBuilder':
+        """Enable and configure the safety pipeline."""
+        self._safety.use_safety_pipeline = True
+        return self._set_section('_safety', **kwargs)
+
+    def with_vector_store(self, **kwargs) -> 'ConfigBuilder':
+        """Configure vector store backend."""
+        return self._set_section('_vector_store', **kwargs)
+
     def with_fact_extraction(self, enabled: bool = True) -> 'ConfigBuilder':
         """Enable or disable personal fact extraction for deep memory recall."""
         self._memory.use_fact_extraction = enabled
         return self
-    
+
     def with_debug(self, verbose_logging: bool = None, debug_mode: bool = None) -> 'ConfigBuilder':
         """Configure debug and logging settings."""
         if verbose_logging is not None:
@@ -392,14 +557,17 @@ class ConfigBuilder:
         if debug_mode is not None:
             self._debug_mode = debug_mode
         return self
-    
+
     def with_custom_config(self, custom_config: dict[str, Any]) -> 'ConfigBuilder':
         """Configure custom settings."""
         self._custom_config = custom_config
         return self
-    
+
     def build(self) -> CortexFlowConfig:
         """Build the final configuration object."""
+        # Invalidate the cached field map so new sections are included
+        CortexFlowConfig._FIELD_MAP = None
+
         return CortexFlowConfig(
             memory=self._memory,
             knowledge_store=self._knowledge_store,
@@ -413,7 +581,16 @@ class ConfigBuilder:
             llm=self._llm,
             classifier=self._classifier,
             inference=self._inference,
+            session=self._session,
+            emotion=self._emotion,
+            persona=self._persona,
+            relationship=self._relationship,
+            events=self._events,
+            temporal=self._temporal,
+            episodic=self._episodic,
+            safety=self._safety,
+            vector_store=self._vector_store,
             verbose_logging=self._verbose_logging,
             debug_mode=self._debug_mode,
             custom_config=self._custom_config
-        ) 
+        )

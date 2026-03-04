@@ -214,6 +214,125 @@ class CortexFlowManager(ContextProvider):
                 except Exception as e:
                     logger.error(f"Failed to initialize Personal Fact Detector: {e}")
 
+            # ---- Companion AI subsystems (Phase 1–3) ----
+
+            # Session management
+            self._session_manager = None
+            self._current_session = None
+            if getattr(self.config, "enable_sessions", False):
+                try:
+                    from cortexflow.session import SessionManager
+                    self._session_manager = SessionManager(
+                        db_path=self.config.session.session_db_path,
+                        session_ttl=self.config.session.session_ttl,
+                        max_sessions_per_user=self.config.session.max_sessions_per_user,
+                    )
+                    logger.info("Session Manager initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Session Manager: {e}")
+
+            # Emotion tracking
+            self._emotion_tracker = None
+            if getattr(self.config, "use_emotion_tracking", False):
+                try:
+                    from cortexflow.emotion import (
+                        RuleBasedEmotionDetector, LLMEmotionDetector, EmotionTracker,
+                    )
+                    detector_type = self.config.emotion.emotion_detector
+                    if detector_type == "llm":
+                        detector = LLMEmotionDetector(self.llm_client)
+                    else:
+                        detector = RuleBasedEmotionDetector()
+                    self._emotion_tracker = EmotionTracker(
+                        detector, window_size=self.config.emotion.emotion_window_size,
+                    )
+                    logger.info("Emotion Tracker initialized (detector=%s)", detector_type)
+                except Exception as e:
+                    logger.error(f"Failed to initialize Emotion Tracker: {e}")
+
+            # User profile manager
+            self._user_profile_manager = None
+            if getattr(self.config, "enable_sessions", False):
+                try:
+                    from cortexflow.user_profile import UserProfileManager
+                    self._user_profile_manager = UserProfileManager(
+                        db_path=self.config.session.session_db_path,
+                    )
+                    logger.info("User Profile Manager initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize User Profile Manager: {e}")
+
+            # Persona management
+            self._persona_manager = None
+            if getattr(self.config, "use_personas", False):
+                try:
+                    from cortexflow.persona import PersonaManager
+                    self._persona_manager = PersonaManager(
+                        db_path=self.config.persona.persona_db_path,
+                    )
+                    logger.info("Persona Manager initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Persona Manager: {e}")
+
+            # Relationship tracking
+            self._relationship_tracker = None
+            if getattr(self.config, "use_relationship_tracking", False):
+                try:
+                    from cortexflow.relationship import RelationshipTracker
+                    self._relationship_tracker = RelationshipTracker(
+                        db_path=self.config.relationship.relationship_db_path,
+                    )
+                    logger.info("Relationship Tracker initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Relationship Tracker: {e}")
+
+            # ---- Event system (gated by config) ----
+            self._event_bus = None
+            if getattr(self.config, "use_events", False):
+                try:
+                    from cortexflow.events import EventBus, EventType
+                    self._event_bus = EventBus()
+                    logger.info("Event Bus initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Event Bus: {e}")
+
+            # ---- Safety pipeline (gated by config) ----
+            self._safety_pipeline = None
+            if getattr(self.config, "use_safety_pipeline", False):
+                try:
+                    from cortexflow.safety import SafetyPipeline
+                    self._safety_pipeline = SafetyPipeline(
+                        enable_pii_detection=self.config.safety.enable_pii_detection,
+                        enable_boundary_enforcement=self.config.safety.enable_boundary_enforcement,
+                        custom_blocked_patterns=self.config.safety.custom_blocked_patterns,
+                    )
+                    logger.info("Safety Pipeline initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Safety Pipeline: {e}")
+
+            # ---- Temporal & Episodic subsystems (gated by config) ----
+            self._temporal_manager = None
+            if getattr(self.config, "use_temporal_facts", False):
+                try:
+                    from cortexflow.temporal import TemporalManager
+                    self._temporal_manager = TemporalManager(
+                        db_path=self.config.temporal.temporal_db_path,
+                    )
+                    logger.info("Temporal Manager initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Temporal Manager: {e}")
+
+            self._episodic_store = None
+            if getattr(self.config, "use_episodic_memory", False):
+                try:
+                    from cortexflow.episodic_memory import EpisodicMemoryStore
+                    self._episodic_store = EpisodicMemoryStore(
+                        db_path=self.config.episodic.episodic_db_path,
+                    )
+                    logger.info("Episodic Memory Store initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Episodic Memory Store: {e}")
+
             # ---- Instantiate domain delegates ----
             self._response_orchestrator = ResponseOrchestrator(
                 config=self.config,
@@ -226,6 +345,13 @@ class CortexFlowManager(ContextProvider):
                 add_message_fn=self.add_message,
                 get_conversation_context_fn=self.get_conversation_context,
             )
+
+            # Wire companion AI references into the orchestrator
+            self._response_orchestrator._emotion_tracker = self._emotion_tracker
+            self._response_orchestrator._persona_manager = self._persona_manager
+            self._response_orchestrator._user_profile_manager = self._user_profile_manager
+            self._response_orchestrator._relationship_tracker = self._relationship_tracker
+            self._response_orchestrator._get_current_session_fn = self.get_current_session
 
             self._knowledge_coordinator = KnowledgeCoordinator(
                 config=self.config,
@@ -240,10 +366,28 @@ class CortexFlowManager(ContextProvider):
 
             logger.info("CortexFlowManager initialized")
 
+            if self._event_bus:
+                from cortexflow.events import EventType
+                self._event_bus.emit_typed(EventType.MANAGER_INITIALIZED, source="manager")
+
         except Exception as e:
             logger.error(f"Error initializing CortexFlowManager: {e}")
             logger.error(traceback.format_exc())
             raise
+
+    # ------------------------------------------------------------------
+    # Event bus accessor
+    # ------------------------------------------------------------------
+
+    @property
+    def event_bus(self):
+        """Access the event bus (None if not enabled)."""
+        return self._event_bus
+
+    @property
+    def safety_pipeline(self):
+        """Access the safety pipeline (None if not enabled)."""
+        return self._safety_pipeline
 
     # ------------------------------------------------------------------
     # Internal helpers (kept on the facade)
@@ -286,6 +430,25 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Message object that was added
         """
+        # Safety check (runs before any other processing)
+        if self._safety_pipeline and role == "user":
+            from cortexflow.safety import SafetyLevel
+            safety_result = self._safety_pipeline.check(content)
+            if safety_result.level == SafetyLevel.BLOCKED and self.config.safety.block_on_safety_violation:
+                logger.warning(f"Message blocked by safety pipeline: {safety_result.reason}")
+                return {
+                    "role": role,
+                    "content": "[Message blocked by safety filter]",
+                    "blocked": True,
+                    "safety": safety_result.triggered_rules,
+                }
+            if safety_result.filtered_content:
+                content = safety_result.filtered_content
+            if metadata is None:
+                metadata = {}
+            if safety_result.triggered_rules:
+                metadata["safety_flags"] = safety_result.triggered_rules
+
         # Perform classification and set importance metadata before adding to memory
         if role == "user" and self.classifier is not None:
             try:
@@ -308,7 +471,76 @@ class CortexFlowManager(ContextProvider):
             if "importance" not in metadata:
                 metadata["importance"] = 5.0
 
+        # Tag message with session context if sessions are active
+        if self._current_session is not None:
+            metadata = metadata or {}
+            metadata["session_id"] = self._current_session.session_id
+            metadata["user_id"] = self._current_session.user_id
+
         message = self.memory.add_message(role, content, metadata)
+
+        # Emotion detection
+        if role == "user" and self._emotion_tracker is not None:
+            try:
+                emotional_state = self._emotion_tracker.process_message(content)
+                message["metadata"] = message.get("metadata", {})
+                message["metadata"]["emotional_state"] = emotional_state.to_dict()
+            except Exception as e:
+                logger.debug(f"Emotion detection failed: {e}")
+                emotional_state = None
+        else:
+            emotional_state = None
+
+        # User profile update
+        if role == "user" and self._user_profile_manager is not None:
+            try:
+                user_id = (self._current_session.user_id
+                           if self._current_session else self.config.session.default_user_id)
+                self._user_profile_manager.update_from_message(
+                    user_id, content, self.fact_detector,
+                )
+            except Exception as e:
+                logger.debug(f"User profile update failed: {e}")
+
+        # Relationship tracking
+        if self._relationship_tracker is not None and self._current_session is not None:
+            try:
+                persona_id = self._current_session.persona_id or "default"
+                self._relationship_tracker.update(
+                    user_id=self._current_session.user_id,
+                    persona_id=persona_id,
+                    message=content,
+                    role=role,
+                    emotional_state=emotional_state,
+                )
+            except Exception as e:
+                logger.debug(f"Relationship tracking failed: {e}")
+
+        # ---- Temporal fact extraction ----
+        if self._temporal_manager and self.fact_detector and role == "user":
+            try:
+                facts = self.fact_detector.detect_facts(content)
+                for fact_dict in facts:
+                    from cortexflow.temporal import TemporalFact
+                    from datetime import datetime
+                    tf = TemporalFact(
+                        subject=fact_dict.get("subject", "user"),
+                        predicate=fact_dict.get("fact_type", "states"),
+                        object=fact_dict.get("value", content[:100]),
+                        valid_from=datetime.utcnow().isoformat(),
+                        confidence=fact_dict.get("confidence", 0.8),
+                        source="conversation",
+                    )
+                    self._temporal_manager.add_temporal_fact(tf)
+                    if self._event_bus:
+                        from cortexflow.events import EventType
+                        self._event_bus.emit_typed(
+                            EventType.TEMPORAL_FACT_ADDED,
+                            data={"subject": tf.subject, "predicate": tf.predicate, "object": tf.object},
+                            source="manager",
+                        )
+            except Exception as e:
+                logger.debug(f"Temporal fact extraction failed: {e}")
 
         # Dual-write: extract personal facts and store in knowledge store
         if role == "user" and self.fact_detector is not None:
@@ -338,6 +570,10 @@ class CortexFlowManager(ContextProvider):
                 self._update_memory_tier_limits(new_limits)
             except Exception as e:
                 logger.error(f"Error in dynamic weighting: {e}")
+
+        if self._event_bus:
+            from cortexflow.events import EventType
+            self._event_bus.emit_typed(EventType.MESSAGE_ADDED, data={"role": role, "content": content}, source="manager")
 
         return message
 
@@ -377,6 +613,10 @@ class CortexFlowManager(ContextProvider):
 
             context["knowledge"] = knowledge_items
 
+            if self._event_bus:
+                from cortexflow.events import EventType
+                self._event_bus.emit_typed(EventType.KNOWLEDGE_RETRIEVED, data={"query": last_user_message}, source="manager")
+
         return context
 
     def clear_memory(self) -> None:
@@ -386,6 +626,143 @@ class CortexFlowManager(ContextProvider):
         # Reset dynamic weighting to defaults if enabled
         if self.config.use_dynamic_weighting and self.weighting_engine:
             self.reset_dynamic_weighting()
+
+        if self._event_bus:
+            from cortexflow.events import EventType
+            self._event_bus.emit_typed(EventType.MEMORY_CLEARED, source="manager")
+
+    # ------------------------------------------------------------------
+    # Session management (Phase 1A)
+    # ------------------------------------------------------------------
+
+    def create_session(self, user_id: str, persona_id: str | None = None,
+                       metadata: dict[str, Any] | None = None):
+        """Create a new session and make it active."""
+        if self._session_manager is None:
+            raise RuntimeError("Sessions are not enabled. Use ConfigBuilder.with_sessions() to enable.")
+        session = self._session_manager.create_session(user_id, persona_id, metadata)
+        self._current_session = session
+        return session
+
+    def switch_session(self, session_id: str):
+        """Switch to an existing session."""
+        if self._session_manager is None:
+            raise RuntimeError("Sessions are not enabled.")
+        session = self._session_manager.get_session(session_id)
+        if session is None:
+            raise ValueError(f"Session {session_id} not found")
+        self._current_session = session
+        return session
+
+    def get_current_session(self):
+        """Return the currently active session context, or ``None``."""
+        return self._current_session
+
+    def close_session(self, session_id: str | None = None) -> bool:
+        """Close a session (defaults to current)."""
+        if self._session_manager is None:
+            return False
+        sid = session_id or (self._current_session.session_id if self._current_session else None)
+        if sid is None:
+            return False
+
+        session = self._current_session
+
+        # Auto-save episode on session close
+        if self._episodic_store and session:
+            try:
+                from cortexflow.episodic_memory import Episode
+                from datetime import datetime
+                # Gather recent messages from memory
+                messages = []
+                if hasattr(self.memory, 'get_messages'):
+                    messages = self.memory.get_messages()
+                elif hasattr(self.memory, 'messages'):
+                    messages = self.memory.messages
+
+                emotions = []
+                if self._emotion_tracker:
+                    state = self._emotion_tracker.get_current_state()
+                    if state and state.primary_emotion:
+                        emotions = [state.primary_emotion]
+
+                episode = Episode(
+                    session_id=session.session_id if hasattr(session, 'session_id') else str(session),
+                    user_id=getattr(session, 'user_id', None),
+                    title="Session conversation",
+                    summary=f"Conversation with {len(messages)} messages",
+                    messages=[{"role": m.get("role", ""), "content": m.get("content", "")[:200]} for m in messages[-20:]],  # last 20
+                    emotions=emotions,
+                    end_time=datetime.utcnow().isoformat(),
+                )
+                self._episodic_store.save_episode(episode)
+                logger.debug("Episode saved for session close")
+            except Exception as e:
+                logger.debug(f"Episode auto-save failed: {e}")
+
+        result = self._session_manager.close_session(sid)
+        if self._current_session and self._current_session.session_id == sid:
+            self._current_session = None
+        return result
+
+    # ------------------------------------------------------------------
+    # Companion AI accessors (Phase 2–3)
+    # ------------------------------------------------------------------
+
+    @property
+    def emotion_tracker(self):
+        """Return the EmotionTracker instance, or ``None``."""
+        return self._emotion_tracker
+
+    @property
+    def user_profile_manager(self):
+        """Return the UserProfileManager instance, or ``None``."""
+        return self._user_profile_manager
+
+    @property
+    def persona_manager(self):
+        """Return the PersonaManager instance, or ``None``."""
+        return self._persona_manager
+
+    @property
+    def relationship_tracker(self):
+        """Return the RelationshipTracker instance, or ``None``."""
+        return self._relationship_tracker
+
+    @property
+    def temporal_manager(self):
+        """Access the temporal fact manager (None if not enabled)."""
+        return self._temporal_manager
+
+    @property
+    def episodic_store(self):
+        """Access the episodic memory store (None if not enabled)."""
+        return self._episodic_store
+
+    # ------------------------------------------------------------------
+    # Temporal & Episodic convenience methods
+    # ------------------------------------------------------------------
+
+    def get_temporal_facts(self, subject: str | None = None) -> list:
+        """Get current temporal facts, optionally filtered by subject."""
+        if not self._temporal_manager:
+            return []
+        from datetime import datetime
+        return self._temporal_manager.get_facts_at_time(
+            datetime.utcnow().isoformat(), subject=subject
+        )
+
+    def get_recent_episodes(self, user_id: str | None = None, limit: int = 10) -> list:
+        """Get recent episodes from episodic memory."""
+        if not self._episodic_store:
+            return []
+        return self._episodic_store.get_recent_episodes(user_id=user_id, limit=limit)
+
+    def search_episodes(self, query: str, max_results: int = 5) -> list:
+        """Search episodic memory by text query."""
+        if not self._episodic_store:
+            return []
+        return self._episodic_store.recall_episodes(query, max_results=max_results)
 
     # ------------------------------------------------------------------
     # Dynamic weighting (stays on facade -- thin and cross-cutting)
@@ -484,7 +861,13 @@ class CortexFlowManager(ContextProvider):
         Returns:
             Generated response
         """
-        return self._response_orchestrator.generate_response(prompt, model)
+        response = self._response_orchestrator.generate_response(prompt, model)
+
+        if self._event_bus:
+            from cortexflow.events import EventType
+            self._event_bus.emit_typed(EventType.RESPONSE_GENERATED, data={"response": response[:200]}, source="manager")
+
+        return response
 
     def generate_response_stream(self, prompt: str = None, model: str = None) -> Iterator[str]:
         """
@@ -535,7 +918,13 @@ class CortexFlowManager(ContextProvider):
         Returns:
             List of IDs for the stored knowledge
         """
-        return self._knowledge_coordinator.add_knowledge(text, source, confidence)
+        result = self._knowledge_coordinator.add_knowledge(text, source, confidence)
+
+        if self._event_bus:
+            from cortexflow.events import EventType
+            self._event_bus.emit_typed(EventType.KNOWLEDGE_ADDED, data={"text": text, "source": source}, source="manager")
+
+        return result
 
     def detect_contradictions(self, entity_id=None, relation_type=None,
                           max_results=100) -> list[dict[str, Any]]:
@@ -841,8 +1230,15 @@ class CortexFlowManager(ContextProvider):
 
     def close(self) -> None:
         """Close and clean up resources."""
+        if self._event_bus:
+            from cortexflow.events import EventType
+            self._event_bus.emit_typed(EventType.MANAGER_CLOSING, source="manager")
+
         for component_name in ('memory', 'knowledge_store', 'uncertainty_handler',
-                               'performance_optimizer', 'ontology', 'graph_store'):
+                               'performance_optimizer', 'ontology', 'graph_store',
+                               '_session_manager', '_user_profile_manager',
+                               '_persona_manager', '_relationship_tracker',
+                               '_temporal_manager', '_episodic_store'):
             component = getattr(self, component_name, None)
             if component and hasattr(component, 'close'):
                 try:

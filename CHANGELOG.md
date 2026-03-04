@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-03-04
+
+### Added
+- **MCP Server** — FastMCP-based tool server with 9 tools (add_memory, search_memory, add_knowledge, get_conversation_context, get_user_profile, get_emotional_state, get_relationship_state, manage_persona, create_session), stdio transport, `cortexflow-mcp` entry point
+- **LangChain Integration** — `CortexFlowChatMessageHistory`, `CortexFlowRetriever`, `CortexFlowMemory` adapters in `cortexflow.integrations.langchain`
+- **CrewAI Integration** — `CortexFlowCrewStorage` implementing CrewAI storage protocol in `cortexflow.integrations.crewai`
+- **Pluggable Vector Store Backends** — `VectorStoreBackend` ABC with SQLite (default), ChromaDB, and Qdrant adapters; `create_vector_store()` factory; wired into `KnowledgeStore` with dual-write and fallback
+- **Temporal Facts** — `TemporalFact` and `TemporalManager` for time-aware fact management with validity windows, superseding, conflict detection; auto-extracts from conversation messages
+- **Episodic Memory** — `Episode` and `EpisodicMemoryStore` with SQLite + FTS5 full-text search; auto-saves episodes on session close
+- **Event System** — Thread-safe `EventBus` with pub/sub, 12 event types, emits at 7 manager lifecycle points; decorator-based handler registration
+- **Safety Pipeline** — `SafetyPipeline` with PII detection (email, phone, SSN, credit card), boundary enforcement (medical/legal/impersonation), custom rules; configurable blocking or filtering
+- **New config sections** — `VectorStoreConfig`, `TemporalConfig`, `EpisodicConfig`, `EventConfig`, `SafetyConfig` with builder methods
+- **New optional dependency groups** — `mcp`, `langchain`, `crewai`, `chromadb`, `qdrant`
+- **5 example scripts** in `examples/` directory
+- **Convenience methods** — `get_temporal_facts()`, `get_recent_episodes()`, `search_episodes()` on manager
+
+### Changed
+- Version bumped to 1.0.0
+- `pyproject.toml` updated with new classifiers, keywords, and `cortexflow-mcp` entry point
+- `__init__.py` now exports all new classes (EventType, EventBus, TemporalFact, TemporalManager, Episode, EpisodicMemoryStore, VectorStoreBackend, VectorSearchResult, SafetyLevel, SafetyResult, SafetyRule, SafetyPipeline)
+- README updated with comprehensive documentation for all new features
+
 ## [0.9.0] - 2026-03-03
 
 ### Added

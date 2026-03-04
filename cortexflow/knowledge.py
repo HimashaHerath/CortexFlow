@@ -160,15 +160,33 @@ class DenseVectorSearchStrategy:
     def search(self, knowledge_store: 'KnowledgeStore', query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform vector similarity search for embeddings.
-        
+
         Args:
             knowledge_store: The knowledge store instance
             query_embedding: Query embedding vector
             max_results: Maximum number of results to return
-        
+
         Returns:
             List of matching items with similarity scores
         """
+        # Delegate to pluggable vector backend if available
+        if getattr(knowledge_store, '_vector_backend', None) is not None:
+            try:
+                from cortexflow.vector_stores.base import VectorSearchResult
+                results = knowledge_store._vector_backend.search(query_embedding, max_results)
+                return [
+                    {
+                        'id': r.id,
+                        'text': r.text,
+                        'score': r.score,
+                        'type': r.metadata.get('type', r.type) if r.metadata else r.type,
+                        'content': r.text,
+                    }
+                    for r in results
+                ]
+            except Exception as e:
+                logging.warning(f"Vector backend search failed, falling back to SQLite: {e}")
+
         if not VECTOR_ENABLED:
             logging.warning("Dense vector search unavailable: sentence-transformers library is not installed")
             return []
@@ -514,7 +532,21 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 logging.info(f"Loaded embedding model: {model_name} with dimension {self.embedding_dimension}")
         except Exception as e:
             logging.error(f"Error loading vector model: {e}")
-        
+
+        # Initialize pluggable vector store backend if configured
+        self._vector_backend = None
+        if hasattr(config, 'vector_store') and config.vector_store.backend != "sqlite":
+            try:
+                from cortexflow.vector_stores import create_vector_store
+                self._vector_backend = create_vector_store(config)
+                logging.info(f"Using {config.vector_store.backend} vector backend")
+            except Exception as e:
+                logging.warning(
+                    f"Failed to init vector backend '{config.vector_store.backend}', "
+                    f"falling back to SQLite: {e}"
+                )
+                self._vector_backend = None
+
         # Initialize BM25 indexer
         self.bm25_index = None
         if BM25_ENABLED:
@@ -954,6 +986,16 @@ class KnowledgeStore(KnowledgeStoreInterface):
 
                 fact_id = cursor.lastrowid
                 conn.commit()
+
+            # Also store in pluggable vector backend if available
+            if self._vector_backend and embedding is not None and fact_id is not None:
+                try:
+                    self._vector_backend.add_embedding(
+                        id=fact_id, text=fact_text, embedding=embedding,
+                        metadata={"type": "fact"}
+                    )
+                except Exception as e:
+                    logging.warning(f"Vector backend add_embedding failed for fact {fact_id}: {e}")
 
             # Update BM25 index after adding a new fact
             self._update_bm25_index()
@@ -1744,6 +1786,16 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 item_id = cursor.lastrowid
                 conn.commit()
 
+            # Also store in pluggable vector backend if available
+            if self._vector_backend and embedding is not None and item_id is not None:
+                try:
+                    self._vector_backend.add_embedding(
+                        id=item_id, text=text, embedding=embedding,
+                        metadata={"type": "knowledge"}
+                    )
+                except Exception as e:
+                    logging.warning(f"Vector backend add_embedding failed for knowledge item {item_id}: {e}")
+
             # Update BM25 index after adding a new knowledge item
             self._update_bm25_index()
 
@@ -1822,6 +1874,13 @@ class KnowledgeStore(KnowledgeStoreInterface):
         with self._lock:
             if getattr(self, '_closed', False):
                 return
+
+            try:
+                if hasattr(self, '_vector_backend') and self._vector_backend is not None:
+                    self._vector_backend.close()
+                    self._vector_backend = None
+            except Exception:
+                pass
 
             try:
                 if hasattr(self, 'graph_store') and self.graph_store is not None:

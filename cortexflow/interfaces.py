@@ -13,6 +13,9 @@ __all__ = [
     "MemoryTierInterface",
     "KnowledgeStoreInterface",
     "LLMProviderInterface",
+    "SessionAwareInterface",
+    "AsyncContextProvider",
+    "AsyncKnowledgeStoreInterface",
 ]
 
 
@@ -107,3 +110,49 @@ class LLMProviderInterface(ABC):
     async def agenerate_from_prompt(self, prompt: str, model: str = None, **kwargs) -> str:
         """Async generate from prompt. Default delegates to sync."""
         return self.generate_from_prompt(prompt, model=model, **kwargs)
+
+
+class SessionAwareInterface(ABC):
+    """Mixin for components that can scope operations to a session/user."""
+
+    @abstractmethod
+    def set_session_context(self, session_id: str | None, user_id: str | None) -> None:
+        """Set the active session/user scope for subsequent operations."""
+
+    @abstractmethod
+    def get_session_context(self) -> dict[str, Any]:
+        """Return the currently active session/user context."""
+
+
+class AsyncContextProvider(ABC):
+    """Async variant of ContextProvider."""
+
+    @abstractmethod
+    async def add_message(self, role: str, content: str,
+                          metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        pass
+
+    @abstractmethod
+    async def get_context(self) -> dict[str, Any]:
+        pass
+
+    @abstractmethod
+    async def clear_context(self) -> None:
+        pass
+
+
+class AsyncKnowledgeStoreInterface(ABC):
+    """Async variant of KnowledgeStoreInterface."""
+
+    @abstractmethod
+    async def add_knowledge(self, text: str, source: str | None = None,
+                            confidence: float = 0.95) -> list[int]:
+        pass
+
+    @abstractmethod
+    async def retrieve(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def clear(self) -> None:
+        pass

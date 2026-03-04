@@ -54,6 +54,29 @@ class PersonalFactDetector:
             re.compile(r"\bi(?:'m| am)\s+(\d+)\s+years?\s+old", re.IGNORECASE),
             re.compile(r"\bmy age is\s+(\d+)", re.IGNORECASE),
         ],
+        # Companion-specific patterns (Phase 2B)
+        "relationship_status": [
+            re.compile(r"\bi(?:'m| am)\s+(single|married|divorced|engaged|in a relationship|dating|widowed)", re.IGNORECASE),
+            re.compile(r"\bi have a\s+(boyfriend|girlfriend|partner|wife|husband|spouse)", re.IGNORECASE),
+        ],
+        "emotional_state": [
+            re.compile(r"\bi(?:'m| am) (?:feeling |)(happy|sad|anxious|depressed|lonely|stressed|excited|scared|angry|grateful|hopeful|overwhelmed)\b", re.IGNORECASE),
+            re.compile(r"\bi(?:'ve| have) been (?:feeling |)(happy|sad|anxious|depressed|lonely|stressed|excited|scared|angry|grateful|hopeful|overwhelmed)\b", re.IGNORECASE),
+        ],
+        "routine": [
+            re.compile(r"\bevery (?:day|morning|evening|night|week)\s+i\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(r"\bi (?:usually|always|typically)\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+        ],
+        "boundary": [
+            re.compile(r"\bi(?:'m| am) not comfortable (?:with |talking about |discussing )(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(r"\bplease (?:don't|do not) (?:talk about |mention |bring up )(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(r"\bi(?:'d| would) (?:rather|prefer) not (?:talk about |discuss )(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+        ],
+        "interest": [
+            re.compile(r"\bi(?:'m| am) (?:really )?interested in\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(r"\bi(?:'m| am) (?:really )?into\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+            re.compile(r"\bmy hobbi(?:es|y)\s+(?:is|are|include)\s+(.+?)(?:\.|,|!|\?|$)", re.IGNORECASE),
+        ],
     }
 
     # Quick-check pattern: any of these substrings hint at a personal fact.
@@ -63,7 +86,13 @@ class PersonalFactDetector:
         r"|\bi live\b|\bi(?:'m| am) from\b|\bi was born\b"
         r"|\bmy favo(?:u?)rite\b|\bi have a\b|\bmy \w+'s name\b"
         r"|\bi(?:'m| am) \d+ years?\b|\bmy age\b"
-        r"|\bi(?:'m| am) an?\b|\bi grew up\b",
+        r"|\bi(?:'m| am) an?\b|\bi grew up\b"
+        # Companion-specific hints
+        r"|\bi(?:'m| am) (?:single|married|divorced|engaged|dating)"
+        r"|\bi(?:'m| am) (?:feeling )?(?:happy|sad|anxious|depressed|lonely|stressed)"
+        r"|\bevery (?:day|morning|evening|night|week) i\b"
+        r"|\bi(?:'m| am) not comfortable\b|\bplease (?:don't|do not)\b"
+        r"|\bi(?:'m| am) (?:really )?interested in\b|\bmy hobbi",
         re.IGNORECASE,
     )
 

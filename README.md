@@ -37,6 +37,13 @@ CortexFlow dynamically manages context information, retaining important elements
   - Multi-hop indexing for faster traversal
   - Query planning for optimizing reasoning paths
   - Caching for common reasoning patterns
+- **MCP Server** -- expose CortexFlow as a Model Context Protocol tool server with 9 tools over stdio transport
+- **Framework integrations** -- first-class adapters for LangChain (ChatMessageHistory, Retriever, Memory) and CrewAI (StorageBackend)
+- **Pluggable vector store backends** -- swap between SQLite (default), ChromaDB, and Qdrant
+- **Temporal facts** -- time-aware fact management with validity windows, superseding, and conflict detection
+- **Episodic memory** -- session-based episode storage with FTS5 full-text search
+- **Event system** -- thread-safe pub/sub event bus with 12 event types for middleware and hooks
+- **Safety pipeline** -- content filtering with PII detection, boundary enforcement, and custom rules
 
 ## Requirements
 
@@ -56,6 +63,31 @@ pip install "cortexflow-llm[graph]"
 For LiteLLM multi-provider support (OpenAI, Anthropic, Cohere, Azure, Bedrock, etc.):
 ```bash
 pip install "cortexflow-llm[litellm]"
+```
+
+For the MCP server (Model Context Protocol):
+```bash
+pip install "cortexflow-llm[mcp]"
+```
+
+For LangChain integration:
+```bash
+pip install "cortexflow-llm[langchain]"
+```
+
+For CrewAI integration:
+```bash
+pip install "cortexflow-llm[crewai]"
+```
+
+For ChromaDB vector backend:
+```bash
+pip install "cortexflow-llm[chromadb]"
+```
+
+For Qdrant vector backend:
+```bash
+pip install "cortexflow-llm[qdrant]"
 ```
 
 For the full package with all dependencies:
@@ -401,6 +433,237 @@ response = manager.generate_response()
 ```
 
 Enable via config: `use_fact_extraction=True` in `MemoryConfig`, or `.with_fact_extraction()` on the builder. Disabled by default for backward compatibility.
+
+## New in v1.0
+
+### MCP Server (Model Context Protocol)
+
+CortexFlow exposes itself as an MCP tool server with 9 tools, allowing any MCP-compatible client (Claude Desktop, IDEs, custom agents) to use CortexFlow memory, knowledge, and companion AI features over stdio transport.
+
+**Available tools:** `add_memory`, `search_memory`, `add_knowledge`, `get_conversation_context`, `get_user_profile`, `get_emotional_state`, `get_relationship_state`, `manage_persona`, `create_session`.
+
+Run the server directly:
+
+```bash
+# Via console-script entry point
+cortexflow-mcp
+
+# Or as a Python module
+python -m cortexflow.mcp_server
+```
+
+Configure in Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "cortexflow": {
+      "command": "cortexflow-mcp",
+      "env": {
+        "CORTEXFLOW_DB_PATH": "/path/to/knowledge.db",
+        "CORTEXFLOW_SESSIONS": "true",
+        "CORTEXFLOW_EMOTIONS": "true",
+        "CORTEXFLOW_FACT_EXTRACTION": "true"
+      }
+    }
+  }
+}
+```
+
+The server is configured entirely through environment variables (`CORTEXFLOW_DB_PATH`, `CORTEXFLOW_SESSIONS`, `CORTEXFLOW_EMOTIONS`, `CORTEXFLOW_PERSONAS`, `CORTEXFLOW_RELATIONSHIPS`, `CORTEXFLOW_FACT_EXTRACTION`, `CORTEXFLOW_VERBOSE`). See `examples/mcp_quickstart.py` for a full walkthrough.
+
+### Framework Integrations
+
+CortexFlow provides first-class adapters for popular LLM frameworks. Import only the integration you need -- dependencies are optional and lazy-loaded.
+
+#### LangChain
+
+```python
+from cortexflow import CortexFlowManager, ConfigBuilder
+from cortexflow.integrations.langchain import (
+    CortexFlowChatMessageHistory,
+    CortexFlowRetriever,
+    CortexFlowMemory,
+)
+
+manager = CortexFlowManager(ConfigBuilder().with_memory().build())
+
+# Use as LangChain chat history
+history = CortexFlowChatMessageHistory(manager=manager)
+history.add_user_message("My name is Alice.")
+history.add_ai_message("Nice to meet you, Alice!")
+
+# Use as a LangChain retriever in RAG chains
+retriever = CortexFlowRetriever(manager=manager, search_kwargs={"max_results": 5})
+docs = retriever.invoke("What is the user's name?")
+
+# Or bundle both into a single memory object
+memory = CortexFlowMemory(manager=manager)
+```
+
+See `examples/langchain_integration.py` for a full example.
+
+#### CrewAI
+
+```python
+from cortexflow import CortexFlowManager, ConfigBuilder
+from cortexflow.integrations.crewai import CortexFlowCrewStorage
+
+manager = CortexFlowManager(ConfigBuilder().with_memory().build())
+storage = CortexFlowCrewStorage(manager=manager)
+
+# CrewAI storage protocol
+storage.save(key="user_pref", value="Prefers Python over JavaScript")
+results = storage.search(query="programming language preference")
+```
+
+See `examples/crewai_integration.py` for a full example.
+
+### Pluggable Vector Store Backends
+
+Swap the default SQLite vector store for ChromaDB or Qdrant with a single builder call. All backends implement the same `VectorStoreBackend` interface, so the rest of CortexFlow works identically regardless of choice.
+
+```python
+from cortexflow import ConfigBuilder, CortexFlowManager
+
+# ChromaDB (local or client/server)
+config = (ConfigBuilder()
+    .with_vector_store(backend="chromadb", chromadb_path="/tmp/cortexflow_chroma")
+    .with_memory(active_token_limit=2048)
+    .build())
+
+# Qdrant (local or cloud)
+config = (ConfigBuilder()
+    .with_vector_store(backend="qdrant", qdrant_url="http://localhost:6333")
+    .with_memory(active_token_limit=2048)
+    .build())
+
+# SQLite (default -- no extra config needed)
+config = (ConfigBuilder()
+    .with_vector_store(backend="sqlite")
+    .build())
+
+manager = CortexFlowManager(config)
+```
+
+See `examples/vector_backends.py` for a full example.
+
+### Temporal Facts
+
+Time-aware fact management with validity windows. Facts can be superseded when new information arrives, and conflicts are automatically detected.
+
+```python
+from cortexflow import ConfigBuilder, CortexFlowManager
+from cortexflow.temporal import TemporalFact, TemporalManager
+
+config = (ConfigBuilder()
+    .with_temporal(temporal_db_path="temporal.db")
+    .build())
+
+manager = CortexFlowManager(config)
+temporal = TemporalManager(db_path="temporal.db")
+
+# Add a fact with a validity window
+fact_id = temporal.add_temporal_fact(TemporalFact(
+    subject="Alice",
+    predicate="lives_in",
+    object="Boston",
+    valid_from="2020-01-01",
+    confidence=0.95,
+    source="user_statement",
+))
+
+# Supersede when information changes
+new_id = temporal.add_temporal_fact(TemporalFact(
+    subject="Alice",
+    predicate="lives_in",
+    object="San Francisco",
+    valid_from="2025-06-01",
+    confidence=0.9,
+    source="user_statement",
+))
+temporal.update_fact_validity(fact_id, valid_until="2025-05-31")
+```
+
+See `examples/temporal_facts.py` for a full example.
+
+### Episodic Memory
+
+Session-based episode storage with FTS5 full-text search. Automatically captures conversation episodes with associated emotions, topics, and importance scores.
+
+```python
+from cortexflow.episodic_memory import EpisodicMemoryStore, Episode
+
+store = EpisodicMemoryStore(db_path="episodes.db")
+
+# Store an episode
+episode_id = store.save_episode(Episode(
+    session_id="session-001",
+    user_id="alice",
+    title="Planning a trip to Japan",
+    summary="Discussed travel plans, budget, and itinerary for a 2-week trip.",
+    topics=["travel", "japan", "budget"],
+    emotions=["excited", "curious"],
+    importance=0.8,
+))
+
+# Full-text search across episodes
+results = store.search_episodes("japan travel plans")
+```
+
+### Event System
+
+A thread-safe pub/sub event bus with 12 event types for building middleware, logging, analytics, and custom hooks.
+
+```python
+from cortexflow import ConfigBuilder, CortexFlowManager
+from cortexflow.events import EventBus, EventType
+
+config = (ConfigBuilder()
+    .with_events()
+    .with_memory(active_token_limit=2048)
+    .build())
+
+bus = EventBus()
+
+# Subscribe to specific events
+@bus.on(EventType.MESSAGE_ADDED)
+def on_message(event):
+    print(f"New message from {event.data.get('role')}: {event.data.get('content')[:50]}")
+
+@bus.on(EventType.KNOWLEDGE_ADDED)
+def on_knowledge(event):
+    print(f"Knowledge stored: {event.data.get('text')[:50]}")
+
+# Or subscribe to all events for logging
+@bus.on_all
+def log_all(event):
+    print(f"[{event.type.value}] {event.timestamp}")
+```
+
+**Event types:** `MESSAGE_ADDED`, `MEMORY_CLEARED`, `KNOWLEDGE_ADDED`, `KNOWLEDGE_RETRIEVED`, `SESSION_CREATED`, `SESSION_CLOSED`, `RESPONSE_GENERATED`, `EMOTION_DETECTED`, `RELATIONSHIP_STAGE_CHANGED`, `TEMPORAL_FACT_ADDED`, `MANAGER_INITIALIZED`, `MANAGER_CLOSING`.
+
+### Safety Pipeline
+
+Content filtering with PII detection, boundary enforcement, and custom blocked-pattern rules. Disabled by default; enable via the builder.
+
+```python
+from cortexflow import ConfigBuilder, CortexFlowManager
+
+config = (ConfigBuilder()
+    .with_safety(
+        enable_pii_detection=True,
+        enable_boundary_enforcement=True,
+        custom_blocked_patterns=[r"\b(SSN|social security)\b"],
+        block_on_safety_violation=False,  # True = block message entirely
+    )
+    .with_memory(active_token_limit=2048)
+    .build())
+
+manager = CortexFlowManager(config)
+```
+
+When `block_on_safety_violation` is `False` (default), flagged content is annotated but still processed. Set to `True` to reject messages that trigger safety rules.
 
 ## LLM Backends
 

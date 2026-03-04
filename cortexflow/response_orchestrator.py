@@ -55,6 +55,83 @@ class ResponseOrchestrator:
         self.uncertainty_handler = uncertainty_handler
         self._add_message = add_message_fn
         self._get_conversation_context = get_conversation_context_fn
+        # Companion AI context providers (set by manager after construction)
+        self._emotion_tracker = None
+        self._persona_manager = None
+        self._user_profile_manager = None
+        self._relationship_tracker = None
+        self._get_current_session_fn = None
+
+    # ------------------------------------------------------------------
+    # Companion AI context helpers
+    # ------------------------------------------------------------------
+
+    def _build_companion_system_message(self) -> str | None:
+        """Build an optional system message from persona + emotion + relationship."""
+        parts: list[str] = []
+
+        session = self._get_current_session_fn() if self._get_current_session_fn else None
+        user_id = session.user_id if session else None
+        persona_id = session.persona_id if session else None
+
+        # Persona-based system prompt
+        if self._persona_manager and persona_id:
+            user_profile_text = ""
+            if self._user_profile_manager and user_id:
+                try:
+                    user_profile_text = self._user_profile_manager.get_profile_for_prompt(user_id)
+                except Exception:
+                    pass
+
+            emotional_context = ""
+            if self._emotion_tracker:
+                try:
+                    trend = self._emotion_tracker.get_emotional_trend(last_n=5)
+                    state = self._emotion_tracker.get_current_state()
+                    if state.primary_emotion != "neutral":
+                        emotional_context = (
+                            f"User's current emotion: {state.primary_emotion} "
+                            f"(intensity: {state.intensity:.0%}). "
+                            f"Emotional trend: {trend.get('valence_direction', 'stable')}."
+                        )
+                except Exception:
+                    pass
+
+            relationship_context = ""
+            if self._relationship_tracker and user_id:
+                try:
+                    relationship_context = self._relationship_tracker.get_relationship_context(
+                        user_id, persona_id,
+                    )
+                except Exception:
+                    pass
+
+            try:
+                full_prompt = self._persona_manager.build_system_prompt(
+                    persona_id,
+                    user_profile_text=user_profile_text,
+                    emotional_context=emotional_context,
+                    relationship_context=relationship_context,
+                )
+                if full_prompt:
+                    return full_prompt
+            except Exception as e:
+                logger.debug("Persona prompt build failed: %s", e)
+
+        # No persona — fall back to individual context blocks
+        if self._emotion_tracker:
+            try:
+                state = self._emotion_tracker.get_current_state()
+                if state.primary_emotion != "neutral":
+                    parts.append(
+                        f"The user seems to be feeling {state.primary_emotion} "
+                        f"(intensity: {state.intensity:.0%}). "
+                        "Adjust your tone accordingly."
+                    )
+            except Exception:
+                pass
+
+        return "\n".join(parts) if parts else None
 
     # ------------------------------------------------------------------
     # Public API
@@ -137,6 +214,11 @@ class ResponseOrchestrator:
                         if contradiction_note:
                             system_content += contradiction_note
                         messages = [{"role": "system", "content": system_content}] + messages
+
+                # Inject companion AI context (persona + emotion + relationship)
+                companion_ctx = self._build_companion_system_message()
+                if companion_ctx:
+                    messages = [{"role": "system", "content": companion_ctx}] + messages
 
                 # Format as prompt if needed
                 if not messages:
