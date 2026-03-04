@@ -4,9 +4,15 @@ Test script for vector-based knowledge retrieval in CortexFlow.
 This demonstrates the improved semantic search capabilities.
 """
 
-import sys
 import time
-from cortexflow import CortexFlowManager, CortexFlowConfig, MemoryConfig, KnowledgeStoreConfig
+
+from cortexflow import (
+    CortexFlowConfig,
+    CortexFlowManager,
+    KnowledgeStoreConfig,
+    MemoryConfig,
+)
+
 
 def print_divider():
     print("\n" + "="*70 + "\n")

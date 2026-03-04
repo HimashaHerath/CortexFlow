@@ -1,9 +1,10 @@
 """Tests for cortexflow.async_manager."""
 import asyncio
+
 import pytest
 
-from cortexflow.config import CortexFlowConfig
 from cortexflow.async_manager import AsyncCortexFlowManager
+from cortexflow.config import CortexFlowConfig
 
 
 def _run(coro):

@@ -1,11 +1,10 @@
 """Tests for cortexflow.safety."""
-import pytest
 
 from cortexflow.safety import (
     SafetyLevel,
+    SafetyPipeline,
     SafetyResult,
     SafetyRule,
-    SafetyPipeline,
 )
 
 

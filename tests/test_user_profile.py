@@ -1,8 +1,7 @@
 """Tests for cortexflow.user_profile."""
-import pytest
 
-from cortexflow.user_profile import UserProfile, UserProfileManager
 from cortexflow.fact_detector import PersonalFactDetector
+from cortexflow.user_profile import UserProfile, UserProfileManager
 
 
 class TestUserProfile:

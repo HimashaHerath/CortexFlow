@@ -1,9 +1,9 @@
 """Temporal fact management for CortexFlow."""
 from __future__ import annotations
 
-import sqlite3
 import logging
-from dataclasses import dataclass, field, asdict
+import sqlite3
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -102,7 +102,6 @@ class TemporalManager:
 
     def get_facts_at_time(self, timestamp: str, subject: str | None = None) -> list[TemporalFact]:
         """Get all facts valid at a specific time."""
-        import json
         query = '''SELECT * FROM temporal_facts
                    WHERE (valid_from IS NULL OR valid_from <= ?)
                    AND (valid_until IS NULL OR valid_until > ?)
@@ -117,7 +116,6 @@ class TemporalManager:
 
     def get_fact_timeline(self, subject: str, predicate: str | None = None) -> list[TemporalFact]:
         """Get the timeline of facts for a subject, ordered by creation."""
-        import json
         query = 'SELECT * FROM temporal_facts WHERE subject = ?'
         params: list[str] = [subject]
         if predicate:
@@ -130,7 +128,6 @@ class TemporalManager:
 
     def detect_temporal_conflicts(self, subject: str | None = None) -> list[tuple[TemporalFact, TemporalFact]]:
         """Detect overlapping facts that may conflict (same subject+predicate, overlapping validity)."""
-        import json
         query = '''SELECT * FROM temporal_facts WHERE superseded_by IS NULL'''
         params: list[str] = []
         if subject:

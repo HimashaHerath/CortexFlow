@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from cortexflow.vector_stores.base import VectorStoreBackend
 
-from cortexflow.vector_stores.base import VectorStoreBackend, VectorSearchResult
+from cortexflow.vector_stores.base import VectorSearchResult, VectorStoreBackend
 
 
-def create_vector_store(config) -> "VectorStoreBackend":
+def create_vector_store(config) -> VectorStoreBackend:
     """Factory to create a vector store backend from config.
 
     The backend type is determined by ``config.vector_store.backend``.  When

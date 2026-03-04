@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
@@ -17,7 +17,6 @@ from cortexflow.mcp_server import (
     manage_persona,
     search_memory,
 )
-
 
 # ------------------------------------------------------------------
 # Fixtures

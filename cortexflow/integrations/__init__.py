@@ -9,8 +9,8 @@ def get_langchain_integration():
     """Return LangChain integration classes."""
     from cortexflow.integrations.langchain import (
         CortexFlowChatMessageHistory,
-        CortexFlowRetriever,
         CortexFlowMemory,
+        CortexFlowRetriever,
     )
     return CortexFlowChatMessageHistory, CortexFlowRetriever, CortexFlowMemory
 

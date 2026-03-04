@@ -6,15 +6,15 @@ compress_segment with different importance levels.
 """
 
 import time
+
 import pytest
 
-from cortexflow.memory import ContextSegment
 from cortexflow.compressor import (
-    TruncationCompressor,
-    ExtractiveSummarizer,
     ContextCompressor,
+    ExtractiveSummarizer,
+    TruncationCompressor,
 )
-
+from cortexflow.memory import ContextSegment
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -5,12 +5,20 @@ CortexFlow Example Usage
 This script demonstrates how to use the CortexFlow system with Ollama.
 """
 
+import argparse
 import json
 import time
-import requests
-import argparse
 
-from cortexflow import CortexFlowManager, CortexFlowConfig, MemoryConfig, KnowledgeStoreConfig, LLMConfig
+import requests
+
+from cortexflow import (
+    CortexFlowConfig,
+    CortexFlowManager,
+    KnowledgeStoreConfig,
+    LLMConfig,
+    MemoryConfig,
+)
+
 
 def send_to_ollama(prompt, model="llama3", ollama_host="http://localhost:11434"):
     """Send a prompt to Ollama API and return the response."""

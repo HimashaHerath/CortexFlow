@@ -11,19 +11,17 @@ Covers:
 - Edge cases (disabled profiler, no current profile)
 """
 
-import os
 import json
+import os
 import time
+
 import pytest
-from unittest.mock import MagicMock, patch
-from datetime import datetime
 
 from cortexflow.traversal_profiler import (
     TraversalProfile,
     TraversalProfiler,
     profile_traversal,
 )
-
 
 # ---------------------------------------------------------------------------
 # TraversalProfile tests

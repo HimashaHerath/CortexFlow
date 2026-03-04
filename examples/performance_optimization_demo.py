@@ -6,13 +6,13 @@ This script demonstrates the performance optimization features of CortexFlow,
 including graph partitioning, multi-hop indexing, query planning, and caching.
 """
 
-import time
-import json
 import random
+import time
 from pprint import pprint
 
 from cortexflow import CortexFlowManager
 from cortexflow.config import CortexFlowConfig
+
 
 def print_section(title):
     """Print a section title."""
@@ -31,17 +31,17 @@ def measure_time(func, *args, **kwargs):
 def main():
     """Main function demonstrating performance optimization features."""
     print_section("CortexFlow Performance Optimization Demo")
-    
+
     # Initialize with performance optimization enabled
     config = CortexFlowConfig(
         # Basic settings
         knowledge_store_path=":memory:",  # Use in-memory DB for this demo
-        
+
         # Enable Graph RAG features
         use_graph_rag=True,
         enable_multi_hop_queries=True,
         max_graph_hops=4,
-        
+
         # Enable performance optimization
         use_performance_optimization=True,
         use_graph_partitioning=True,
@@ -49,18 +49,18 @@ def main():
         use_multihop_indexing=True,
         max_indexed_hops=2,
         use_reasoning_cache=True,
-        
+
         # Enable verbose logging
         verbose_logging=True
     )
-    
+
     print("Initializing CortexFlow with performance optimization enabled...\n")
     manager = CortexFlowManager(config)
-    
+
     # Create a sample knowledge graph
     print_section("Creating Sample Knowledge Graph")
     create_sample_graph(manager)
-    
+
     # Demonstrate graph partitioning
     print_section("Graph Partitioning")
     print("Partitioning the graph to improve query performance...")
@@ -72,7 +72,7 @@ def main():
     print(f"Created {result.get('partitions', 0)} partitions")
     print("\nPartition statistics:")
     pprint(result.get('partition_stats', {}))
-    
+
     # Demonstrate multi-hop indexing
     print_section("Multi-hop Indexing")
     print("Creating multi-hop indexes to speed up path queries...")
@@ -82,11 +82,11 @@ def main():
     )
     print(f"Index creation completed in {execution_time:.4f} seconds")
     print(f"Created {result.get('indexes_created', 0)} indexes")
-    
+
     # Demonstrate query planning
     print_section("Query Planning")
     print("Generating an optimized query plan for a path query...\n")
-    
+
     query = {
         "type": "path",
         "start_entity": "Albert Einstein",
@@ -94,20 +94,20 @@ def main():
         "max_hops": 2,
         "relation_constraints": ["field_of_work", "known_for"]
     }
-    
+
     print("Query parameters:")
     pprint(query)
     print()
-    
+
     plan, execution_time = measure_time(manager.optimize_query, query)
     print(f"Query plan generated in {execution_time:.6f} seconds")
     print("\nOptimized Query Plan:")
     pprint(plan)
-    
+
     # Run the same query multiple times to demonstrate caching
     print_section("Query Caching")
     print("Running the same query multiple times to demonstrate caching benefits...\n")
-    
+
     # First query (should be a cache miss)
     result1, time1 = measure_time(
         manager.optimize_path_query,
@@ -116,7 +116,7 @@ def main():
         max_hops=2,
         relation_constraints=["field_of_work", "known_for"]
     )
-    
+
     # Second query (should be a cache hit)
     result2, time2 = measure_time(
         manager.optimize_path_query,
@@ -125,22 +125,22 @@ def main():
         max_hops=2,
         relation_constraints=["field_of_work", "known_for"]
     )
-    
+
     print(f"First query execution time: {time1:.6f} seconds")
     print(f"Second query execution time: {time2:.6f} seconds")
     print(f"Speed improvement: {time1 / time2:.2f}x faster\n")
-    
+
     # Check cache statistics
     cache_stats = manager.get_cache_stats()
     print("Cache Statistics:")
     pprint(cache_stats)
-    
+
     # Show overall performance statistics
     print_section("Performance Statistics")
     print("Getting overall performance statistics...\n")
     stats = manager.get_performance_stats()
     pprint(stats)
-    
+
     # Clean up
     manager.close()
     print("\nDemo completed successfully!")
@@ -160,7 +160,7 @@ def create_sample_graph(manager):
         "Rosalind Franklin",
         "Alan Turing"
     ]
-    
+
     # Fields
     fields = [
         "Physics",
@@ -174,7 +174,7 @@ def create_sample_graph(manager):
         "Relativity",
         "Evolution"
     ]
-    
+
     # Institutions
     institutions = [
         "Princeton University",
@@ -188,7 +188,7 @@ def create_sample_graph(manager):
         "MIT",
         "Imperial College London"
     ]
-    
+
     # Awards
     awards = [
         "Nobel Prize",
@@ -202,7 +202,7 @@ def create_sample_graph(manager):
         "Royal Medal",
         "Lorentz Medal"
     ]
-    
+
     # Add entities
     print("Adding entities...")
     for entity in scientists + fields + institutions + awards:
@@ -215,12 +215,12 @@ def create_sample_graph(manager):
             entity_type = "Institution"
         elif entity in awards:
             entity_type = "Award"
-        
+
         manager.knowledge_store.add_entity(entity, entity_type)
-    
+
     # Add relationships
     print("Adding relationships...")
-    
+
     # Scientists to Fields (field_of_work)
     for scientist in scientists:
         # Each scientist works in 1-3 fields
@@ -232,7 +232,7 @@ def create_sample_graph(manager):
                 target=field,
                 metadata={"confidence": random.uniform(0.7, 0.99)}
             )
-    
+
     # Scientists to Institutions (affiliated_with)
     for scientist in scientists:
         # Each scientist is affiliated with 1-2 institutions
@@ -244,7 +244,7 @@ def create_sample_graph(manager):
                 target=institution,
                 metadata={"confidence": random.uniform(0.8, 0.99)}
             )
-    
+
     # Scientists to Awards (received)
     for scientist in scientists:
         # Some scientists receive awards
@@ -257,7 +257,7 @@ def create_sample_graph(manager):
                     target=award,
                     metadata={"confidence": random.uniform(0.9, 0.99)}
                 )
-    
+
     # Scientists to Scientists (collaborated_with)
     for i, scientist1 in enumerate(scientists):
         for scientist2 in scientists[i+1:]:
@@ -269,7 +269,7 @@ def create_sample_graph(manager):
                     target=scientist2,
                     metadata={"confidence": random.uniform(0.7, 0.95)}
                 )
-    
+
     # Scientists known for specific contributions
     contributions = [
         ("Albert Einstein", "Relativity"),
@@ -283,7 +283,7 @@ def create_sample_graph(manager):
         ("Rosalind Franklin", "Genetics"),
         ("Alan Turing", "Computer Science")
     ]
-    
+
     for scientist, field in contributions:
         manager.knowledge_store.add_relationship(
             source=scientist,
@@ -291,7 +291,7 @@ def create_sample_graph(manager):
             target=field,
             metadata={"confidence": random.uniform(0.9, 0.99)}
         )
-    
+
     # Fields related to other fields
     field_relations = [
         ("Physics", "Quantum Mechanics"),
@@ -304,7 +304,7 @@ def create_sample_graph(manager):
         ("Mathematics", "Computer Science"),
         ("Computer Science", "Mathematics")
     ]
-    
+
     for field1, field2 in field_relations:
         manager.knowledge_store.add_relationship(
             source=field1,
@@ -312,11 +312,11 @@ def create_sample_graph(manager):
             target=field2,
             metadata={"confidence": random.uniform(0.7, 0.9)}
         )
-    
+
     # Count entities and relationships
     print("Sample knowledge graph created successfully!")
-    
-    # Get graph stats 
+
+    # Get graph stats
     entity_count = len(scientists) + len(fields) + len(institutions) + len(awards)
     relationship_count = (
         # Scientists to Fields
@@ -332,9 +332,9 @@ def create_sample_graph(manager):
         # Field relationships
         len(field_relations)
     )
-    
+
     print(f"  - Entities: {entity_count}")
     print(f"  - Relationships: ~{int(relationship_count)}")
 
 if __name__ == "__main__":
-    main() 
+    main()

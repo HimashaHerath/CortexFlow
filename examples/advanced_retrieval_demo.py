@@ -4,10 +4,15 @@ Test script for advanced vector retrieval techniques in CortexFlow.
 This demonstrates hybrid search (BM25 + vector), sparse-dense fusion, and re-ranking.
 """
 
-import sys
 import time
-import json
-from cortexflow import CortexFlowManager, CortexFlowConfig, MemoryConfig, KnowledgeStoreConfig
+
+from cortexflow import (
+    CortexFlowConfig,
+    CortexFlowManager,
+    KnowledgeStoreConfig,
+    MemoryConfig,
+)
+
 
 def print_divider():
     print("\n" + "="*70 + "\n")

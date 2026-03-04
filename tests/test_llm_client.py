@@ -5,17 +5,15 @@ Covers the factory function, OllamaClient URL construction, VertexAIClient
 model remapping, and mocked API calls.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from cortexflow.config import CortexFlowConfig, ConfigBuilder, LLMConfig
+from cortexflow.config import ConfigBuilder, CortexFlowConfig, LLMConfig
 from cortexflow.llm_client import (
+    LLMClient,
     OllamaClient,
     VertexAIClient,
     create_llm_client,
-    LLMClient,
 )
-
 
 # ---------------------------------------------------------------------------
 # create_llm_client factory
@@ -38,7 +36,7 @@ class TestCreateLLMClient:
     def test_vertex_ai_backend_returns_vertex_client(self, mock_vertex_cls):
         mock_vertex_cls.return_value = MagicMock(spec=LLMClient)
         config = ConfigBuilder().with_vertex_ai(project_id="test-project").build()
-        client = create_llm_client(config)
+        create_llm_client(config)
         mock_vertex_cls.assert_called_once_with(config)
 
     def test_accepts_llm_sub_config_directly(self):

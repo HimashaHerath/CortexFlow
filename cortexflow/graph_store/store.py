@@ -21,8 +21,8 @@ from ._deps import (
     FUZZY_MATCHING_ENABLED,
     NETWORKX_ENABLED,
     ONTOLOGY_ENABLED,
-    SPANBERT_ENABLED,
     SPACY_ENABLED,
+    SPANBERT_ENABLED,
     AutoModelForTokenClassification,
     AutoTokenizer,
     Ontology,
@@ -475,7 +475,7 @@ class GraphStore(TraversalMixin):
         # 6. Add noun phrase extraction if no entities found yet or to supplement
         if SPACY_ENABLED and self.nlp is not None:
             try:
-                if not 'doc' in locals():  # Only parse if we haven't already
+                if 'doc' not in locals():  # Only parse if we haven't already
                     doc = self.nlp(text)
 
                 # Extract noun phrases
@@ -588,7 +588,7 @@ class GraphStore(TraversalMixin):
             try:
                 # Get only canonical entities (not aliases)
                 canonical_entities = [key for key in self.entity_db
-                                     if not 'canonical' in self.entity_db[key]]
+                                     if 'canonical' not in self.entity_db[key]]
 
                 # Find closest match with threshold
                 matches = process.extractBests(entity_text, canonical_entities,
@@ -2078,7 +2078,7 @@ class GraphStore(TraversalMixin):
 
         try:
             # Extract entities
-            entities = self.extract_entities(text)
+            self.extract_entities(text)
 
             # Extract binary relations using existing methods
             binary_relations = self.extract_relations(text)

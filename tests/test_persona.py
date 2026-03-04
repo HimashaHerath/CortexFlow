@@ -1,5 +1,4 @@
 """Tests for cortexflow.persona."""
-import pytest
 
 from cortexflow.persona import PersonaDefinition, PersonaManager
 

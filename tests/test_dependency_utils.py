@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 from cortexflow.dependency_utils import check_dependency, import_optional_dependency
 
 

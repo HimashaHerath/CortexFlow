@@ -5,11 +5,11 @@ Command line interface for CortexFlow.
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 
-from cortexflow import CortexFlowManager, CortexFlowConfig
+from cortexflow import CortexFlowConfig, CortexFlowManager
 from cortexflow.version import __version__
+
 
 def main():
     """Main CLI entry point."""
@@ -19,22 +19,22 @@ def main():
     parser.add_argument(
         "--version", action="version", version=f"CortexFlow {__version__}"
     )
-    
+
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
-    
+
     # Chat command
     chat_parser = subparsers.add_parser("chat", help="Interactive chat with CortexFlow")
     chat_parser.add_argument("--model", default="llama3", help="Ollama model to use")
     chat_parser.add_argument("--host", default="http://localhost:11434", help="Ollama API host")
     chat_parser.add_argument("--db", default=":memory:", help="Knowledge store path")
-    
+
     # Analyze command
     analyze_parser = subparsers.add_parser("analyze", help="Analyze memory usage")
     analyze_parser.add_argument("--db", required=True, help="Knowledge store path to analyze")
-    
+
     # Execute the command
     args = parser.parse_args()
-    
+
     if args.command == "chat":
         run_chat(args)
     elif args.command == "analyze":
@@ -42,7 +42,7 @@ def main():
     else:
         parser.print_help()
         return 1
-        
+
     return 0
 
 def run_chat(args):
@@ -52,21 +52,21 @@ def run_chat(args):
         default_model=args.model,
         knowledge_store_path=args.db
     )
-    
+
     manager = CortexFlowManager(config)
-    
+
     print(f"CortexFlow Chat (model: {args.model}, db: {args.db})")
     print("Type 'exit' to quit, 'stats' to see memory stats")
-    
+
     try:
         while True:
             # Get user input
             user_input = input("\nYou: ")
-            
+
             # Check for exit command
             if user_input.lower() in ["exit", "quit", "q"]:
                 break
-                
+
             # Check for stats command
             if user_input.lower() == "stats":
                 stats = manager.get_stats()
@@ -88,10 +88,10 @@ def run_chat(args):
                             for tier, weight in weights.items():
                                 print(f"{tier.capitalize()}: {weight*100:.1f}%")
                 continue
-                
+
             # Generate response
             print("\nCortexFlow: ", end="", flush=True)
-            
+
             # Use streaming if possible
             try:
                 for chunk in manager.generate_response_stream(user_input):
@@ -110,18 +110,18 @@ def run_analyze(args):
         config = CortexFlowConfig(
             knowledge_store_path=args.db
         )
-        
+
         manager = CortexFlowManager(config)
-        
+
         stats = manager.get_stats()
-        
+
         print(f"CortexFlow Analysis - DB: {args.db}")
         print("\n=== Memory Usage ===")
-        
+
         if "memory" in stats:
             memory_stats = stats["memory"]
             print(f"Total messages: {memory_stats.get('message_count', 0)}")
-            
+
             if "tiers" in memory_stats:
                 tiers = memory_stats["tiers"]
                 print("\nMemory Tiers:")
@@ -131,7 +131,7 @@ def run_analyze(args):
                     print(f"  - Limit: {tier_stats.get('limit', 0)} tokens")
                     print(f"  - Segments: {tier_stats.get('segment_count', 0)}")
                     print(f"  - Fullness: {tier_stats.get('fullness', 0)*100:.1f}%")
-        
+
         # Display knowledge statistics if available
         if hasattr(manager, 'knowledge_store'):
             print("\n=== Knowledge Store ===")
@@ -143,7 +143,7 @@ def run_analyze(args):
                 print(f"BM25 search enabled: {knowledge_stats.get('bm25_enabled', False)}")
             else:
                 print("Knowledge statistics not available")
-        
+
         print("\nAnalysis complete.")
     except Exception as e:
         print(f"Error analyzing database: {e}")
@@ -151,8 +151,8 @@ def run_analyze(args):
     finally:
         if 'manager' in locals():
             manager.close()
-    
+
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())

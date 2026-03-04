@@ -5,9 +5,8 @@ This module provides self-reflection capabilities for CortexFlow.
 """
 from __future__ import annotations
 
-import logging
 import json
-import time
+import logging
 import re
 from typing import Any
 
@@ -20,21 +19,21 @@ logger = logging.getLogger('cortexflow')
 class ReflectionEngine:
     """
     Engine for self-reflection and self-correction capabilities in CortexFlow.
-    
+
     This class provides mechanisms to:
     1. Verify the relevance of retrieved knowledge
     2. Check for inconsistencies in generated responses
     3. Revise answers based on detected issues
     """
-    
+
     def __init__(
-        self, 
+        self,
         config: CortexFlowConfig,
         knowledge_store: KnowledgeStore | None = None,
     ):
         """
         Initialize the reflection engine with configuration.
-        
+
         Args:
             config: CortexFlow configuration
             knowledge_store: Optional knowledge store for verification
@@ -42,20 +41,20 @@ class ReflectionEngine:
         self.config = config
         self.knowledge_store = knowledge_store
         self.llm_client = create_llm_client(config)
-        
+
         # Default reflection thresholds
         self.relevance_threshold = 0.6  # Minimum score for knowledge relevance
         self.confidence_threshold = 0.7  # Minimum confidence for answers
-        
+
         # Configure from config if available
         if hasattr(config, 'reflection_relevance_threshold'):
             self.relevance_threshold = config.reflection_relevance_threshold
-            
+
         if hasattr(config, 'reflection_confidence_threshold'):
             self.confidence_threshold = config.reflection_confidence_threshold
-            
+
         logger.info(f"Initialized ReflectionEngine with relevance threshold {self.relevance_threshold} and confidence threshold {self.confidence_threshold}")
-    
+
     def verify_knowledge_relevance(
         self,
         query: str,
@@ -111,7 +110,7 @@ class ReflectionEngine:
             logger.error(f"Error parsing relevance response: {e}")
             # Fall back to original items if parsing fails
             return knowledge_items
-    
+
     def _extract_claims(self, response: str) -> list[str]:
         """Extract key claims from a response using sentence splitting.
 
@@ -259,7 +258,7 @@ class ReflectionEngine:
                 "kb_support_ratio": kb_support_ratio,
                 "claim_details": claim_details
             }
-    
+
     def revise_response(
         self,
         query: str,
@@ -309,10 +308,10 @@ class ReflectionEngine:
         except Exception as e:
             logger.error(f"Error during response revision: {e}")
             return original_response
-    
+
     def _create_relevance_prompt(
-        self, 
-        query: str, 
+        self,
+        query: str,
         knowledge_items: list[dict[str, Any]]
     ) -> str:
         """Create a prompt for knowledge relevance verification."""
@@ -320,9 +319,9 @@ class ReflectionEngine:
         for i, item in enumerate(knowledge_items):
             text = item.get('text', '')
             knowledge_texts.append(f"[{i+1}] {text}")
-            
+
         knowledge_context = "\n".join(knowledge_texts)
-        
+
         return f"""As an AI assistant, your task is to evaluate the relevance of retrieved knowledge to a user's query.
 For each knowledge item, assign a relevance score between 0.0 and 1.0, where:
 - 1.0: Directly answers the query
@@ -349,11 +348,11 @@ Format your response as a JSON array of objects with these fields:
 ]
 
 RELEVANCE ASSESSMENT:"""
-    
+
     def _create_consistency_prompt(
-        self, 
-        query: str, 
-        response: str, 
+        self,
+        query: str,
+        response: str,
         knowledge_items: list[dict[str, Any]]
     ) -> str:
         """Create a prompt for response consistency checking."""
@@ -361,9 +360,9 @@ RELEVANCE ASSESSMENT:"""
         for i, item in enumerate(knowledge_items):
             text = item.get('text', '')
             knowledge_texts.append(f"[{i+1}] {text}")
-            
+
         knowledge_context = "\n".join(knowledge_texts)
-        
+
         return f"""As an AI assistant with self-reflection capabilities, your task is to identify any inconsistencies or factual errors in a generated response compared to the knowledge base.
 
 USER QUERY: {query}
@@ -387,11 +386,11 @@ Provide your assessment as a JSON object with these fields:
 - reasoning: Brief explanation of your reasoning
 
 CONSISTENCY ASSESSMENT:"""
-    
+
     def _create_revision_prompt(
-        self, 
-        query: str, 
-        original_response: str, 
+        self,
+        query: str,
+        original_response: str,
         knowledge_items: list[dict[str, Any]],
         consistency_result: dict[str, Any]
     ) -> str:
@@ -400,12 +399,12 @@ CONSISTENCY ASSESSMENT:"""
         for i, item in enumerate(knowledge_items):
             text = item.get('text', '')
             knowledge_texts.append(f"[{i+1}] {text}")
-            
+
         knowledge_context = "\n".join(knowledge_texts)
-        
+
         issues = consistency_result.get('issues', [])
         issues_text = "\n".join([f"- {issue}" for issue in issues])
-        
+
         return f"""As an AI assistant with self-correction capabilities, your task is to revise a response that contains inconsistencies or errors.
 
 USER QUERY: {query}
@@ -428,7 +427,7 @@ Please revise the response to:
 Provide a complete revised response that directly answers the user's query while addressing all identified issues.
 
 REVISED RESPONSE:"""
-    
+
     def _process_with_llm(self, prompt: str) -> str:
         """Process the prompt with an LLM.
 
@@ -446,10 +445,10 @@ REVISED RESPONSE:"""
         except Exception as e:
             logger.error(f"LLM processing failed in ReflectionEngine: {e}")
             raise
-    
+
     def _parse_relevance_response(
-        self, 
-        response: str, 
+        self,
+        response: str,
         knowledge_items: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Parse the relevance assessment response."""
@@ -469,15 +468,15 @@ REVISED RESPONSE:"""
                         json_lines.append(line)
                     if in_json and line.strip().endswith(']'):
                         break
-                        
+
                 relevance_json = ''.join(json_lines)
                 relevance_data = json.loads(relevance_json)
-            
+
             # Map relevance scores to knowledge items
             updated_items = []
             for i, item in enumerate(knowledge_items):
                 item_copy = item.copy()
-                
+
                 # Find the corresponding relevance data
                 for rel_item in relevance_data:
                     if rel_item.get('item') == i + 1:
@@ -488,19 +487,19 @@ REVISED RESPONSE:"""
                     # Default if not found
                     item_copy['relevance_score'] = 0.0
                     item_copy['relevance_explanation'] = 'Not assessed'
-                    
+
                 updated_items.append(item_copy)
-                
+
             return updated_items
-            
+
         except Exception as e:
             logger.error(f"Error parsing relevance response: {e}")
             # Return original items with default scores on error
             return [
-                {**item, 'relevance_score': 0.5, 'relevance_explanation': 'Error in assessment'} 
+                {**item, 'relevance_score': 0.5, 'relevance_explanation': 'Error in assessment'}
                 for item in knowledge_items
             ]
-    
+
     def _parse_consistency_response(self, response: str) -> dict[str, Any]:
         """Parse the consistency check response."""
         try:
@@ -519,10 +518,10 @@ REVISED RESPONSE:"""
                         json_lines.append(line)
                     if in_json and line.strip().endswith('}'):
                         break
-                        
+
                 consistency_json = ''.join(json_lines)
                 return json.loads(consistency_json)
-                
+
         except Exception as e:
             logger.error(f"Error parsing consistency response: {e}")
             # Return default result on error
@@ -531,4 +530,4 @@ REVISED RESPONSE:"""
                 "confidence": 0.5,
                 "issues": [],
                 "reasoning": "Failed to parse consistency check result."
-            } 
+            }

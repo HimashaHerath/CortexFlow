@@ -5,14 +5,14 @@ Refactored from the original print-based test script to use proper
 pytest assertions. Uses in-memory or tempfile databases for isolation.
 """
 
-import os
-import sys
-import tempfile
-import pytest
 import logging
+import os
+import tempfile
 
-from cortexflow.graph_store import GraphStore
+import pytest
+
 from cortexflow.config import CortexFlowConfig
+from cortexflow.graph_store import GraphStore
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def graph_store():
     yield gs
     try:
         gs.close()
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     if os.path.exists(db_path):
         try:
@@ -173,8 +173,8 @@ class TestCoreferenceResolution:
 
     def test_coreference_or_skip(self, graph_store):
         try:
-            import neuralcoref
-            import spacy
+            import neuralcoref  # noqa: F401
+            import spacy  # noqa: F401
         except ImportError:
             pytest.skip("neuralcoref not available")
 
@@ -197,7 +197,7 @@ class TestSemanticRoleLabeling:
 
     def test_srl_or_skip(self, graph_store):
         try:
-            from allennlp.predictors.predictor import Predictor
+            from allennlp.predictors.predictor import Predictor  # noqa: F401
         except (ImportError, Exception):
             pytest.skip("allennlp not available")
 

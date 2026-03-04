@@ -6,14 +6,12 @@ probability distribution storage/retrieval, source reliability management,
 belief revision recording, incomplete information reasoning, and edge cases.
 """
 
-import json
-import sqlite3
-import pytest
 from unittest.mock import MagicMock, patch
 
-from cortexflow.config import CortexFlowConfig, ConfigBuilder
-from cortexflow.uncertainty_handler import UncertaintyHandler
+import pytest
 
+from cortexflow.config import ConfigBuilder
+from cortexflow.uncertainty_handler import UncertaintyHandler
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -1,11 +1,11 @@
 """Safety pipeline for CortexFlow -- content filtering and boundary enforcement."""
 from __future__ import annotations
 
-import re
 import logging
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
 
 logger = logging.getLogger("cortexflow")
 

@@ -13,12 +13,10 @@ All credentials are read from environment variables — never hardcoded.
 
 import json
 import os
-import sys
 import tempfile
-import time
 import traceback
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 # ── Colour helpers ─────────────────────────────────────────────────────────────
 GREEN  = "\033[92m"
@@ -43,7 +41,7 @@ def _tmp_db(name: str) -> str:
     return os.path.join(_tmp_dir, f"{name}.db")
 
 # ── Result accumulator ─────────────────────────────────────────────────────────
-results: Dict[str, Dict[str, Any]] = {}
+results: dict[str, dict[str, Any]] = {}
 
 def record(section_name: str, test_name: str, passed: bool, detail: str = ""):
     if section_name not in results:
@@ -70,9 +68,9 @@ def run_section1() -> None:
 
     # 1.1 imports
     try:
-        from cortexflow.config import ConfigBuilder, CortexFlowConfig
+        from cortexflow.config import ConfigBuilder
+        from cortexflow.llm_client import VertexAIClient, create_llm_client
         from cortexflow.manager import CortexFlowManager
-        from cortexflow.llm_client import create_llm_client, VertexAIClient
         record(SEC, "CortexFlow imports succeed", True)
     except Exception as e:
         record(SEC, "CortexFlow imports succeed", False, str(e))
@@ -288,7 +286,7 @@ def run_section3() -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 4 – Vertex AI LLM Generation Tests
 # ══════════════════════════════════════════════════════════════════════════════
-def run_section4() -> Tuple[Any, Any]:
+def run_section4() -> tuple[Any, Any]:
     """Returns (config, manager) for re-use in later sections."""
     section("SECTION 4: Vertex AI LLM Generation Tests")
     SEC = "S4_LLM"
@@ -298,7 +296,7 @@ def run_section4() -> Tuple[Any, Any]:
 
     try:
         from cortexflow.config import ConfigBuilder
-        from cortexflow.llm_client import create_llm_client, VertexAIClient
+        from cortexflow.llm_client import create_llm_client
         from cortexflow.manager import CortexFlowManager
 
         config = (
@@ -368,10 +366,10 @@ def run_section4() -> Tuple[Any, Any]:
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 5 – GraphRAG Benchmark (Precision / Recall / F1)
 # ══════════════════════════════════════════════════════════════════════════════
-def run_section5(config=None) -> Dict[str, float]:
+def run_section5(config=None) -> dict[str, float]:
     section("SECTION 5: GraphRAG Benchmark (Precision/Recall/F1)")
     SEC = "S5_GraphRAG"
-    summary: Dict[str, float] = {}
+    summary: dict[str, float] = {}
 
     try:
         from cortexflow.config import ConfigBuilder
@@ -667,7 +665,7 @@ def run_section8() -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 9 – Results Report
 # ══════════════════════════════════════════════════════════════════════════════
-def run_section9(graphrag_summary: Dict[str, float]) -> None:
+def run_section9(graphrag_summary: dict[str, float]) -> None:
     section("SECTION 9: Results Report")
 
     total_passed = 0

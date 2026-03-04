@@ -5,72 +5,81 @@ This package provides tools to optimize context windows by implementing a
 cognitive-inspired multi-tier memory system with dynamic allocation.
 """
 
-from cortexflow.manager import CortexFlowManager, configure_logging
+from cortexflow.async_manager import AsyncCortexFlowManager
 from cortexflow.config import (
-    CortexFlowConfig,
-    ConfigBuilder,
-    MemoryConfig,
-    KnowledgeStoreConfig,
-    GraphRagConfig,
-    LLMConfig,
     AgentConfig,
-    ReflectionConfig,
-    UncertaintyConfig,
-    PerformanceConfig,
-    OntologyConfig,
-    MetadataConfig,
     ClassifierConfig,
+    ConfigBuilder,
+    CortexFlowConfig,
+    EmotionConfig,
+    EpisodicConfig,
+    EventConfig,
+    GraphRagConfig,
     InferenceConfig,
+    KnowledgeStoreConfig,
+    LLMConfig,
+    MemoryConfig,
+    MetadataConfig,
+    OntologyConfig,
+    PerformanceConfig,
+    PersonaConfig,
+    ReflectionConfig,
+    RelationshipConfig,
+    SafetyConfig,
     # Companion AI configs
     SessionConfig,
-    EmotionConfig,
-    PersonaConfig,
-    RelationshipConfig,
-    EventConfig,
     # Temporal & Episodic configs
     TemporalConfig,
-    EpisodicConfig,
+    UncertaintyConfig,
+    VectorStoreConfig,
 )
-from cortexflow.memory import ConversationMemory
-from cortexflow.knowledge import KnowledgeStore
-from cortexflow.llm_client import (
-    LLMClient,
-    OllamaClient,
-    VertexAIClient,
-    LiteLLMClient,
-    create_llm_client,
-)
-from cortexflow.interfaces import (
-    ContextProvider,
-    MemoryTierInterface,
-    KnowledgeStoreInterface,
-    LLMProviderInterface,
-    SessionAwareInterface,
-    AsyncContextProvider,
-    AsyncKnowledgeStoreInterface,
-)
-from cortexflow.version import __version__
-
-# Companion AI modules
-from cortexflow.session import SessionContext, SessionManager
-from cortexflow.user_store import UserStore
-from cortexflow.async_manager import AsyncCortexFlowManager
 from cortexflow.emotion import (
     EmotionalState,
     EmotionDetector,
-    RuleBasedEmotionDetector,
-    LLMEmotionDetector,
     EmotionTracker,
+    LLMEmotionDetector,
+    RuleBasedEmotionDetector,
 )
-from cortexflow.user_profile import UserProfile, UserProfileManager
-from cortexflow.persona import PersonaDefinition, PersonaManager
-from cortexflow.relationship import RelationshipStage, RelationshipState, RelationshipTracker
-from cortexflow.events import EventType, Event, EventBus, EventHandler
-from cortexflow.temporal import TemporalFact, TemporalManager
 from cortexflow.episodic_memory import Episode, EpisodicMemoryStore
-from cortexflow.vector_stores import VectorStoreBackend, VectorSearchResult, create_vector_store
-from cortexflow.config import VectorStoreConfig, SafetyConfig
-from cortexflow.safety import SafetyLevel, SafetyResult, SafetyRule, SafetyPipeline
+from cortexflow.events import Event, EventBus, EventHandler, EventType
+from cortexflow.interfaces import (
+    AsyncContextProvider,
+    AsyncKnowledgeStoreInterface,
+    ContextProvider,
+    KnowledgeStoreInterface,
+    LLMProviderInterface,
+    MemoryTierInterface,
+    SessionAwareInterface,
+)
+from cortexflow.knowledge import KnowledgeStore
+from cortexflow.llm_client import (
+    LiteLLMClient,
+    LLMClient,
+    OllamaClient,
+    VertexAIClient,
+    create_llm_client,
+)
+from cortexflow.manager import CortexFlowManager, configure_logging
+from cortexflow.memory import ConversationMemory
+from cortexflow.persona import PersonaDefinition, PersonaManager
+from cortexflow.relationship import (
+    RelationshipStage,
+    RelationshipState,
+    RelationshipTracker,
+)
+from cortexflow.safety import SafetyLevel, SafetyPipeline, SafetyResult, SafetyRule
+
+# Companion AI modules
+from cortexflow.session import SessionContext, SessionManager
+from cortexflow.temporal import TemporalFact, TemporalManager
+from cortexflow.user_profile import UserProfile, UserProfileManager
+from cortexflow.user_store import UserStore
+from cortexflow.vector_stores import (
+    VectorSearchResult,
+    VectorStoreBackend,
+    create_vector_store,
+)
+from cortexflow.version import __version__
 
 __all__ = [
     # Core

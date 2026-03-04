@@ -5,18 +5,16 @@ Covers _is_complex_query heuristic, simple-query skip behavior,
 agent error handling, and full chain processing with mocked LLM.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from cortexflow.config import CortexFlowConfig, ConfigBuilder
+import pytest
+
 from cortexflow.agent_chain import (
     AgentChainManager,
-    ExplorerAgent,
     AnalyzerAgent,
     SynthesizerAgent,
-    Agent,
 )
-
+from cortexflow.config import ConfigBuilder
 
 # ---------------------------------------------------------------------------
 # Fixtures

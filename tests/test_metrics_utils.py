@@ -1,19 +1,17 @@
 """Tests for cortexflow.metrics_utils."""
 from __future__ import annotations
 
-import pytest
-
 from cortexflow.metrics_utils import (
-    normalize_text,
-    extract_entities,
-    calculate_precision,
-    calculate_recall,
+    calculate_benchmark_metrics,
     calculate_f1,
     calculate_mrr,
     calculate_path_accuracy,
+    calculate_precision,
+    calculate_recall,
     evaluate_hop_accuracy,
     evaluate_llm_answer,
-    calculate_benchmark_metrics,
+    extract_entities,
+    normalize_text,
 )
 
 

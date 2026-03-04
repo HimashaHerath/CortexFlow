@@ -12,7 +12,7 @@ simply does not inherit from any CrewAI base.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("cortexflow.integrations.crewai")
 
@@ -64,7 +64,7 @@ class CortexFlowCrewStorage(_Base):  # type: ignore[misc]
         self,
         key: str,
         value: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Store a key/value pair in the CortexFlow knowledge store.
 
@@ -102,7 +102,7 @@ class CortexFlowCrewStorage(_Base):  # type: ignore[misc]
         query: str,
         limit: int = 5,
         score_threshold: float = 0.0,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search the CortexFlow knowledge store.
 
         Parameters

@@ -7,18 +7,15 @@ Uses small token limits (50/100/200) to force overflow quickly.
 """
 
 import time
-import pytest
 
-from cortexflow.config import CortexFlowConfig, ConfigBuilder
+from cortexflow.config import CortexFlowConfig
 from cortexflow.memory import (
-    ConversationMemory,
-    ContextSegment,
-    MemoryTier,
     ActiveTier,
-    WorkingTier,
     ArchiveTier,
+    ContextSegment,
+    ConversationMemory,
+    WorkingTier,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

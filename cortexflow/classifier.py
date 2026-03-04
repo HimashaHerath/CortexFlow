@@ -5,23 +5,23 @@ This module provides content classification functionality for CortexFlow.
 """
 from __future__ import annotations
 
-import time
 import logging
-import numpy as np
+import time
 
 logger = logging.getLogger(__name__)
-from typing import Any
-import re
-import json
-from cortexflow.config import CortexFlowConfig
-from cortexflow.llm_client import create_llm_client
-from cortexflow.memory import ContextSegment
+import re  # noqa: E402
+from typing import Any  # noqa: E402
+
+from cortexflow.config import CortexFlowConfig  # noqa: E402
+from cortexflow.llm_client import create_llm_client  # noqa: E402
+from cortexflow.memory import ContextSegment  # noqa: E402
+
 
 class RuleBasedClassifier:
     """
     Rule-based classifier for message importance.
     """
-    
+
     def __init__(self):
         """Initialize rule-based classifier."""
         # Patterns that suggest higher importance
@@ -36,25 +36,25 @@ class RuleBasedClassifier:
             r'(?:\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b)',  # Email
             r'(?:\b\d{3}[-.]?\d{3}[-.]?\d{4}\b)'  # Phone numbers
         ]
-        
+
         # Patterns that suggest lower importance
         self.unimportant_patterns = [
             r'\b(?:lol|haha|hmm|oh|ah|um|uh)\b',
             r'(?:[\U0001F600-\U0001F64F])',  # Emojis
             r'(?:^(?:ok|okay|sure|yes|no|maybe)$)',  # Single-word responses
         ]
-        
+
         # Keywords that influence importance
         self.importance_keywords = {
             'high': ['urgent', 'important', 'critical', 'emergency', 'deadline', 'required',
                    'necessary', 'essential', 'vital', 'crucial', 'key', 'significant',
                    'remember', 'note', 'attention', 'action', 'decision'],
-            'medium': ['meeting', 'project', 'task', 'update', 'information', 'report', 
+            'medium': ['meeting', 'project', 'task', 'update', 'information', 'report',
                      'review', 'consider', 'discuss', 'option', 'alternative', 'suggestion'],
-            'low': ['fyi', 'maybe', 'perhaps', 'sometime', 'whenever', 'thought', 
+            'low': ['fyi', 'maybe', 'perhaps', 'sometime', 'whenever', 'thought',
                   'random', 'just', 'btw', 'by the way', 'off topic']
         }
-        
+
         # Message type weights
         self.type_weights = {
             'system': 0.9,
@@ -65,7 +65,7 @@ class RuleBasedClassifier:
             'summary': 0.7,
             'unknown': 0.5
         }
-    
+
     def classify(self, segment: ContextSegment) -> float:
         """
         Classify importance using rule-based heuristics.
@@ -83,52 +83,52 @@ class RuleBasedClassifier:
         """
         if not segment or not segment.content:
             return 0.0
-            
+
         content = segment.content
         segment_type = segment.segment_type
         metadata = segment.metadata or {}
-        
+
         # Base score from message type
         score = self.type_weights.get(segment_type, 0.5)
-        
+
         # Check for important patterns
         for pattern in self.important_patterns:
             if re.search(pattern, content, re.IGNORECASE):
                 score += 0.1
-                
+
         # Check for unimportant patterns
         for pattern in self.unimportant_patterns:
             if re.search(pattern, content, re.IGNORECASE):
                 score -= 0.1
-                
+
         # Check for keywords
         for keyword in self.importance_keywords['high']:
             if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
                 score += 0.15
-                
+
         for keyword in self.importance_keywords['medium']:
             if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
                 score += 0.07
-                
+
         for keyword in self.importance_keywords['low']:
             if re.search(r'\b' + re.escape(keyword) + r'\b', content, re.IGNORECASE):
                 score -= 0.05
-        
+
         # Message length factor (longer messages might be more important)
         length_factor = min(len(content.split()) / 100.0, 0.2)
         score += length_factor
-        
+
         # Content recency
         if hasattr(segment, 'timestamp'):
             recency = (time.time() - segment.timestamp) / 86400.0  # Days
             recency_factor = max(0.0, 0.1 - min(recency, 10) / 100.0)
             score += recency_factor
-            
+
         # Explicit importance from metadata
         if 'importance' in metadata:
             explicit_importance = float(metadata['importance'])
             score = score * 0.6 + explicit_importance * 0.4
-            
+
         # Ensure score is within range
         return max(0.0, min(score, 1.0))
 
@@ -139,18 +139,18 @@ class LLMClassifier:
     LLM-based classifier for message importance.
     Uses external LLM to determine importance.
     """
-    
+
     def __init__(self, config: CortexFlowConfig):
         """
         Initialize LLM classifier.
-        
+
         Args:
             config: CortexFlow configuration
         """
         self.config = config
         self.llm_client = create_llm_client(config)
         self.cache = {}  # Simple cache to avoid repeated queries
-        
+
         # Base prompt for importance classification
         self.base_prompt = """
         You are an AI assistant that determines the importance of conversation messages.
@@ -160,56 +160,56 @@ class LLMClassifier:
         - 0.4-0.6: Moderately important information
         - 0.1-0.3: Background information with limited relevance
         - 0.0: Completely unimportant, could be forgotten
-        
+
         Consider factors like:
         - Information density and uniqueness
         - Presence of facts, data, references
         - Questions or requests requiring follow-up
         - Overall contribution to the conversation
-        
+
         Message: {message}
-        
+
         Rate the importance as a single number between 0.0 and 1.0:
         """
-    
+
     def classify(self, segment: ContextSegment, context: list[ContextSegment] = None) -> float:
         """
         Classify importance using LLM.
-        
+
         Args:
             segment: Context segment to classify
             context: Recent conversation context
-            
+
         Returns:
             Importance score (0-1) or 0.5 if LLM fails
         """
         # Simple feature-based fallback
         if not segment.content:
             return 0.1
-        
+
         content = segment.content
-        
+
         # Check cache first
         cache_key = content[:100]  # Use first 100 chars as key
         if cache_key in self.cache:
             return self.cache[cache_key]
-            
+
         # Extract context for better classification
         context_text = ""
         if context:
             context_samples = context[-2:]  # Just use the last 2 messages
             context_text = "\n".join([f"[{c.segment_type}] {c.content[:100]}..." for c in context_samples])
-        
+
         # Truncate long messages
         max_length = 500  # Character limit for LLM
         if len(content) > max_length:
             content = content[:max_length] + "..."
-            
+
         # Prepare prompt
         prompt = self.base_prompt.format(message=content)
         if context_text:
             prompt = prompt.replace("Message:", f"Recent context:\n{context_text}\n\nMessage:")
-            
+
         try:
             result = self.llm_client.generate_from_prompt(prompt, timeout=5)
 
@@ -229,7 +229,7 @@ class LLMClassifier:
 
         except Exception as e:
             logging.error(f"Error in LLM classification: {e}")
-        
+
         # Fallback importance
         return 0.5
 
@@ -238,7 +238,7 @@ class ImportanceClassifier:
     """
     Classifier that determines the importance of context segments.
     """
-    
+
     def __init__(self, config: CortexFlowConfig):
         """
         Initialize importance classifier.
@@ -269,7 +269,7 @@ class ImportanceClassifier:
             self.rule_weight = config.rule_weight
         if hasattr(config, 'llm_weight'):
             self.llm_weight = config.llm_weight
-            
+
     def classify(self, segment: ContextSegment, context: list[ContextSegment] = None) -> float:
         """
         Classify the importance of a context segment.
@@ -327,16 +327,16 @@ class ContentClassifier:
     Classifier for content types in messages.
     Used to identify content categories, questions, commands, etc.
     """
-    
+
     def __init__(self, config: CortexFlowConfig):
         """
         Initialize the content classifier.
-        
+
         Args:
             config: Configuration object
         """
         self.config = config
-        
+
         # Define classification categories
         self.categories = {
             "question": ["what", "why", "how", "when", "where", "who", "which", "?"],
@@ -346,7 +346,7 @@ class ContentClassifier:
             "greeting": ["hi", "hello", "hey", "good morning", "good afternoon", "good evening"],
             "farewell": ["bye", "goodbye", "see you", "talk later", "thanks"]
         }
-        
+
         # Initialize vector model if ML classification is enabled
         self.model = None
         if hasattr(config, 'use_ml_classifier') and config.use_ml_classifier:
@@ -358,14 +358,14 @@ class ContentClassifier:
                 logger.warning("SentenceTransformer not available for ML classification")
             except Exception as e:
                 logger.error(f"Error loading classifier model: {e}")
-    
+
     def classify(self, content: str) -> dict[str, Any]:
         """
         Classify the content of a message.
-        
+
         Args:
             content: Text content to classify
-            
+
         Returns:
             Classification results
         """
@@ -376,47 +376,47 @@ class ContentClassifier:
             "sentiment": "neutral",
             "confidence": 0.0
         }
-        
+
         # Skip classification for very short content
         if len(content) < 3:
             return result
-            
+
         # Normalize content for classification
         normalized = content.lower().strip()
-        
+
         # Simple rule-based classification
         for category, keywords in self.categories.items():
             score = 0.0
             for keyword in keywords:
                 if keyword in normalized:
                     score += 0.2
-                    
+
             # Scale to 0-1
             score = min(1.0, score)
             result["categories"][category] = score
-        
+
         # Determine primary category
         if result["categories"]:
             primary = max(result["categories"].items(), key=lambda x: x[1])
             if primary[1] > 0.2:  # Minimum threshold
                 result["primary_category"] = primary[0]
                 result["confidence"] = primary[1]
-        
+
         # Check if content is a question
         result["is_question"] = normalized.endswith("?") or any(q in normalized for q in ["what", "why", "how", "when", "where", "who", "which"])
-        
+
         # Simple sentiment detection
         positive_words = ["good", "great", "excellent", "amazing", "wonderful", "fantastic", "happy", "thanks"]
         negative_words = ["bad", "terrible", "awful", "horrible", "sad", "angry", "upset", "disappointed"]
-        
+
         positive_score = sum(1 for word in positive_words if word in normalized)
         negative_score = sum(1 for word in negative_words if word in normalized)
-        
+
         if positive_score > negative_score:
             result["sentiment"] = "positive"
         elif negative_score > positive_score:
             result["sentiment"] = "negative"
-            
+
         # Use ML classification if available
         if self.model is not None:
             try:
@@ -428,5 +428,5 @@ class ContentClassifier:
                 }
             except Exception as e:
                 logger.error(f"Error in ML classification: {e}")
-                
-        return result 
+
+        return result

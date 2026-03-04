@@ -8,11 +8,11 @@ Migration Guide for CortexFlow 0.5.0 Knowledge Module Changes:
 1. API Changes:
    - Added `add_knowledge()` method which replaces `remember_knowledge()`
    - The `remember_knowledge()` method is now deprecated and will be removed in a future version
-   
+
 2. Migration steps:
    - Replace `knowledge_store.remember_knowledge(text, source)` with `knowledge_store.add_knowledge(text, source)`
    - Replace `manager.remember_knowledge(text, source)` with `manager.add_knowledge(text, source)`
-   
+
 3. Benefits of new API:
    - More intuitive naming that better reflects the method's purpose
    - Better documentation of low-level vs high-level methods
@@ -22,26 +22,25 @@ For any issues or questions, please refer to the documentation or open an issue 
 """
 from __future__ import annotations
 
-import os
-import time
 import json
+import logging
 import sqlite3
 import threading
-import numpy as np
-from typing import Any, Protocol, runtime_checkable
-from sqlitedict import SqliteDict
-from datetime import datetime
-import logging
+import time
+import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
-import warnings
+from datetime import datetime
+from typing import Any, Protocol, runtime_checkable
+
+import numpy as np
 
 # Import dependency utilities
 from cortexflow.dependency_utils import import_optional_dependency
 
 # Import sentence-transformers for vector embeddings
 vector_deps = import_optional_dependency(
-    'sentence_transformers', 
+    'sentence_transformers',
     warning_message="sentence-transformers not found. Vector-based retrieval will be disabled.",
     classes=['SentenceTransformer', 'util']
 )
@@ -60,21 +59,22 @@ BM25_ENABLED = bm25_deps['RANK_BM25_ENABLED']
 if BM25_ENABLED:
     BM25Okapi = bm25_deps['BM25Okapi']
 
-from cortexflow.config import CortexFlowConfig
-from cortexflow.interfaces import KnowledgeStoreInterface
+from cortexflow.config import CortexFlowConfig  # noqa: E402
+from cortexflow.interfaces import KnowledgeStoreInterface  # noqa: E402
+
 
 @runtime_checkable
 class SearchStrategy(Protocol):
     """Strategy interface for search methods."""
-    
-    def search(self, knowledge_store: 'KnowledgeStore', **kwargs) -> list[dict[str, Any]]:
+
+    def search(self, knowledge_store: KnowledgeStore, **kwargs) -> list[dict[str, Any]]:
         """
         Execute the search strategy.
-        
+
         Args:
             knowledge_store: The knowledge store instance
             **kwargs: Strategy-specific parameters
-            
+
         Returns:
             List of search results
         """
@@ -83,16 +83,16 @@ class SearchStrategy(Protocol):
 
 class BM25SearchStrategy:
     """BM25 search strategy for keyword-based retrieval."""
-    
-    def search(self, knowledge_store: 'KnowledgeStore', query: str, max_results: int = 10) -> list[dict[str, Any]]:
+
+    def search(self, knowledge_store: KnowledgeStore, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform BM25 search for keyword-based retrieval.
-        
+
         Args:
             knowledge_store: The knowledge store instance
             query: The search query
             max_results: Maximum number of results to return
-            
+
         Returns:
             List of results with BM25 scores
         """
@@ -108,22 +108,22 @@ class BM25SearchStrategy:
         if not knowledge_store.bm25_index:
             logging.warning("BM25 search unavailable: BM25 index has not been built yet (no documents indexed)")
             return []
-            
+
         # Tokenize query
         tokenized_query = query.lower().split()
-        
+
         # Get BM25 scores
         bm25_scores = knowledge_store.bm25_index.get_scores(tokenized_query)
-        
+
         # Sort document IDs by score
         sorted_indices = np.argsort(bm25_scores)[::-1]
-        
+
         results = []
         for i in sorted_indices[:max_results]:
             if i in knowledge_store.id_to_doc_mapping and bm25_scores[i] > 0:
                 doc = knowledge_store.id_to_doc_mapping[i]
                 doc_type = doc.get('type', 'fact')
-                
+
                 if doc_type == 'summary':
                     results.append({
                         'type': 'summary',
@@ -150,14 +150,14 @@ class BM25SearchStrategy:
                         'score': float(bm25_scores[i]),
                         'id': doc['id']
                     })
-                    
+
         return results
 
 
 class DenseVectorSearchStrategy:
     """Dense vector search strategy using embeddings."""
-    
-    def search(self, knowledge_store: 'KnowledgeStore', query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
+
+    def search(self, knowledge_store: KnowledgeStore, query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform vector similarity search for embeddings.
 
@@ -172,7 +172,6 @@ class DenseVectorSearchStrategy:
         # Delegate to pluggable vector backend if available
         if getattr(knowledge_store, '_vector_backend', None) is not None:
             try:
-                from cortexflow.vector_stores.base import VectorSearchResult
                 results = knowledge_store._vector_backend.search(query_embedding, max_results)
                 return [
                     {
@@ -282,17 +281,17 @@ class DenseVectorSearchStrategy:
 
 class HybridSearchStrategy:
     """Hybrid search strategy combining dense vector and sparse BM25 results."""
-    
-    def search(self, knowledge_store: 'KnowledgeStore', query: str, query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
+
+    def search(self, knowledge_store: KnowledgeStore, query: str, query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform hybrid search combining dense vector and sparse BM25 results.
-        
+
         Args:
             knowledge_store: The knowledge store instance
             query: Text query for sparse search
             query_embedding: Query embedding for dense search
             max_results: Maximum number of results
-            
+
         Returns:
             List of results with combined scores
         """
@@ -316,12 +315,12 @@ class HybridSearchStrategy:
 
         # Combine results
         combined_results = {}
-        
+
         # Normalize sparse scores
         max_sparse_score = max([r['bm25_score'] for r in sparse_results]) if sparse_results else 1.0
         min_sparse_score = min([r['bm25_score'] for r in sparse_results]) if sparse_results else 0.0
         sparse_range = max(1e-6, max_sparse_score - min_sparse_score)
-        
+
         # Add sparse results with normalized scores
         for result in sparse_results:
             result_id = result['id']
@@ -332,7 +331,7 @@ class HybridSearchStrategy:
                 'normalized_sparse_score': normalized_score,
                 'combined_score': (1 - knowledge_store.hybrid_alpha) * normalized_score
             }
-            
+
         # Add dense results, combining with sparse scores when available
         for result in dense_results:
             result_id = result['id']
@@ -350,26 +349,26 @@ class HybridSearchStrategy:
                     'dense_score': result.get('score', 0),
                     'combined_score': knowledge_store.hybrid_alpha * result.get('score', 0)
                 }
-                
+
         # Convert to list and sort by combined score
         results_list = list(combined_results.values())
         results_list.sort(key=lambda x: x['combined_score'], reverse=True)
-        
+
         return results_list[:max_results]
 
 
 class KeywordSearchStrategy:
     """Basic keyword search strategy."""
-    
-    def search(self, knowledge_store: 'KnowledgeStore', query: str, max_results: int = 5) -> list[dict[str, Any]]:
+
+    def search(self, knowledge_store: KnowledgeStore, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Basic keyword search as fallback when vector/BM25 is not available.
-        
+
         Args:
             knowledge_store: The knowledge store instance
             query: The search query
             max_results: Maximum number of results to return
-            
+
         Returns:
             List of results
         """
@@ -418,7 +417,7 @@ class KeywordSearchStrategy:
             for summary_id, keywords in knowledge_store.vector_store.items():
                 if not isinstance(keywords, str):
                     continue
-                    
+
                 # Improved keyword matching with partial matches
                 score = 0
                 for term in query_terms:
@@ -430,10 +429,10 @@ class KeywordSearchStrategy:
                             if term in keyword or keyword in term:
                                 score += 0.5
                                 break
-                
+
                 if score > 0:
                     summary_scores.append((summary_id, score))
-            
+
             # Sort by score and get top results
             summary_scores.sort(key=lambda x: x[1], reverse=True)
             for summary_id, score in summary_scores[:max_results - len(results)]:
@@ -455,11 +454,11 @@ class KeywordSearchStrategy:
 
 class KnowledgeStore(KnowledgeStoreInterface):
     """Persistent storage for important facts and retrievable context."""
-    
+
     def __init__(self, config: CortexFlowConfig):
         """
         Initialize the knowledge store with configuration.
-        
+
         Args:
             config: Configuration for the knowledge store
         """
@@ -471,42 +470,42 @@ class KnowledgeStore(KnowledgeStoreInterface):
 
         # Trust marker for high-confidence facts
         self.trust_marker = config.trust_marker if hasattr(config, 'trust_marker') else "📚"
-        
+
         # Configure retrieval settings
         self.use_reranking = config.use_reranking if hasattr(config, 'use_reranking') else True
         self.rerank_top_k = config.rerank_top_k if hasattr(config, 'rerank_top_k') else 15
-        
+
         # GraphRAG settings
         self.use_graph_rag = config.use_graph_rag if hasattr(config, 'use_graph_rag') else False
         self.graph_weight = config.graph_weight if hasattr(config, 'graph_weight') else 0.3
-        
+
         # Ontology settings
         self.use_ontology = config.use_ontology if hasattr(config, 'use_ontology') else False
-        
+
         # Metadata tracking
         self.track_provenance = config.track_provenance if hasattr(config, 'track_provenance') else True
         self.track_confidence = config.track_confidence if hasattr(config, 'track_confidence') else True
         self.track_temporal = config.track_temporal if hasattr(config, 'track_temporal') else True
-        
+
         # Hybrid search parameters
         self.hybrid_alpha = 0.7  # Weight for dense vector search (1-alpha is weight for sparse BM25)
-        
+
         # Inference engine settings
         self.use_inference_engine = config.use_inference_engine if hasattr(config, 'use_inference_engine') else False
         self.inference_engine = None
-        
+
         if self.use_inference_engine:
             try:
                 from .inference import InferenceEngine
                 self.inference_engine = InferenceEngine(self, config)
-                logging.info(f"Inference engine initialized successfully")
+                logging.info("Inference engine initialized successfully")
             except ImportError:
-                logging.error(f"Inference module not found, disabling inference features")
+                logging.error("Inference module not found, disabling inference features")
                 self.use_inference_engine = False
             except Exception as e:
                 logging.error(f"Error initializing inference engine: {e}")
                 self.use_inference_engine = False
-        
+
         # Initialize database connection
         self.conn = None
         self._init_db()
@@ -522,7 +521,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         # Initialize vector embedding model
         self.model = None
         self.embedding_dimension = 384
-        
+
         try:
             if VECTOR_ENABLED:
                 from sentence_transformers import SentenceTransformer
@@ -555,40 +554,40 @@ class KnowledgeStore(KnowledgeStoreInterface):
             self.id_to_doc_mapping = {}
             self.doc_to_id_mapping = {}
             self._update_bm25_index(force_rebuild=True)
-        
+
         # Initialize graph store if enabled
         self.graph_store = None
-        
+
         if self.use_graph_rag:
             try:
                 from .graph_store import GraphStore
                 self.graph_store = GraphStore(config)
-                logging.info(f"Graph store initialized successfully")
+                logging.info("Graph store initialized successfully")
             except Exception as e:
                 logging.error(f"Error initializing graph store: {e}")
                 self.use_graph_rag = False
-            
+
         # Initialize ontology if enabled
         self.ontology = None
         if self.use_ontology:
             try:
                 from .ontology import Ontology
                 self.ontology = Ontology(self.db_path)
-                logging.info(f"Ontology system initialized successfully")
-                
+                logging.info("Ontology system initialized successfully")
+
                 # Connect the ontology to the graph store if both are enabled
                 if self.use_graph_rag and self.graph_store:
                     self.graph_store.ontology = self.ontology
-                    logging.info(f"Connected ontology to graph store")
+                    logging.info("Connected ontology to graph store")
             except ImportError:
-                logging.error(f"Ontology module not found, disabling ontology features")
+                logging.error("Ontology module not found, disabling ontology features")
                 self.use_ontology = False
             except Exception as e:
                 logging.error(f"Error initializing ontology: {e}")
                 self.use_ontology = False
-            
+
         logging.info(f"Knowledge store initialized with vector retrieval: {VECTOR_ENABLED}, BM25: {BM25_ENABLED}")
-        
+
         # Add embedding cache (OrderedDict for LRU eviction)
         self.embedding_cache = OrderedDict()
         self.max_cache_size = 1000  # Limit cache size
@@ -614,15 +613,15 @@ class KnowledgeStore(KnowledgeStoreInterface):
 
         # Track whether this instance has been closed
         self._closed = False
-    
+
     @contextmanager
     def get_connection(self) -> sqlite3.Connection:
         """
         Context manager for database connections.
-        
+
         Returns a connection to the database, either the persistent in-memory connection
         or a new connection to the file-based database if in-memory is not available.
-        
+
         The connection is automatically closed if it's a new connection.
         """
         if self.conn is not None:
@@ -639,7 +638,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 yield conn
             finally:
                 conn.close()
-    
+
     def _init_db(self):
         """Initialize the database for storing structured knowledge."""
         # Create tables if they don't exist
@@ -652,9 +651,9 @@ class KnowledgeStore(KnowledgeStoreInterface):
             else:
                 conn = sqlite3.connect(self.db_path)
                 conn.row_factory = sqlite3.Row
-            
+
             cursor = conn.cursor()
-            
+
             # Create fact triples table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS fact_triples (
@@ -668,7 +667,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     embedding BLOB
                 )
             ''')
-            
+
             # Create knowledge items table for direct text storage
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS knowledge_items (
@@ -680,11 +679,11 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     embedding BLOB
                 )
             ''')
-            
+
             # Create indices for faster queries
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_subject ON fact_triples(subject)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_predicate ON fact_triples(predicate)')
-            
+
             # Create graph entities table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS graph_entities (
@@ -695,7 +694,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     timestamp REAL
                 )
             ''')
-            
+
             # Create graph relationships table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS graph_relationships (
@@ -710,19 +709,19 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     FOREIGN KEY (target_id) REFERENCES graph_entities (id)
                 )
             ''')
-            
+
             # Create indices for graph queries
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_source ON graph_relationships(source_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_target ON graph_relationships(target_id)')
-            
+
             conn.commit()
             conn.close()
-            
+
             logging.debug(f"Database initialized at {self.db_path}")
-            
+
         except sqlite3.Error as e:
             logging.error(f"SQLite error initializing database: {e}")
-    
+
     def _copy_db_to_memory(self):
         """Copy the database to memory for faster access."""
         try:
@@ -730,26 +729,26 @@ class KnowledgeStore(KnowledgeStoreInterface):
             if self.db_path == ":memory:":
                 # If we're already using in-memory database, no need to copy
                 return
-            
+
             disk_conn = sqlite3.connect(self.db_path)
-            
+
             # Create in-memory connection if it doesn't exist
             if self.conn is None:
                 self.conn = sqlite3.connect("")
-            
+
             # Copy to in-memory database
             disk_conn.backup(self.conn)
             disk_conn.close()
-            
+
             logging.debug("Database copied to memory")
-            
+
         except sqlite3.Error as e:
             logging.error(f"Error copying database to memory: {e}")
-            
+
         except AttributeError:
             logging.error("In-memory connection not initialized")
             self.conn = None
-    
+
     def _generate_embedding(self, text: str) -> np.ndarray | None:
         """
         Generate embedding vector for text with caching.
@@ -787,40 +786,40 @@ class KnowledgeStore(KnowledgeStoreInterface):
             except Exception as e:
                 logging.error(f"Error generating embedding: {e}")
                 return None
-    
+
     def _vector_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """
         Calculate cosine similarity between two vectors.
-        
+
         Args:
             vec1: First vector
             vec2: Second vector
-            
+
         Returns:
             Cosine similarity score (0-1)
         """
         if vec1 is None or vec2 is None:
             return 0.0
-            
+
         # Normalize vectors
         vec1_norm = vec1 / np.linalg.norm(vec1)
         vec2_norm = vec2 / np.linalg.norm(vec2)
-        
+
         # Calculate cosine similarity
         similarity = np.dot(vec1_norm, vec2_norm)
         return float(similarity)
-    
+
     def _update_bm25_index(self, force_rebuild=False):
         """
         Update the BM25 index with the latest facts and knowledge items.
-        
+
         Args:
             force_rebuild: Force complete rebuild of the index
         """
         # Skip if BM25 is not enabled
         if not BM25_ENABLED:
             return
-        
+
         # Only update if we have the required libraries
         try:
             import rank_bm25
@@ -843,22 +842,22 @@ class KnowledgeStore(KnowledgeStoreInterface):
             # Get latest document IDs from the database
             max_fact_id = 0
             max_knowledge_id = 0
-            
+
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                
+
                 # Get max fact ID
                 cursor.execute('SELECT MAX(id) FROM fact_triples')
                 result = cursor.fetchone()
                 if result and result[0]:
                     max_fact_id = result[0]
-                
+
                 # Get max knowledge ID
                 cursor.execute('SELECT MAX(id) FROM knowledge_items')
                 result = cursor.fetchone()
                 if result and result[0]:
                     max_knowledge_id = result[0]
-            
+
             # Check if we need to update based on new entries
             if (not force_rebuild and
                 hasattr(self, 'last_indexed_fact_id') and
@@ -867,7 +866,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 max_knowledge_id == self.last_indexed_knowledge_id):
                 # No new documents, skip update
                 return
-            
+
             try:
                 # Rebuild the corpus from the database
                 if force_rebuild:
@@ -875,15 +874,15 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     self.id_to_doc_mapping = {}
                     self.doc_to_id_mapping = {}
                     doc_id = 0
-                
+
                 with self.get_connection() as conn:
                     conn.row_factory = sqlite3.Row
                     cursor = conn.cursor()
-                    
+
                     # Add fact triples to the corpus
                     last_id = getattr(self, 'last_indexed_fact_id', 0)
                     cursor.execute('SELECT id, subject, predicate, object FROM fact_triples WHERE id > ?', (last_id,))
-                    
+
                     for item in cursor.fetchall():
                         # Create document text and tokenize
                         doc_text = f"{item['subject']} {item['predicate']} {item['object']}"
@@ -916,7 +915,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                             # Fallback to simple whitespace tokenization
                             logging.warning("NLTK tokenization failed, using whitespace fallback: %s", e)
                             tokenized_doc = doc_text.lower().split()
-                        
+
                         self.bm25_corpus.append(tokenized_doc)
                         self.id_to_doc_mapping[doc_id] = {
                             'id': item['id'],
@@ -925,34 +924,34 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         }
                         self.doc_to_id_mapping[doc_text] = doc_id
                         doc_id += 1
-                        
+
                     # Update the latest IDs we've indexed
                     self.last_indexed_fact_id = max_fact_id
                     self.last_indexed_knowledge_id = max_knowledge_id
-                    
+
             except Exception as e:
                 logging.error(f"Error updating BM25 index: {e}")
-        
+
             # Recreate the BM25 index with the updated corpus
             if self.bm25_corpus:
                 import rank_bm25
                 self.bm25_index = rank_bm25.BM25Okapi(self.bm25_corpus)
-            
+
             self.bm25_last_update = time.time()
             logging.debug(f"BM25 index updated with {len(self.bm25_corpus)} documents")
-    
-    def store_fact_triple(self, subject: str, predicate: str, obj: str, 
+
+    def store_fact_triple(self, subject: str, predicate: str, obj: str,
                           confidence: float = 1.0, source: str = None) -> int:
         """
         Store a fact triple in the knowledge store.
-        
+
         Args:
             subject: Subject of the fact
             predicate: Predicate/relation
             obj: Object of the fact
             confidence: Confidence score (0.0-1.0)
             source: Source of the fact
-            
+
         Returns:
             ID of the stored fact
         """
@@ -1001,57 +1000,57 @@ class KnowledgeStore(KnowledgeStoreInterface):
             self._update_bm25_index()
 
             return fact_id
-    
+
     def get_facts_about(self, subject: str) -> list[dict[str, Any]]:
         """
         Retrieve facts about a subject.
-        
+
         Args:
             subject: The subject to query
-            
+
         Returns:
             List of fact dictionaries
         """
         facts = []
-        
+
         with self.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
+
             cursor.execute(
                 'SELECT * FROM fact_triples WHERE subject = ? ORDER BY confidence DESC',
                 (subject,)
             )
-            
+
             facts = [dict(row) for row in cursor.fetchall()]
-        
+
         return facts
-    
+
     def get_facts_by_predicate(self, predicate: str) -> list[dict[str, Any]]:
         """
         Retrieve facts by predicate.
-        
+
         Args:
             predicate: The predicate to query
-            
+
         Returns:
             List of fact dictionaries
         """
         facts = []
-        
+
         with self.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
+
             cursor.execute(
                 'SELECT * FROM fact_triples WHERE predicate = ? ORDER BY confidence DESC',
                 (predicate,)
             )
-            
+
             facts = [dict(row) for row in cursor.fetchall()]
-        
+
         return facts
-    
+
     def update_fact_confidence(self, fact_id: int, new_confidence: float) -> bool:
         """
         Update the confidence of a fact.
@@ -1078,7 +1077,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 conn.commit()
 
             return success
-    
+
     def forget_old_facts(self, threshold_days: int = 30, max_confidence: float = 0.7) -> int:
         """
         Remove facts older than threshold with confidence below max_confidence.
@@ -1106,7 +1105,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 conn.commit()
 
             return count
-    
+
     def store_conversation_summary(self, summary: str, keywords: list[str],
                                  timestamp: float = None) -> str:
         """
@@ -1150,96 +1149,96 @@ class KnowledgeStore(KnowledgeStoreInterface):
             self._update_bm25_index()
 
             return summary_id
-    
+
     def _bm25_search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform BM25 search for keyword-based retrieval.
-        
+
         Args:
             query: The search query
             max_results: Maximum number of results to return
-            
+
         Returns:
             List of results with BM25 scores
         """
         return self.search_strategy(strategy="bm25", query=query, max_results=max_results)
-    
+
     def _dense_vector_search(self, query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform vector similarity search for embeddings.
-        
+
         Args:
             query_embedding: Query embedding vector
             max_results: Maximum number of results to return
-        
+
         Returns:
             List of matching items with similarity scores
         """
         return self.search_strategy(strategy="dense_vector", query_embedding=query_embedding, max_results=max_results)
-    
+
     def _hybrid_search(self, query: str, query_embedding: np.ndarray, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Perform hybrid search combining dense vector and sparse BM25 results.
-        
+
         Args:
             query: Text query for sparse search
             query_embedding: Query embedding for dense search
             max_results: Maximum number of results
-            
+
         Returns:
             List of results with combined scores
         """
         return self.search_strategy(strategy="hybrid", query=query, query_embedding=query_embedding, max_results=max_results)
-    
+
     def _keyword_search(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Basic keyword search as fallback when vector/BM25 is not available.
-        
+
         Args:
             query: The search query
             max_results: Maximum number of results to return
-            
+
         Returns:
             List of results
         """
         return self.search_strategy(strategy="keyword", query=query, max_results=max_results)
-    
+
     def search_strategy(self, strategy: str, **kwargs) -> list[dict[str, Any]]:
         """
         Use a specific search strategy.
-        
+
         Args:
             strategy: The name of the strategy to use
             **kwargs: Arguments to pass to the strategy
-            
+
         Returns:
             Search results from the selected strategy
         """
         if strategy not in self._search_strategies:
             logging.warning(f"Unknown search strategy: {strategy}, falling back to keyword search")
             strategy = "keyword"
-            
+
         return self._search_strategies[strategy].search(self, **kwargs)
-    
+
     def _rerank_results(self, query: str, results: list[dict[str, Any]], max_results: int = 5) -> list[dict[str, Any]]:
         """
         Re-rank search results for improved relevance.
-        
+
         Args:
             query: Original search query
             results: Initial search results
             max_results: Maximum number of results to return
-            
+
         Returns:
             Re-ranked results
         """
         if not results or len(results) <= 1:
             return results[:max_results]
-            
+
         try:
             # Generate query embedding
             query_embedding = self._generate_embedding(query)
-            
+
             # Extract content texts
             texts = []
             for result in results:
@@ -1250,10 +1249,10 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 else:
                     # If no text content found, use a placeholder
                     texts.append("")
-                    
+
             # Generate embeddings for all texts
             text_embeddings = [self._generate_embedding(text) for text in texts]
-            
+
             # Calculate similarity scores
             similarities = []
             for embed in text_embeddings:
@@ -1263,12 +1262,12 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     similarities.append(similarity)
                 else:
                     similarities.append(0.0)
-                
+
             # Re-weight scores based on similarity
             for i, result in enumerate(results):
                 # Get current score or default to 0.5
                 orig_score = result.get("score", 0.5)
-                
+
                 # Combine with similarity (if available)
                 if i < len(similarities):
                     sim_score = similarities[i]
@@ -1276,25 +1275,25 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     new_score = orig_score * 0.7 + sim_score * 0.3
                     result["score"] = new_score
                     result["similarity"] = sim_score
-            
+
             # Sort by new scores
             reranked_results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
-            
+
             return reranked_results[:max_results]
-            
+
         except Exception as e:
             logging.error(f"Error in re-ranking: {e}")
             # Fall back to original results on error
             return results[:max_results]
-        
+
     def get_relevant_knowledge(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Get relevant knowledge for a query using hybrid search.
-        
+
         Args:
             query: Search query
             max_results: Maximum number of results to return
-            
+
         Returns:
             List of relevant knowledge items
         """
@@ -1304,12 +1303,12 @@ class KnowledgeStore(KnowledgeStoreInterface):
             self._bm25_dirty = False
 
         results = []
-        
+
         # Use vector search if available
         if VECTOR_ENABLED and self.model is not None:
             # Generate query embedding
             query_embedding = self._generate_embedding(query)
-            
+
             # Use hybrid search (vector + keyword)
             if BM25_ENABLED and self.bm25_index is not None:
                 results = self._hybrid_search(query, query_embedding, max_results=self.rerank_top_k)
@@ -1323,25 +1322,25 @@ class KnowledgeStore(KnowledgeStoreInterface):
             else:
                 # Last resort: simple keyword search
                 results = self._keyword_search(query, max_results=self.rerank_top_k)
-        
+
         # Get graph-based results if enabled
         graph_results = []
         if self.use_graph_rag:
             graph_results = self._graph_search(query, max_results=self.rerank_top_k)
-        
+
         # Merge results from different retrieval methods
         combined_results = []
-        
+
         # Create a set to track unique items
         seen_texts = set()
-        
+
         # Add standard retrieval results
         for result in results:
             text = result.get("text", "")
             if text and text not in seen_texts:
                 seen_texts.add(text)
                 combined_results.append(result)
-        
+
         # Add graph-based results with a factor to boost their scores
         for result in graph_results:
             text = result.get("text", "")
@@ -1351,14 +1350,14 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 if "score" in result:
                     result["score"] = result["score"] * (1.0 + self.graph_weight)
                 combined_results.append(result)
-        
+
         # Apply re-ranking if enabled
         if self.use_reranking:
             combined_results = self._rerank_results(query, combined_results, max_results)
         else:
             # Sort by score and limit results
             combined_results = sorted(combined_results, key=lambda x: x.get("score", 0), reverse=True)[:max_results]
-        
+
         # Format results for the context
         final_results = []
         for item in combined_results:
@@ -1367,11 +1366,11 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 text = f"{self.trust_marker} {item.get('text', '')}"
             else:
                 text = item.get("text", "")
-                
+
             # Add provenance if available
             if "source" in item:
                 text = f"{text} [Source: {item['source']}]"
-                
+
             final_results.append({
                 "text": text,
                 "score": item.get("score", 0),
@@ -1379,32 +1378,32 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 "source": item.get("source", "knowledge_store"),
                 "type": item.get("type", "fact")
             })
-            
+
         return final_results
-    
+
     def _graph_search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
         Get knowledge from graph store relevant to the query.
-        
+
         Args:
             query: Search query
             max_results: Maximum number of results
-            
+
         Returns:
             List of relevant knowledge items from graph
         """
         results = []
-        
+
         try:
             # Extract entities from query
             entities = self.graph_store.extract_entities(query)
-            
+
             # Track entities found in query
             query_entities = [entity["text"] for entity in entities]
-            
+
             logging.debug(f"Graph search for query: '{query}'")
             logging.debug(f"Extracted entities: {query_entities}")
-            
+
             # If we don't have entities, try using noun phrases and proper nouns
             if not query_entities:
                 # Extract noun phrases from query
@@ -1415,33 +1414,33 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         for chunk in doc.noun_chunks:
                             if len(chunk.text) > 2:  # Skip very short chunks
                                 query_entities.append(chunk.text)
-                                
+
                         # Find proper nouns
                         for token in doc:
                             if token.pos_ == "PROPN" and len(token.text) > 2:
                                 if token.text not in query_entities:
                                     query_entities.append(token.text)
-                                    
+
                         logging.debug(f"Added potential entities from query: {query_entities}")
                 except Exception as e:
                     logging.error(f"Error extracting additional entities: {e}")
-            
+
             # If we still don't have entities, use important words from the query
             if not query_entities:
                 # Use words that might be important
                 for word in query.split():
                     if len(word) > 3 and word.lower() not in ["what", "where", "when", "how", "why", "who", "does", "is", "are", "the", "and", "that", "this"]:
                         query_entities.append(word)
-                        
+
                 logging.debug(f"Using important words as entities: {query_entities}")
-            
+
             # If we have entities in the query
             if query_entities:
                 # Get subgraph relevant to the query
                 subgraph = self.graph_store.build_knowledge_subgraph(query, max_nodes=30)
-                
+
                 logging.debug(f"Built subgraph with {len(subgraph['nodes'])} nodes and {len(subgraph['edges'])} edges")
-                
+
                 # For each entity in the query, explore its neighbors
                 for entity_text in query_entities:
                     neighbors = self.graph_store.get_entity_neighbors(
@@ -1449,22 +1448,22 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         direction="both",
                         limit=5
                     )
-                    
+
                     logging.debug(f"Found {len(neighbors)} neighbors for entity '{entity_text}'")
-                    
+
                     # Convert neighbors to knowledge items
                     for neighbor in neighbors:
                         direction = neighbor.get("direction", "")
                         relation = neighbor.get("relation", "")
                         entity = neighbor.get("entity", "")
-                        
+
                         if direction == "outgoing":
                             # Entity → Relation → Neighbor
                             fact_text = f"{entity_text} {relation} {entity}"
                         else:
                             # Neighbor → Relation → Entity
                             fact_text = f"{entity} {relation} {entity_text}"
-                        
+
                         results.append({
                             "text": fact_text,
                             "score": neighbor.get("weight", 0.5),
@@ -1473,7 +1472,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                             "type": "graph_fact",
                             "entity_type": neighbor.get("type")
                         })
-                
+
                 # Try to find paths between different entities in the query
                 if len(query_entities) >= 2:
                     # Check paths between pairs of entities
@@ -1481,15 +1480,15 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         for j in range(i + 1, len(query_entities)):
                             start_entity = query_entities[i]
                             end_entity = query_entities[j]
-                            
+
                             paths = self.graph_store.path_query(
                                 start_entity=start_entity,
                                 end_entity=end_entity,
                                 max_hops=4  # Increased max hops for path finding
                             )
-                            
+
                             logging.debug(f"Found {len(paths)} paths between '{start_entity}' and '{end_entity}'")
-                            
+
                             # Convert paths to knowledge items
                             for path in paths:
                                 path_text = self._format_path_as_text(path)
@@ -1501,7 +1500,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                                         "source": "knowledge_graph",
                                         "type": "graph_path"
                                     })
-            
+
             # If no results were found but we have query terms, try fuzzy matching
             if not results and len(query.split()) > 0:
                 # Try fuzzy matching with common terms in query
@@ -1513,39 +1512,39 @@ class KnowledgeStore(KnowledgeStoreInterface):
                                 conn = self.conn
                             else:
                                 conn = sqlite3.connect(self.graph_store.db_path)
-                                
+
                             conn.row_factory = sqlite3.Row
                             cursor = conn.cursor()
-                            
+
                             # Search for entities that might match
                             cursor.execute('''
-                                SELECT id, entity, entity_type FROM graph_entities 
+                                SELECT id, entity, entity_type FROM graph_entities
                                 WHERE entity LIKE ? LIMIT 5
                             ''', (f"%{word}%",))
-                            
+
                             entity_matches = cursor.fetchall()
-                            
+
                             for entity in entity_matches:
                                 entity_id = entity['id']
                                 entity_text = entity['entity']
-                                
+
                                 # Look for relationships involving this entity
                                 cursor.execute('''
-                                    SELECT r.relation_type, e2.entity 
+                                    SELECT r.relation_type, e2.entity
                                     FROM graph_relationships r
                                     JOIN graph_entities e2 ON r.target_id = e2.id
                                     WHERE r.source_id = ?
                                     LIMIT 3
                                 ''', (entity_id,))
-                                
+
                                 relations = cursor.fetchall()
-                                
+
                                 for relation in relations:
                                     relation_type = relation['relation_type']
                                     target_entity = relation['entity']
-                                    
+
                                     fact_text = f"{entity_text} {relation_type} {target_entity}"
-                                    
+
                                     results.append({
                                         "text": fact_text,
                                         "score": 0.4,  # Lower score for fuzzy matches
@@ -1559,49 +1558,49 @@ class KnowledgeStore(KnowledgeStoreInterface):
                             if not hasattr(self, 'conn') or self.conn is None:
                                 if conn is not None:
                                     conn.close()
-            
+
             # Sort results by score
             results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)[:max_results]
-            
+
             logging.debug(f"Graph search returned {len(results)} results")
-            
+
         except Exception as e:
             logging.error(f"Error in graph search: {e}")
             import traceback
             logging.error(f"Traceback: {traceback.format_exc()}")
-        
+
         return results
-    
+
     def _format_path_as_text(self, path: list[dict[str, Any]]) -> str:
         """
         Format a graph path as readable text.
-        
+
         Args:
             path: List of path nodes with their details
-            
+
         Returns:
             Formatted text representation of the path
         """
         if not path or len(path) < 2:
             return ""
-            
+
         path_segments = []
-        
+
         for i in range(len(path) - 1):
             current = path[i]
             next_node = path[i + 1]
-            
+
             current_entity = current.get("entity", "")
             relation = current.get("next_relation", {}).get("type", "is related to")
-            
+
             path_segments.append(f"{current_entity} {relation}")
-            
+
             # Add the final entity for the last segment
             if i == len(path) - 2:
                 path_segments.append(next_node.get("entity", ""))
-        
+
         return " → ".join(path_segments)
-    
+
     def extract_facts_from_text(self, text: str) -> list[tuple[str, str, str]]:
         """
         Extract fact triples from text.
@@ -1623,18 +1622,18 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 return self.graph_store.extract_relations(text)
             except Exception as e:
                 logging.error(f"Error extracting relations via graph store, falling back to heuristic: {e}")
-        
+
         # Simple pattern-based extraction fallback
         facts = []
-        
+
         # Split text into sentences (simplified)
         sentences = text.replace("! ", ". ").replace("? ", ". ").split(". ")
-        
+
         for sentence in sentences:
             # Skip short sentences
             if len(sentence.split()) < 5:
                 continue
-                
+
             # Very simple SVO (subject-verb-object) extraction
             words = sentence.split()
             for i in range(1, len(words) - 1):
@@ -1642,31 +1641,31 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 subject = words[i-1]
                 predicate = words[i]
                 obj = words[i+1]
-                
+
                 # Skip common words and punctuation
                 if (len(subject) > 3 and len(predicate) > 3 and len(obj) > 3 and
                     subject not in ["this", "that", "these", "those"] and
                     obj not in ["this", "that", "these", "those"]):
                     facts.append((subject, predicate, obj))
-        
+
         return facts
-    
+
     def remember_explicit(self, text: str, source: str = "user_command", confidence: float = 0.95) -> list[int]:
         """
         Explicitly add knowledge to the knowledge store, with special handling for facts marked with a trust marker.
-        
+
         This is a low-level implementation method that handles:
         1. Parsing for facts prefixed with trust markers to extract triples
         2. Building knowledge graph relations
         3. Storing raw text as knowledge items when no structured data is extracted
-        
+
         Most callers should use remember() or add_knowledge() instead, which provide a simpler interface.
-        
+
         Args:
             text: The text to add
             source: Source of the knowledge (for provenance)
             confidence: Confidence level in the knowledge (0.0 to 1.0)
-            
+
         Returns:
             IDs of the facts added
         """
@@ -1743,7 +1742,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     logging.error(f"Error storing direct knowledge: {e}")
 
             return fact_ids
-    
+
     def store_knowledge_item(self, text: str, confidence: float = 0.9, source: str = None) -> int:
         """
         Store a knowledge item in the database.
@@ -1800,21 +1799,21 @@ class KnowledgeStore(KnowledgeStoreInterface):
             self._update_bm25_index()
 
             return item_id
-    
+
     def add_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> list[int]:
         """
         Add knowledge to the system, the primary method for adding knowledge programmatically.
-        
+
         Args:
             text: Text to remember
             source: Source of the knowledge, defaults to "system" if None
             confidence: Confidence score for the facts
-            
+
         Returns:
             List of IDs for stored facts
         """
         return self.remember_explicit(text, source or "system", confidence)
-    
+
     def remember_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> list[int]:
         """Deprecated: Use add_knowledge() instead."""
         warnings.warn(
@@ -1822,23 +1821,23 @@ class KnowledgeStore(KnowledgeStoreInterface):
             DeprecationWarning, stacklevel=2
         )
         return self.add_knowledge(text, source, confidence)
-    
+
     def _expand_query(self, query: str) -> list[str]:
         """
         Expand a query with synonyms and related terms to improve search.
-        
+
         Args:
             query: The original query
-            
+
         Returns:
             List of expanded search terms
         """
         expanded = [query.lower()]
-        
+
         # Add original terms
         terms = query.lower().split()
         expanded.extend(terms)
-        
+
         # Add variations for common question patterns
         question_words = ["what", "where", "who", "when", "how", "why"]
         for word in question_words:
@@ -1846,7 +1845,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 # Remove question words to focus on entities
                 clean_terms = [t for t in terms if t not in question_words and len(t) > 2]
                 expanded.extend(clean_terms)
-                
+
                 # Add special handling for common questions
                 if "name" in query.lower():
                     expanded.append("is")
@@ -1862,13 +1861,13 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     expanded.append("likes")
                     expanded.append("prefers")
                     expanded.append("is")
-                
+
                 break
-        
+
         # Remove duplicates and very short terms
         expanded = list(set([term for term in expanded if len(term) > 1]))
         return expanded
-    
+
     def close(self):
         """Clean up resources. Safe to call multiple times."""
         with self._lock:
@@ -1879,7 +1878,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 if hasattr(self, '_vector_backend') and self._vector_backend is not None:
                     self._vector_backend.close()
                     self._vector_backend = None
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
             try:
@@ -1910,7 +1909,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """Destructor to clean up resources. Safe to call multiple times."""
         try:
             self.close()
-        except Exception:
+        except Exception:  # noqa: S110
             # Avoid errors during interpreter shutdown when logging may be unavailable
             pass
 
@@ -1922,60 +1921,60 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """Exit context manager and clean up resources."""
         self.close()
         return False
-            
+
     def get_snapshots(self) -> list[dict[str, Any]]:
         """
         Get snapshots of the knowledge store for consistency evaluation.
-        
+
         Returns:
             List of knowledge snapshots, each with a timestamp
         """
         snapshots = []
-        
+
         try:
             # Check if we have a history of snapshots in the database
             with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
-                
+
                 # Try to get snapshots from the database
                 try:
                     cursor.execute('''
-                    SELECT id, snapshot_data, timestamp 
+                    SELECT id, snapshot_data, timestamp
                     FROM knowledge_snapshots
                     ORDER BY timestamp DESC
                     LIMIT 10
                     ''')
-                    
+
                     rows = cursor.fetchall()
-                    
+
                     if rows:
                         for row in rows:
                             snapshot_data = json.loads(row['snapshot_data'])
                             snapshot_data['timestamp'] = row['timestamp']
                             snapshots.append(snapshot_data)
-                
+
                 except sqlite3.OperationalError:
                     # Table might not exist, we'll create it later
                     pass
-                
+
             # If no snapshots found, return current state as the only snapshot
             if not snapshots:
                 current_snapshot = self.take_snapshot()
                 snapshots.append(current_snapshot)
-                
+
         except Exception as e:
             logging.error(f"Error getting snapshots: {e}")
-            
+
             # Return an empty snapshot as fallback
             snapshots.append({
                 "timestamp": datetime.now().timestamp(),
                 "entities": [],
                 "relations": []
             })
-            
+
         return snapshots
-    
+
     def take_snapshot(self) -> dict[str, Any]:
         """
         Take a snapshot of the current knowledge state.
@@ -2036,36 +2035,36 @@ class KnowledgeStore(KnowledgeStoreInterface):
 
             except Exception as e:
                 logging.error(f"Error taking knowledge snapshot: {e}")
-            
+
         return snapshot
 
     # Implement methods required by KnowledgeStoreInterface
     def remember(self, text: str, source: str | None = None) -> list[int]:
         """
         Store knowledge in the system as required by KnowledgeStoreInterface.
-        
+
         Args:
             text: Text to remember
             source: Optional source information
-            
+
         Returns:
             List of IDs for the stored knowledge
         """
         return self.add_knowledge(text, source)
-    
+
     def retrieve(self, query: str, max_results: int = 5) -> list[dict[str, Any]]:
         """
         Retrieve knowledge relevant to the query as required by KnowledgeStoreInterface.
-        
+
         Args:
             query: Query text
             max_results: Maximum number of results
-            
+
         Returns:
             List of relevant knowledge items
         """
         return self.get_relevant_knowledge(query, max_results)
-    
+
     def clear(self) -> None:
         """Clear all stored knowledge."""
         with self._lock:
@@ -2102,41 +2101,41 @@ class KnowledgeStore(KnowledgeStoreInterface):
 
             # Clear embedding cache
             self.embedding_cache = OrderedDict()
-    
+
     def retrieve_context(self, query: str, max_results: int = 5, min_score: float = 0.0) -> list[dict[str, Any]]:
         """
         Retrieve relevant context for a query.
-        
+
         Args:
             query: The query to retrieve context for
             max_results: Maximum number of results to return
             min_score: Minimum similarity score (0-1) for results
-            
+
         Returns:
             List of relevant context items
         """
         results = []
-        
+
         # Get vector search results (generate embedding from query text first)
         vector_results = []
         if VECTOR_ENABLED and self.model is not None:
             query_embedding = self._generate_embedding(query)
             if query_embedding is not None:
                 vector_results = self._dense_vector_search(query_embedding, max_results * 2)
-        
+
         # Get BM25 search results
         bm25_results = self._bm25_search(query, max_results * 2) if BM25_ENABLED else []
-        
+
         # Get graph search results if enabled
         graph_results = []
         if self.use_graph_rag and self.graph_store:
             graph_results = self._graph_search(query, max_results * 2)
-        
+
         # Combine results from different sources with hybrid ranking
         if vector_results and bm25_results:
             # Map IDs to maintain uniqueness
             combined_results = {}
-            
+
             # Add vector results with their scores
             for item in vector_results:
                 item_id = item.get("id", 0)
@@ -2146,7 +2145,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         "vector_score": item.get("score", 0),
                         "bm25_score": 0
                     }
-            
+
             # Update or add BM25 results
             for item in bm25_results:
                 item_id = item.get("id", 0)
@@ -2159,43 +2158,43 @@ class KnowledgeStore(KnowledgeStoreInterface):
                             "vector_score": 0,
                             "bm25_score": item.get("score", 0)
                         }
-            
+
             # Calculate hybrid scores
             for item_id, data in combined_results.items():
                 # Normalize scores to 0-1 range (they should already be in this range)
                 vector_score = data["vector_score"]
                 bm25_score = data["bm25_score"]
-                
+
                 # Calculate hybrid score
                 hybrid_score = self.hybrid_alpha * vector_score + (1 - self.hybrid_alpha) * bm25_score
-                
+
                 # Update the item with hybrid score
                 data["item"]["score"] = hybrid_score
                 results.append(data["item"])
-                
+
             # Sort by hybrid score
             results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
         elif vector_results:
             results = vector_results
         elif bm25_results:
             results = bm25_results
-        
+
         # Add graph results if available, weighing them appropriately
         if graph_results:
             existing_ids = {r.get("id", 0) for r in results if "id" in r}
-            
+
             for graph_item in graph_results:
                 graph_id = graph_item.get("id", 0)
-                
+
                 # Only add if not already in results
                 if graph_id and graph_id not in existing_ids:
                     # Adjust score by graph weight
                     graph_item["score"] = graph_item.get("score", 0.5) * self.graph_weight
                     results.append(graph_item)
-            
+
             # Resort results
             results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
-        
+
         # If ontology is enabled, enhance results with subclass/superclass information
         if self.use_ontology and self.ontology:
             try:
@@ -2204,7 +2203,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                 if self.graph_store:
                     extracted_entities = self.graph_store.extract_entities(query)
                     entities = [entity["text"] for entity in extracted_entities]
-                
+
                 # For each entity, check if it belongs to a class in the ontology
                 enhanced_results = []
                 for entity in entities:
@@ -2215,7 +2214,7 @@ class KnowledgeStore(KnowledgeStoreInterface):
                     row = cursor.fetchone()
                     if row and row[0]:
                         entity_type = row[0]
-                    
+
                     if entity_type and self.ontology.get_class(entity_type):
                         # Get superclasses
                         for parent_class in self.ontology.get_class(entity_type).parent_classes:
@@ -2230,47 +2229,47 @@ class KnowledgeStore(KnowledgeStoreInterface):
                                         "source": "ontology_reasoning",
                                         "type": "class_hierarchy"
                                     })
-                
+
                 # Add the enhanced results
                 results.extend(enhanced_results)
-                
+
                 # Resort results
                 results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
             except Exception as e:
                 logging.error(f"Error applying ontology reasoning: {e}")
-        
+
         # If inference engine is enabled, enhance results with inferences
         if self.use_inference_engine and self.inference_engine:
             try:
                 # Check if this is a "why" question for backward chaining
                 if query.lower().strip().startswith("why "):
                     explanations = self.inference_engine.answer_why_question(query)
-                    
+
                     if explanations and not any("error" in exp for exp in explanations):
                         for explanation in explanations:
                             explanation["score"] = 0.95  # High score for logical explanations
                             explanation["source"] = "inference_engine"
-                            
+
                         # Add explanations to results
                         results.extend(explanations)
-                        
+
                         # Resort results to prioritize explanations
                         results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
                 else:
                     # Try to infer new facts through forward chaining
                     # Only do this occasionally to avoid performance impact
                     should_run_forward_chain = (hash(query) % 5 == 0)  # ~20% of queries
-                    
+
                     if should_run_forward_chain:
                         inferred_facts = self.inference_engine.forward_chain(
                             iterations=self.config.max_forward_chain_iterations
                         )
-                        
+
                         # Convert inferred facts to result format
                         for fact in inferred_facts:
                             # Create a natural language representation
                             fact_text = f"{fact.get('source', '')} {fact.get('relation', '')} {fact.get('target', '')}"
-                            
+
                             results.append({
                                 "text": fact_text,
                                 "score": 0.85,  # High but lower than direct answers
@@ -2279,87 +2278,87 @@ class KnowledgeStore(KnowledgeStoreInterface):
                                 "type": "inferred_fact",
                                 "rule": fact.get("rule")
                             })
-                        
+
                         # Resort results
                         results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
             except Exception as e:
                 logging.error(f"Error applying inference engine: {e}")
-        
+
         # Filter by minimum score
         results = [r for r in results if r.get("score", 0) >= min_score]
-        
+
         # Deduplicate and limit results
         unique_texts = set()
         deduplicated_results = []
-        
+
         for result in results:
             text = result.get("text", "")
             if text and text not in unique_texts:
                 unique_texts.add(text)
                 deduplicated_results.append(result)
-                
+
                 if len(deduplicated_results) >= max_results:
                     break
-        
+
         # Rerank if enabled and we have enough results
         if self.use_reranking and len(deduplicated_results) > 1 and self.model:
             try:
                 reranked_results = self._rerank_results(query, deduplicated_results[:self.rerank_top_k])
-                
+
                 # Keep track of which results were reranked for debugging
                 for result in reranked_results:
                     result["reranked"] = True
-                    
+
                 # Add any results that weren't in the reranking pool
                 if len(deduplicated_results) > self.rerank_top_k:
                     for result in deduplicated_results[self.rerank_top_k:]:
                         reranked_results.append(result)
-                        
+
                 deduplicated_results = reranked_results[:max_results]
             except Exception as e:
                 logging.error(f"Error during reranking: {e}")
-        
+
         # Add metadata about the retrieval process
         for result in deduplicated_results:
             if "provenance" not in result and "source" in result:
                 result["provenance"] = result["source"]
-                
+
             # Include timestamp information if available but no explicit timestamp in result
             if "timestamp" not in result and self.track_temporal:
                 result["timestamp"] = datetime.now().isoformat()
-        
+
         return deduplicated_results[:max_results]
-    
+
     def generate_hypotheses(self, observation: str, max_hypotheses: int = 3) -> list[dict[str, Any]]:
         """
         Generate hypotheses to explain an observation using abductive reasoning.
-        
+
         Args:
             observation: The observation to explain
             max_hypotheses: Maximum number of hypotheses to generate
-            
+
         Returns:
             List of hypothesis explanations
         """
         if not self.use_inference_engine or not self.inference_engine:
             logging.warning("Inference engine not available for hypothesis generation")
             return []
-            
+
         if not self.config.abductive_reasoning_enabled:
             logging.info("Abductive reasoning is disabled in configuration")
             return []
-            
+
         try:
             # Extract a fact pattern from the observation
             fact_pattern = None
-            
+
             # Try to extract entities and relations from the graph store
             if self.graph_store:
                 entities = self.graph_store.extract_entities(observation)
                 if len(entities) >= 1:
                     # Get the first entity as the observation subject
                     subject = entities[0]["text"]
-                    
+
                     # Try to extract relations
                     relations = self.graph_store.extract_relations(observation)
                     if relations:
@@ -2393,29 +2392,29 @@ class KnowledgeStore(KnowledgeStoreInterface):
                                         "target": words[i+1]
                                     }
                                     break
-            
+
             # If we couldn't extract a fact pattern, return empty
             if not fact_pattern:
                 logging.warning(f"Could not extract a fact pattern from observation: {observation}")
                 return []
-                
+
             # Apply abductive reasoning
             hypotheses = self.inference_engine.abductive_reasoning(
-                fact_pattern, 
+                fact_pattern,
                 max_hypotheses=max_hypotheses
             )
-            
+
             # Format the hypotheses
             formatted_hypotheses = []
             for hypothesis in hypotheses:
                 hypothesis_fact = hypothesis.get("hypothesis", {})
-                
+
                 # Create a natural language representation
                 if hypothesis_fact:
                     source = hypothesis_fact.get("source", "")
                     relation = hypothesis_fact.get("relation", "")
                     target = hypothesis_fact.get("target", "")
-                    
+
                     # Format relation for readability
                     if relation == "is_a":
                         relation_text = "is a"
@@ -2423,9 +2422,9 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         relation_text = "has"
                     else:
                         relation_text = relation.replace("_", " ")
-                    
+
                     hypothesis_text = f"{source} {relation_text} {target}"
-                    
+
                     formatted_hypotheses.append({
                         "text": hypothesis_text,
                         "confidence": hypothesis.get("confidence", 0.5),
@@ -2433,9 +2432,9 @@ class KnowledgeStore(KnowledgeStoreInterface):
                         "source": "abductive_reasoning",
                         "reasoning_path": f"Rule: {hypothesis.get('rule', 'unknown')}"
                     })
-            
+
             return formatted_hypotheses
-            
+
         except Exception as e:
             logging.error(f"Error generating hypotheses: {e}")
-            return [] 
+            return []

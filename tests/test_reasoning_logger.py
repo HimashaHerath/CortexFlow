@@ -13,11 +13,11 @@ Covers:
 
 import json
 import os
-import pytest
 import sqlite3
-from unittest.mock import patch, MagicMock
 
-from cortexflow.reasoning_logger import ReasoningLogger, ReasoningContext
+import pytest
+
+from cortexflow.reasoning_logger import ReasoningLogger
 
 
 @pytest.fixture
@@ -189,7 +189,7 @@ class TestDatabaseRetrieval:
     def test_get_recent_sessions(self, logger_with_db):
         """get_recent_sessions returns correct count and structure."""
         for i in range(3):
-            sid = logger_with_db.start_reasoning(f"query {i}")
+            logger_with_db.start_reasoning(f"query {i}")
             logger_with_db.log_reasoning_step("step", f"desc {i}")
             logger_with_db.end_reasoning(success=True)
 
@@ -207,7 +207,7 @@ class TestDatabaseRetrieval:
     def test_get_recent_sessions_limit(self, logger_with_db):
         """get_recent_sessions respects the limit parameter."""
         for i in range(5):
-            sid = logger_with_db.start_reasoning(f"q{i}")
+            logger_with_db.start_reasoning(f"q{i}")
             logger_with_db.end_reasoning()
 
         sessions = logger_with_db.get_recent_sessions(limit=2)

@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, PropertyMock
 
 langchain_core = pytest.importorskip("langchain_core")
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage  # noqa: E402
 
 from cortexflow.integrations.langchain import (  # noqa: E402
+    LANGCHAIN_AVAILABLE,
     CortexFlowChatMessageHistory,
     CortexFlowMemory,
     CortexFlowRetriever,
-    LANGCHAIN_AVAILABLE,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

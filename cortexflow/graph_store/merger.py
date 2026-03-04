@@ -137,7 +137,7 @@ class GraphMerger:
             if should_update:
                 # Update the existing entity
                 try:
-                    result = self.graph_store.add_entity(
+                    self.graph_store.add_entity(
                         entity=entity,
                         entity_type=entity_type or existing_type,
                         metadata=merged_metadata,
@@ -185,7 +185,7 @@ class GraphMerger:
 
             # Add as an alias to the best match
             try:
-                alias_added = self.graph_store.add_entity_alias(
+                self.graph_store.add_entity_alias(
                     entity_id=entity_id,
                     alias=entity,
                     confidence=confidence * (best_match['similarity'] / 100.0)
@@ -279,7 +279,7 @@ class GraphMerger:
         existing = self.cursor.fetchone()
 
         if existing:
-            relation_id = existing[0]
+            existing[0]
             existing_weight = existing[1]
             existing_metadata = json.loads(existing[2]) if existing[2] else {}
             existing_confidence = existing[3]

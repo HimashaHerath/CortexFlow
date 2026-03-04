@@ -5,12 +5,12 @@ Covers _extract_claims, _compute_kb_support_ratio, verify_knowledge_relevance
 filtering, and check_response_consistency with mocked LLM.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
-from cortexflow.config import CortexFlowConfig, ConfigBuilder
+from cortexflow.config import ConfigBuilder
 from cortexflow.reflection import ReflectionEngine
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

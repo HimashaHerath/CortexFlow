@@ -4,4 +4,4 @@
 VERSION = (1, 0, 0)
 
 # String format: X.Y.Z
-__version__ = ".".join(str(x) for x in VERSION) 
+__version__ = ".".join(str(x) for x in VERSION)

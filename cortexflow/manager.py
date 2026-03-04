@@ -14,34 +14,23 @@ unchanged.
 """
 from __future__ import annotations
 
-import time
-import json
 import logging
-import requests
 import traceback
-from typing import Any, Iterator
-import re
-import warnings
+from collections.abc import Iterator
+from typing import Any
 
+from cortexflow.classifier import ContentClassifier
 from cortexflow.interfaces import ContextProvider
-from cortexflow.config import CortexFlowConfig
+from cortexflow.knowledge import KnowledgeStore
+from cortexflow.knowledge_coordinator import KnowledgeCoordinator
 from cortexflow.llm_client import create_llm_client
 from cortexflow.memory import (
-    ContextSegment,
-    MemoryTier,
-    ActiveTier,
-    WorkingTier,
-    ArchiveTier,
-    ConversationMemory
+    ConversationMemory,
 )
-from cortexflow.classifier import ImportanceClassifier, ContentClassifier
-from cortexflow.compressor import ContextCompressor
-from cortexflow.knowledge import KnowledgeStore
+from cortexflow.reasoning_facade import ReasoningFacade
 
 # Domain delegates
 from cortexflow.response_orchestrator import ResponseOrchestrator
-from cortexflow.knowledge_coordinator import KnowledgeCoordinator
-from cortexflow.reasoning_facade import ReasoningFacade
 
 # Add import for Chain of Agents
 try:
@@ -236,7 +225,9 @@ class CortexFlowManager(ContextProvider):
             if getattr(self.config, "use_emotion_tracking", False):
                 try:
                     from cortexflow.emotion import (
-                        RuleBasedEmotionDetector, LLMEmotionDetector, EmotionTracker,
+                        EmotionTracker,
+                        LLMEmotionDetector,
+                        RuleBasedEmotionDetector,
                     )
                     detector_type = self.config.emotion.emotion_detector
                     if detector_type == "llm":
@@ -521,8 +512,9 @@ class CortexFlowManager(ContextProvider):
             try:
                 facts = self.fact_detector.detect_facts(content)
                 for fact_dict in facts:
-                    from cortexflow.temporal import TemporalFact
                     from datetime import datetime
+
+                    from cortexflow.temporal import TemporalFact
                     tf = TemporalFact(
                         subject=fact_dict.get("subject", "user"),
                         predicate=fact_dict.get("fact_type", "states"),
@@ -671,8 +663,9 @@ class CortexFlowManager(ContextProvider):
         # Auto-save episode on session close
         if self._episodic_store and session:
             try:
-                from cortexflow.episodic_memory import Episode
                 from datetime import datetime
+
+                from cortexflow.episodic_memory import Episode
                 # Gather recent messages from memory
                 messages = []
                 if hasattr(self.memory, 'get_messages'):
@@ -827,21 +820,21 @@ class CortexFlowManager(ContextProvider):
         if self.weighting_engine:
             try:
                 stats["dynamic_weighting"] = self.get_dynamic_weighting_stats()
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         # Add uncertainty handling stats if available
         if self.uncertainty_handler:
             try:
                 stats["uncertainty"] = self.uncertainty_handler.get_stats()
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         # Add performance optimization stats if available
         if self.performance_optimizer:
             try:
                 stats["performance"] = self.performance_optimizer.get_stats()
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         return stats
@@ -1253,7 +1246,7 @@ class CortexFlowManager(ContextProvider):
 
         logger.info("CortexFlowManager closed")
 
-    def __enter__(self) -> 'CortexFlowManager':
+    def __enter__(self) -> CortexFlowManager:
         """Support ``with CortexFlowManager() as mgr:`` usage."""
         return self
 
@@ -1266,7 +1259,7 @@ class CortexFlowManager(ContextProvider):
         """Destructor -- best-effort fallback; prefer using a context manager."""
         try:
             self.close()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     def get_context(self) -> dict[str, Any]:

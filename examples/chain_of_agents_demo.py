@@ -6,9 +6,10 @@ This script tests the Chain of Agents functionality in CortexFlow.
 """
 
 import argparse
-import json
 import time
-from cortexflow import CortexFlowManager, CortexFlowConfig
+
+from cortexflow import CortexFlowConfig, CortexFlowManager
+
 
 def test_chain_of_agents():
     """Test the Chain of Agents functionality."""
@@ -20,9 +21,9 @@ def test_chain_of_agents():
     parser.add_argument("--archive-tokens", type=int, default=3000, help="Archive tier token limit")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     args = parser.parse_args()
-    
+
     print(f"Testing CortexFlow Chain of Agents with model {args.model}...")
-    
+
     # Initialize with in-memory storage and Chain of Agents enabled
     config = CortexFlowConfig(
         active_token_limit=args.active_tokens,
@@ -35,25 +36,25 @@ def test_chain_of_agents():
         use_chain_of_agents=True,  # Enable Chain of Agents
         verbose_logging=args.verbose
     )
-    
+
     # Check if required packages are installed
     try:
-        import networkx
-        import spacy
+        import networkx  # noqa: E402, F401
+        import spacy  # noqa: E402, F401
         graph_packages_available = True
     except ImportError:
         print("Note: networkx or spacy not installed. Some graph functionality will be limited.")
         graph_packages_available = False
-    
+
     context_manager = CortexFlowManager(config)
-    
+
     try:
         # Set up system message
         context_manager.add_message(
             "system",
             "You are a helpful AI assistant with advanced reasoning capabilities."
         )
-        
+
         # Add some knowledge to the system
         print("\nAdding knowledge to the system...")
         facts = [
@@ -68,55 +69,55 @@ def test_chain_of_agents():
             "Baseball is one of the most popular sports in Japan.",
             "Mario, Pokemon, and Nintendo are all Japanese creations."
         ]
-        
+
         for fact in facts:
             if graph_packages_available:
                 context_manager.remember_knowledge(fact)
                 print(f"Added fact: {fact}")
-        
+
         # Test with simple query
         print("\n[Test] Simple Query")
         query = "What is the capital of Japan?"
         print(f"User: {query}")
-        
+
         context_manager.add_message("user", query)
         start_time = time.time()
         response = context_manager.generate_response()
         end_time = time.time()
-        
+
         print(f"Assistant: {response}")
         print(f"Response time: {end_time - start_time:.2f}s")
-        
+
         # Test with complex query requiring multi-hop reasoning
         print("\n[Test] Complex Query with Multi-hop Reasoning")
         query = "Is the tallest mountain in Japan located on the same island as the capital city?"
         print(f"User: {query}")
-        
+
         context_manager.add_message("user", query)
         start_time = time.time()
         response = context_manager.generate_response()
         end_time = time.time()
-        
+
         print(f"Assistant: {response}")
         print(f"Response time: {end_time - start_time:.2f}s")
-        
+
         # Test with query requiring reasoning over multiple pieces of information
         print("\n[Test] Integration Query")
         query = "What traditional Japanese cultural elements are associated with the city that was the imperial capital before Tokyo?"
         print(f"User: {query}")
-        
+
         context_manager.add_message("user", query)
         start_time = time.time()
         response = context_manager.generate_response()
         end_time = time.time()
-        
+
         print(f"Assistant: {response}")
         print(f"Response time: {end_time - start_time:.2f}s")
-        
+
     finally:
         # Clean up
         context_manager.close()
         print("\nChain of Agents test completed")
 
 if __name__ == "__main__":
-    test_chain_of_agents() 
+    test_chain_of_agents()

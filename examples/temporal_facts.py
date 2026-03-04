@@ -2,10 +2,8 @@
 
 Demonstrates time-aware fact management and session-based episode storage.
 """
-from datetime import datetime
-from cortexflow import ConfigBuilder, CortexFlowManager
-from cortexflow.temporal import TemporalFact, TemporalManager
 from cortexflow.episodic_memory import Episode, EpisodicMemoryStore
+from cortexflow.temporal import TemporalFact, TemporalManager
 
 # --- Temporal Facts (standalone) ---
 tm = TemporalManager()

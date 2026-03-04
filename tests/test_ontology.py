@@ -7,10 +7,10 @@ Tests the core functionality of:
 - Metadata framework for tracking provenance, confidence, and temporal information
 """
 
-import os
-import pytest
 import time
 from datetime import datetime
+
+import pytest
 
 from cortexflow.config import CortexFlowConfig
 from cortexflow.ontology import Ontology, OntologyClass, RelationType

@@ -16,7 +16,7 @@ checking or documentation generation.
 from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional, Sequence
+from typing import Any
 
 logger = logging.getLogger("cortexflow.integrations.langchain")
 
@@ -25,7 +25,9 @@ logger = logging.getLogger("cortexflow.integrations.langchain")
 # ---------------------------------------------------------------------------
 
 try:
+    from langchain_core.callbacks import CallbackManagerForRetrieverRun
     from langchain_core.chat_history import BaseChatMessageHistory
+    from langchain_core.documents import Document
     from langchain_core.messages import (
         AIMessage,
         BaseMessage,
@@ -33,8 +35,6 @@ try:
         SystemMessage,
     )
     from langchain_core.retrievers import BaseRetriever
-    from langchain_core.documents import Document
-    from langchain_core.callbacks import CallbackManagerForRetrieverRun
 
     LANGCHAIN_AVAILABLE = True
 except ImportError:
@@ -149,8 +149,8 @@ class CortexFlowChatMessageHistory(BaseChatMessageHistory):
     def __init__(
         self,
         manager: Any,
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
     ) -> None:
         self.manager = manager
         self.session_id = session_id
@@ -164,7 +164,7 @@ class CortexFlowChatMessageHistory(BaseChatMessageHistory):
     # -- BaseChatMessageHistory interface -----------------------------------
 
     @property
-    def messages(self) -> List[BaseMessage]:  # noqa: D401
+    def messages(self) -> list[BaseMessage]:  # noqa: D401
         """Return the conversation history as a list of ``BaseMessage``."""
         raw_messages: list[dict[str, Any]] = getattr(
             self.manager, "memory", None
@@ -226,8 +226,8 @@ class CortexFlowRetriever(BaseRetriever):
         self,
         query: str,
         *,
-        run_manager: Optional[CallbackManagerForRetrieverRun] = None,
-    ) -> List[Document]:
+        run_manager: CallbackManagerForRetrieverRun | None = None,
+    ) -> list[Document]:
         """Search the CortexFlow knowledge store and return ``Document`` objects."""
         knowledge_store = getattr(self.manager, "knowledge_store", None)
         if knowledge_store is None:
@@ -276,8 +276,8 @@ class CortexFlowMemory:
     def __init__(
         self,
         manager: Any,
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
         max_results: int = 5,
     ) -> None:
         self.manager = manager
@@ -301,7 +301,7 @@ class CortexFlowMemory:
     # -- Convenience delegation ---------------------------------------------
 
     @property
-    def messages(self) -> List[BaseMessage]:  # noqa: D401
+    def messages(self) -> list[BaseMessage]:  # noqa: D401
         """Shortcut for ``self.history.messages``."""
         return self._history.messages
 
@@ -313,7 +313,7 @@ class CortexFlowMemory:
         """Shortcut for ``self.history.add_ai_message``."""
         self._history.add_ai_message(message)
 
-    def search(self, query: str) -> List[Document]:
+    def search(self, query: str) -> list[Document]:
         """Shortcut for ``self.retriever._get_relevant_documents``."""
         return self._retriever._get_relevant_documents(query)
 

@@ -1,10 +1,9 @@
 """Tests for cortexflow.emotion."""
-import pytest
 
 from cortexflow.emotion import (
     EmotionalState,
-    RuleBasedEmotionDetector,
     EmotionTracker,
+    RuleBasedEmotionDetector,
 )
 
 

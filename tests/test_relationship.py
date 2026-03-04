@@ -1,12 +1,11 @@
 """Tests for cortexflow.relationship."""
-import pytest
 
+from cortexflow.emotion import EmotionalState
 from cortexflow.relationship import (
     RelationshipStage,
     RelationshipState,
     RelationshipTracker,
 )
-from cortexflow.emotion import EmotionalState
 
 
 class TestRelationshipStage:

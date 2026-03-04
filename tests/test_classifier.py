@@ -6,13 +6,13 @@ MLClassifier removal, and importance scale verification.
 """
 
 import time
-import pytest
 from unittest.mock import MagicMock, patch
 
-from cortexflow.config import CortexFlowConfig, ConfigBuilder
-from cortexflow.memory import ContextSegment
-from cortexflow.classifier import RuleBasedClassifier, ImportanceClassifier
+import pytest
 
+from cortexflow.classifier import ImportanceClassifier, RuleBasedClassifier
+from cortexflow.config import CortexFlowConfig
+from cortexflow.memory import ContextSegment
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -6,11 +6,11 @@ This script ensures all necessary directories and dependencies are in place
 for running the evaluation framework.
 """
 
+import argparse
+import json
+import logging
 import os
 import sys
-import argparse
-import logging
-import json
 from datetime import datetime
 
 # Add parent directory to sys.path to import cortexflow modules
@@ -31,7 +31,7 @@ def setup_directories(
 ):
     """
     Set up directories for the evaluation framework.
-    
+
     Args:
         results_dir: Directory for evaluation results
         logs_dir: Directory for logs (default: results_dir/logs)
@@ -40,13 +40,13 @@ def setup_directories(
     # Create main results directory
     os.makedirs(results_dir, exist_ok=True)
     logger.info(f"Created main results directory: {results_dir}")
-    
+
     # Create logs directory
     if logs_dir is None:
         logs_dir = os.path.join(results_dir, "logs")
     os.makedirs(logs_dir, exist_ok=True)
     logger.info(f"Created logs directory: {logs_dir}")
-    
+
     # Create benchmark-specific subdirectories if requested
     if create_subdirs:
         subdirs = [
@@ -56,7 +56,7 @@ def setup_directories(
             "test_suites",
             "visualizations"
         ]
-        
+
         for subdir in subdirs:
             subdir_path = os.path.join(results_dir, subdir)
             os.makedirs(subdir_path, exist_ok=True)
@@ -69,12 +69,12 @@ def create_default_config(
 ):
     """
     Create a default configuration file for the evaluation framework.
-    
+
     Args:
         config_path: Path to the configuration file
         db_path: Path to the knowledge database
         overwrite: Whether to overwrite existing config
-    
+
     Returns:
         True if config was created, False otherwise
     """
@@ -82,7 +82,7 @@ def create_default_config(
     if os.path.exists(config_path) and not overwrite:
         logger.info(f"Configuration file already exists at {config_path}")
         return False
-    
+
     # Create default configuration
     config = {
         "results_dir": "evaluation_results",
@@ -119,18 +119,18 @@ def create_default_config(
         },
         "created_at": datetime.now().isoformat()
     }
-    
+
     # Write configuration to file
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
-    
+
     logger.info(f"Created default configuration at {config_path}")
     return True
 
 def check_dependencies():
     """
     Check if all required dependencies are installed.
-    
+
     Returns:
         True if all dependencies are available, False otherwise
     """
@@ -140,54 +140,54 @@ def check_dependencies():
         "networkx",
         "sqlite3"
     ]
-    
+
     missing_packages = []
-    
+
     for package in required_packages:
         try:
             __import__(package)
         except ImportError:
             missing_packages.append(package)
-    
+
     if missing_packages:
         logger.warning(f"Missing packages: {', '.join(missing_packages)}")
         logger.warning("Install missing packages with: pip install " + " ".join(missing_packages))
         return False
-    
+
     logger.info("All required dependencies are installed")
     return True
 
 def initialize_database(db_path: str):
     """
     Initialize the evaluation database if it doesn't exist.
-    
+
     Args:
         db_path: Path to the database
-    
+
     Returns:
         True if initialization was successful, False otherwise
     """
     if not db_path:
         logger.warning("No database path provided")
         return False
-    
+
     try:
         import sqlite3
-        
+
         # Check if database already exists
         if os.path.exists(db_path):
             logger.info(f"Database already exists at {db_path}")
             return True
-        
+
         # Create database directory if needed
         db_dir = os.path.dirname(db_path)
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
-        
+
         # Create database
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
+
         # Create basic tables - actual schema will be created by the framework
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS evaluation_metadata (
@@ -197,19 +197,19 @@ def initialize_database(db_path: str):
             timestamp REAL
         )
         ''')
-        
+
         # Add initialization timestamp
         cursor.execute(
             "INSERT INTO evaluation_metadata (key, value, timestamp) VALUES (?, ?, ?)",
             ("initialized", "true", datetime.now().timestamp())
         )
-        
+
         conn.commit()
         conn.close()
-        
+
         logger.info(f"Initialized database at {db_path}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         return False
@@ -224,26 +224,26 @@ def main():
     parser.add_argument('--config', type=str, default='evaluation_config.json', help='Path to configuration file')
     parser.add_argument('--overwrite', action='store_true', help='Overwrite existing configuration')
     parser.add_argument('--no_subdirs', action='store_true', help='Do not create benchmark-specific subdirectories')
-    
+
     args = parser.parse_args()
-    
+
     # Check dependencies
     dependencies_ok = check_dependencies()
     if not dependencies_ok:
         logger.warning("Some dependencies are missing. Continuing setup but framework may not work.")
-    
+
     # Setup directories
     setup_directories(args.results_dir, args.logs_dir, not args.no_subdirs)
-    
+
     # Create default configuration
     create_default_config(args.config, args.db_path, args.overwrite)
-    
+
     # Initialize database if path provided
     if args.db_path:
         initialize_database(args.db_path)
-    
+
     logger.info("Setup completed successfully")
     logger.info(f"To run the evaluation framework, use: python benchmark/evaluation_framework.py --config {args.config}")
 
 if __name__ == "__main__":
-    main() 
+    main()

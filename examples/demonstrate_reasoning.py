@@ -4,11 +4,7 @@ Demonstration of CortexFlow's reasoning capabilities.
 This script shows how to use the reasoning engine and path inference features.
 """
 
-import os
-import sys
 import logging
-import json
-from typing import Dict, Any, List
 from unittest.mock import MagicMock
 
 # Configure logging
@@ -16,13 +12,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # Import the necessary modules
-from cortexflow.config import CortexFlowConfig
-from cortexflow.reasoning_engine import ReasoningEngine
-from cortexflow.path_inference import BidirectionalSearch, WeightedPathSearch, ConstrainedPathSearch
 
 class MockGraphStore:
     """Mock graph store for demonstration purposes."""
-    
+
     def __init__(self):
         """Initialize the mock graph store with demo data."""
         # Pre-defined paths between entities
@@ -48,7 +41,7 @@ class MockGraphStore:
                 ]
             ]
         }
-        
+
         # Additional information about entities
         self.entities = {
             "Python": {
@@ -92,33 +85,33 @@ class MockGraphStore:
                 "description": "An open-source machine learning framework"
             }
         }
-    
+
     def bidirectional_search(self, start_entity, end_entity, max_hops=3):
         """Get paths between two entities using bidirectional search."""
         key = (start_entity, end_entity)
         return self.paths.get(key, [])
-    
+
     def weighted_path_query(self, start_entity, end_entity, max_hops=3, **kwargs):
         """Get weighted paths between two entities."""
         key = (start_entity, end_entity)
         return self.paths.get(key, [])
-    
+
     def constrained_path_search(self, start_entity, end_entity, **kwargs):
         """Get paths between two entities with constraints."""
         key = (start_entity, end_entity)
         return self.paths.get(key, [])
-    
+
     def explain_path(self, path):
         """Generate a human-readable explanation of a path."""
         if not path:
             return "No connection found."
-        
+
         explanation_parts = []
         for step in path:
             source = step["source"]
             relation = step["relation"]
             target = step["target"]
-            
+
             if relation == "used_in":
                 explanation_parts.append(f"{source} is used in {target}")
             elif relation == "involves":
@@ -137,9 +130,9 @@ class MockGraphStore:
                 explanation_parts.append(f"{source} uses {target}")
             else:
                 explanation_parts.append(f"{source} {relation} {target}")
-        
+
         return ", which ".join(explanation_parts) + "."
-    
+
     def get_entity_info(self, entity):
         """Get information about an entity."""
         return self.entities.get(entity, {})
@@ -148,10 +141,10 @@ class MockGraphStore:
 def demonstrate_reasoning_engine(mock_graph_store):
     """Demonstrate the reasoning engine capabilities using mock data."""
     logger.info("\n====== REASONING ENGINE DEMONSTRATION ======")
-    
+
     # Create a mock reasoning engine
     mock_reasoning_engine = MagicMock()
-    
+
     # Mock the reason method to return realistic results
     def mock_reason(query):
         if "Python" in query and "mathematics" in query.lower():
@@ -204,26 +197,26 @@ def demonstrate_reasoning_engine(mock_graph_store):
                 "confidence": 0.5,
                 "reasoning_steps": []
             }
-    
+
     mock_reasoning_engine.reason = mock_reason
-    
+
     # Example 1: Simple reasoning
     logger.info("\n----- Example 1: Simple Reasoning -----")
     query1 = "How is Python connected to mathematics?"
     logger.info(f"Query: {query1}")
-    
+
     result1 = mock_reasoning_engine.reason(query1)
     logger.info(f"Answer: {result1['answer']}")
     logger.info(f"Confidence: {result1['confidence']}")
-    
+
     # Example 2: Multi-step reasoning
     logger.info("\n----- Example 2: Multi-step Reasoning -----")
     query2 = "What path connects Python to Artificial Intelligence?"
     logger.info(f"Query: {query2}")
-    
+
     result2 = mock_reasoning_engine.reason(query2)
     logger.info(f"Answer: {result2['answer']}")
-    
+
     # Print reasoning steps
     if "reasoning_steps" in result2:
         logger.info("Reasoning Steps:")
@@ -231,25 +224,25 @@ def demonstrate_reasoning_engine(mock_graph_store):
             logger.info(f"  Step {i+1}: {step['description']}")
             if "explanation" in step:
                 logger.info(f"    {step['explanation']}")
-    
+
     # Example 3: Weighted path search
     logger.info("\n----- Example 3: Path Search Demonstration -----")
-    
+
     paths = mock_graph_store.weighted_path_query(
         start_entity="Python",
         end_entity="Artificial Intelligence",
         max_hops=4
     )
-    
+
     logger.info(f"Found {len(paths)} paths between Python and Artificial Intelligence")
-    
+
     if paths:
         # Show all paths
         for i, path in enumerate(paths):
             # Generate explanation
             explanation = mock_graph_store.explain_path(path)
             logger.info(f"Path {i+1} explanation: {explanation}")
-            
+
             # Show path details
             logger.info(f"Path {i+1} details:")
             for j, step in enumerate(path):
@@ -259,14 +252,14 @@ def demonstrate_reasoning_engine(mock_graph_store):
 def main():
     """Main demonstration function."""
     logger.info("Starting CortexFlow reasoning demonstration")
-    
+
     # Create a mock graph store
     mock_graph_store = MockGraphStore()
-    
+
     # Demonstrate reasoning engine with the mock graph store
     demonstrate_reasoning_engine(mock_graph_store)
-    
+
     logger.info("Demonstration completed")
 
 if __name__ == "__main__":
-    main() 
+    main()

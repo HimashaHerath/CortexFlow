@@ -3,9 +3,9 @@
 Shows how to use different vector backends with CortexFlow.
 """
 import numpy as np
+
 from cortexflow import ConfigBuilder
-from cortexflow.vector_stores import create_vector_store, VectorSearchResult
-from cortexflow.vector_stores.sqlite import SQLiteVectorBackend
+from cortexflow.vector_stores import create_vector_store
 
 # --- Default SQLite backend (zero config) ---
 config = ConfigBuilder().build()
@@ -28,7 +28,7 @@ print(f"Stored {store.count()} embeddings")
 # Search
 query = rng.random(384).astype(np.float32)
 results = store.search(query, max_results=3)
-print(f"\nTop 3 results:")
+print("\nTop 3 results:")
 for r in results:
     print(f"  - [{r.score:.4f}] {r.text}")
 

@@ -1,10 +1,8 @@
 """Tests for cortexflow.session and cortexflow.user_store."""
 import time
-import pytest
 
 from cortexflow.session import SessionContext, SessionManager
 from cortexflow.user_store import UserStore
-
 
 # ──────────────────────────────────────────────────────────────
 # SessionContext dataclass
@@ -82,10 +80,10 @@ class TestSessionManager:
     def test_session_limit_enforcement(self):
         # max_sessions_per_user=3
         s1 = self.mgr.create_session("user1")
-        s2 = self.mgr.create_session("user1")
-        s3 = self.mgr.create_session("user1")
+        self.mgr.create_session("user1")
+        self.mgr.create_session("user1")
         # 4th session should auto-close the oldest
-        s4 = self.mgr.create_session("user1")
+        self.mgr.create_session("user1")
 
         active = self.mgr.list_sessions("user1", active_only=True)
         assert len(active) == 3

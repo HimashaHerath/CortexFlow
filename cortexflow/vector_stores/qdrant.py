@@ -23,9 +23,6 @@ try:
     from qdrant_client import QdrantClient
     from qdrant_client.models import (
         Distance,
-        FieldCondition,
-        Filter,
-        MatchValue,
         PointStruct,
         VectorParams,
     )
@@ -165,7 +162,7 @@ class QdrantBackend(VectorStoreBackend):
         """Close the Qdrant client connection."""
         try:
             self._client.close()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     # ------------------------------------------------------------------

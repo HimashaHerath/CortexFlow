@@ -1,8 +1,8 @@
 """Episodic memory for CortexFlow -- stores and retrieves conversation episodes."""
 from __future__ import annotations
 
-import sqlite3
 import logging
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -96,7 +96,6 @@ class EpisodicMemoryStore:
 
     def recall_episodes(self, query: str, max_results: int = 5) -> list[Episode]:
         """Search episodes using FTS5 full-text search."""
-        import json
         try:
             rows = self._conn.execute(
                 '''SELECT e.* FROM episodes e
@@ -131,7 +130,6 @@ class EpisodicMemoryStore:
 
     def summarize_session(self, session_id: str) -> Episode | None:
         """Get or create a summary episode for a session."""
-        import json
         rows = self._conn.execute(
             'SELECT * FROM episodes WHERE session_id = ? ORDER BY start_time ASC',
             (session_id,)

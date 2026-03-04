@@ -25,8 +25,8 @@ from ._deps import (
     FUZZY_MATCHING_ENABLED,
     NETWORKX_ENABLED,
     ONTOLOGY_ENABLED,
-    SPANBERT_ENABLED,
     SPACY_ENABLED,
+    SPANBERT_ENABLED,
 )
 from .merger import GraphMerger
 from .relation_extractor import RelationExtractor, _extract_svo_triples_from_sentence

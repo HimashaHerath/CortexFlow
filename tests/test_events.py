@@ -1,11 +1,7 @@
 """Tests for cortexflow.events — EventBus, Event, EventType."""
 import threading
-import time
 
-import pytest
-
-from cortexflow.events import Event, EventBus, EventHandler, EventType
-
+from cortexflow.events import Event, EventBus, EventType
 
 # ──────────────────────────────────────────────────────────────
 # Event dataclass
@@ -48,7 +44,8 @@ class TestOnAndEmit:
 
     def test_on_returns_handler(self):
         bus = EventBus()
-        handler = lambda e: None
+        def handler(e):
+            return None
         result = bus.on(EventType.MEMORY_CLEARED, handler)
         assert result is handler
 
@@ -83,7 +80,8 @@ class TestOff:
     def test_off_removes_handler(self):
         bus = EventBus()
         received = []
-        handler = lambda e: received.append(e)
+        def handler(e):
+            return received.append(e)
 
         bus.on(EventType.MESSAGE_ADDED, handler)
         assert bus.off(EventType.MESSAGE_ADDED, handler) is True
@@ -98,7 +96,8 @@ class TestOff:
     def test_off_all_removes_global_handler(self):
         bus = EventBus()
         received = []
-        handler = lambda e: received.append(e)
+        def handler(e):
+            return received.append(e)
 
         bus.on_all(handler)
         assert bus.off_all(handler) is True

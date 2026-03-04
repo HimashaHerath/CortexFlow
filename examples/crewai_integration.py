@@ -2,7 +2,7 @@
 
 Requires: pip install cortexflow-llm[crewai]
 """
-from cortexflow import CortexFlowManager, ConfigBuilder
+from cortexflow import ConfigBuilder, CortexFlowManager
 from cortexflow.integrations.crewai import CortexFlowCrewStorage
 
 # Create manager

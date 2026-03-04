@@ -6,41 +6,41 @@ This module provides context compression functionality for CortexFlow.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from cortexflow.config import CortexFlowConfig
-from cortexflow.memory import ContextSegment
 from cortexflow.llm_client import create_llm_client
+from cortexflow.memory import ContextSegment
+
 
 class TruncationCompressor:
     """Simple truncation-based context compressor."""
-    
+
     def compress(self, content: str, target_ratio: float) -> str:
         """
         Compress content by simple truncation.
-        
+
         Args:
             content: The content to compress
             target_ratio: Target compression ratio (0.0-1.0)
-            
+
         Returns:
             Compressed content
         """
         if not content:
             return ""
-            
+
         # Calculate target length
         target_length = int(len(content) * target_ratio)
         if target_length >= len(content):
             return content
-            
+
         # Simple truncation with ellipsis
         return content[:target_length] + "..."
 
 
 class ExtractiveSummarizer:
     """Keyword-based extractive summarization."""
-    
+
     def __init__(self):
         self.stop_words = {
             "the", "a", "an", "and", "or", "but", "is", "are", "was", "were",
@@ -48,34 +48,34 @@ class ExtractiveSummarizer:
             "that", "this", "these", "those", "it", "they", "them", "their",
             "he", "she", "his", "her", "i", "you", "we", "my", "your", "our"
         }
-    
+
     def extract_keywords(self, text: str, top_n: int = 10) -> list[str]:
         """
         Extract key terms from text.
-        
+
         Args:
             text: Input text
             top_n: Number of keywords to extract
-            
+
         Returns:
             List of keywords
         """
         # Remove code blocks before processing
         text_without_code = re.sub(r'```[\s\S]*?```', '', text)
-        
+
         # Tokenize and convert to lowercase
         words = re.findall(r'\b\w+\b', text_without_code.lower())
-        
+
         # Filter out stop words and count frequencies
         word_freq = {}
         for word in words:
             if word not in self.stop_words and len(word) > 2:
                 word_freq[word] = word_freq.get(word, 0) + 1
-        
+
         # Sort by frequency and return top N
         sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
         return [word for word, _ in sorted_words[:top_n]]
-    
+
     # Lazy-loaded PersonalFactDetector singleton for entity bonus scoring
     _fact_detector = None
 
@@ -128,53 +128,53 @@ class ExtractiveSummarizer:
             scored_sentences.append((sentence, score))
 
         return scored_sentences
-    
+
     def compress(self, content: str, target_ratio: float) -> str:
         """
         Compress content using extractive summarization.
-        
+
         Args:
             content: The content to compress
             target_ratio: Target compression ratio (0.0-1.0)
-            
+
         Returns:
             Compressed content
         """
         if not content or target_ratio >= 1.0:
             return content
-            
+
         # Extract keywords
         keywords = self.extract_keywords(content)
-        
+
         # Rank sentences
         scored_sentences = self.rank_sentences(content, keywords)
-        
+
         # Sort by score (highest first)
         sorted_sentences = sorted(scored_sentences, key=lambda x: x[1], reverse=True)
-        
+
         # Select top sentences to meet target ratio
         target_length = int(len(content) * target_ratio)
         compressed = []
         current_length = 0
-        
+
         for sentence, _ in sorted_sentences:
             if current_length + len(sentence) <= target_length:
                 compressed.append(sentence)
                 current_length += len(sentence)
             else:
                 break
-        
+
         # Join and return
         if not compressed:
             # Fallback to truncation if no sentences were selected
             return TruncationCompressor().compress(content, target_ratio)
-            
+
         return " ".join(compressed)
 
 
 class LLMSummarizer:
     """LLM-based abstractive summarization."""
-    
+
     def __init__(self, config: CortexFlowConfig):
         """
         Initialize LLM summarizer.
@@ -184,49 +184,49 @@ class LLMSummarizer:
         """
         self.config = config
         self.llm_client = create_llm_client(config)
-    
+
     def compress(self, content: str, target_ratio: float) -> str:
         """
         Compress content using LLM-based summarization.
-        
+
         Args:
             content: The content to compress
             target_ratio: Target compression ratio (0.0-1.0)
-            
+
         Returns:
             Compressed content
         """
         if not content or target_ratio >= 1.0:
             return content
-        
+
         # Calculate target token count (approximate)
         approx_tokens = len(content.split())
         target_tokens = int(approx_tokens * target_ratio)
-        
+
         # Don't compress very short content
         if approx_tokens < 50:
             return content
-        
+
         # Create prompt
         prompt = f"""
         Compress the following text to approximately {target_tokens} words while preserving key information.
         Maintain all crucial details, facts, names, and coded instructions.
-        
+
         Text to compress:
         {content}
-        
+
         Compressed version:
         """
-        
+
         try:
             compressed = self.llm_client.generate_from_prompt(prompt, timeout=10).strip()
             # Verify compression was achieved
             if compressed and len(compressed.split()) <= approx_tokens * 1.1:  # Allow 10% margin
                 return compressed
-        except Exception as e:
+        except Exception:  # noqa: S110
             # Fall back to extractive summarization on error
             pass
-        
+
         # Fallback to extractive summarization
         return ExtractiveSummarizer().compress(content, target_ratio)
 
@@ -253,7 +253,7 @@ class ContextCompressor:
                 self._abstractive = None
 
     @classmethod
-    def create_default(cls) -> 'ContextCompressor':
+    def create_default(cls) -> ContextCompressor:
         """
         Create a default compressor that uses extractive summarization only.
 
@@ -264,25 +264,25 @@ class ContextCompressor:
             ContextCompressor instance with extractive/truncation strategies only
         """
         return cls(config=None)
-    
+
     def compress_segment(self, segment: ContextSegment, target_ratio: float) -> ContextSegment:
         """
         Compress a single context segment.
-        
+
         Args:
             segment: The segment to compress
             target_ratio: Target compression ratio (0.0-1.0)
-            
+
         Returns:
             Compressed segment (new instance)
         """
         content = segment.content
-        
+
         # Preserve critical segments
         if segment.importance >= 8.0:
             # Minimal compression for very important content
             target_ratio = max(0.9, target_ratio)
-        
+
         # Use appropriate compression method based on segment type and length
         compressed_content = ""
         if segment.segment_type == "code":
@@ -300,11 +300,11 @@ class ContextCompressor:
         else:
             # Fallback to extractive when no LLM is configured
             compressed_content = self.extractive.compress(content, target_ratio)
-        
+
         # Create new segment with compressed content
         # Estimate token count based on original ratio
         new_token_count = int(segment.token_count * (len(compressed_content) / len(content)))
-        
+
         return ContextSegment(
             content=compressed_content,
             importance=segment.importance,
@@ -313,15 +313,15 @@ class ContextCompressor:
             segment_type=segment.segment_type,
             metadata={**segment.metadata, "compressed": True, "original_length": len(content)}
         )
-    
+
     def progressive_compress(self, segments: list[ContextSegment], target_token_count: int) -> list[ContextSegment]:
         """
         Progressively compress segments to meet target token count.
-        
+
         Args:
             segments: List of segments to compress
             target_token_count: Target total token count
-            
+
         Returns:
             Compressed segments
         """
@@ -329,75 +329,75 @@ class ContextCompressor:
         current_token_count = sum(segment.token_count for segment in segments)
         if current_token_count <= target_token_count:
             return segments
-        
+
         # Calculate compression needed
         compression_ratio = target_token_count / current_token_count
-        
+
         # Sort by importance and age simultaneously - least important and oldest first
         # We'll only sort once to avoid inefficiency
-        sorted_indices = sorted(range(len(segments)), 
+        sorted_indices = sorted(range(len(segments)),
                                 key=lambda i: (segments[i].importance, -segments[i].age))
-        
+
         # Compress segments progressively
         compressed_segments = segments.copy()  # Start with a copy of the original segments
         remaining_tokens = current_token_count
         tokens_to_remove = current_token_count - target_token_count
-        
+
         # Track which segments we've already compressed
         compressed_indices = set()
-        
+
         # First pass: compress least important segments until we reach target
         for idx in sorted_indices:
             if remaining_tokens <= target_token_count:
                 break
-                
+
             segment = segments[idx]
-            
+
             # Calculate compression ratio for this segment
             # Adjust based on importance - compress less important segments more
             segment_ratio = min(1.0, max(0.3, compression_ratio + (segment.importance / 20)))
-            
+
             # More aggressive compression for older segments
             if segment.age > 3600:  # Older than 1 hour
                 segment_ratio *= 0.8
-            
+
             # Compress the segment
             compressed = self.compress_segment(segment, segment_ratio)
             compressed_segments[idx] = compressed
             compressed_indices.add(idx)
-            
+
             # Update remaining tokens
             token_reduction = segment.token_count - compressed.token_count
             remaining_tokens -= token_reduction
             tokens_to_remove -= token_reduction
-            
+
             # If we've removed enough tokens, stop compressing
             if tokens_to_remove <= 0:
                 break
-        
+
         # If we still need to remove more tokens, compress more segments
         if tokens_to_remove > 0:
             # Second pass: compress moderately important segments more aggressively
             for idx in sorted_indices:
                 if idx in compressed_indices or remaining_tokens <= target_token_count:
                     continue
-                    
+
                 segment = segments[idx]
-                
+
                 # For second pass, use more aggressive compression
                 segment_ratio = min(1.0, max(0.2, compression_ratio * 0.7))
-                
+
                 # Compress the segment
                 compressed = self.compress_segment(segment, segment_ratio)
                 compressed_segments[idx] = compressed
-                
+
                 # Update remaining tokens
                 token_reduction = segment.token_count - compressed.token_count
                 remaining_tokens -= token_reduction
                 tokens_to_remove -= token_reduction
-                
+
                 # If we've removed enough tokens, stop compressing
                 if tokens_to_remove <= 0:
                     break
-        
-        return compressed_segments 
+
+        return compressed_segments

@@ -7,13 +7,12 @@ Uses tempfile for DB paths to avoid test pollution.
 """
 
 import os
-import warnings
 import tempfile
+import warnings
+
 import pytest
-from unittest.mock import patch, MagicMock
 
-from cortexflow.config import CortexFlowConfig, ConfigBuilder
-
+from cortexflow.config import CortexFlowConfig
 
 # ---------------------------------------------------------------------------
 # Helpers

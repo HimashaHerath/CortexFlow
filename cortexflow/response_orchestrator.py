@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import traceback
-from typing import Any, Iterator
+from collections.abc import Iterator
 
 logger = logging.getLogger('cortexflow')
 
@@ -80,7 +80,7 @@ class ResponseOrchestrator:
             if self._user_profile_manager and user_id:
                 try:
                     user_profile_text = self._user_profile_manager.get_profile_for_prompt(user_id)
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
 
             emotional_context = ""
@@ -94,7 +94,7 @@ class ResponseOrchestrator:
                             f"(intensity: {state.intensity:.0%}). "
                             f"Emotional trend: {trend.get('valence_direction', 'stable')}."
                         )
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
 
             relationship_context = ""
@@ -103,7 +103,7 @@ class ResponseOrchestrator:
                     relationship_context = self._relationship_tracker.get_relationship_context(
                         user_id, persona_id,
                     )
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
 
             try:
@@ -128,7 +128,7 @@ class ResponseOrchestrator:
                         f"(intensity: {state.intensity:.0%}). "
                         "Adjust your tone accordingly."
                     )
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         return "\n".join(parts) if parts else None
@@ -149,7 +149,6 @@ class ResponseOrchestrator:
             Generated response
         """
         try:
-            import requests  # noqa: F811 – kept for parity with original
 
             # Use model from config if not specified
             if model is None:
@@ -383,7 +382,6 @@ class ResponseOrchestrator:
             Chunks of the generated response
         """
         try:
-            import requests  # noqa: F811 – kept for parity with original
 
             # Use model from config if not specified
             if model is None:

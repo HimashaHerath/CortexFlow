@@ -6,7 +6,9 @@ These tests require the spaCy en_core_web_sm model to be installed.
 """
 
 import logging
+
 import pytest
+
 from cortexflow.config import CortexFlowConfig
 from cortexflow.graph_store import GraphStore, RelationExtractor
 

@@ -7,13 +7,11 @@ query plan generation, reasoning pattern caching, cache pruning, cache clearing,
 statistics, partition pruning, close/cleanup, and persistence of patterns.
 """
 
-import json
 import os
 import tempfile
 import time
-from collections import Counter
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,19 +22,16 @@ except ImportError:
     HAS_NETWORKX = False
 
 try:
-    import community as community_louvain
+    import community as community_louvain  # noqa: F401
     HAS_COMMUNITY = True
 except ImportError:
     HAS_COMMUNITY = False
 
 from cortexflow.config import CortexFlowConfig
 from cortexflow.performance_optimizer import (
-    ReasoningPattern,
     PerformanceOptimizer,
-    NETWORKX_ENABLED,
-    COMMUNITY_DETECTION_ENABLED,
+    ReasoningPattern,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -442,7 +437,7 @@ class TestReasoningCaching:
             "hop_count": 1,
         }
         result = {"answer": "Alice lives in Wonderland"}
-        key = optimizer.cache_reasoning_pattern(pattern_data, result)
+        optimizer.cache_reasoning_pattern(pattern_data, result)
 
         hit, cached = optimizer.get_cached_reasoning(pattern_data)
         assert hit is True

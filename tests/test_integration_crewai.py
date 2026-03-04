@@ -7,11 +7,9 @@ the actual ``crewai`` package.
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
 
 from cortexflow.integrations.crewai import CortexFlowCrewStorage
-
 
 # ---------------------------------------------------------------------------
 # Helpers

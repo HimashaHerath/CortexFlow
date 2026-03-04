@@ -9,12 +9,12 @@ Covers:
 - Unknown command behavior
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, call
 import argparse
+from unittest.mock import MagicMock, patch
 
-from cortexflow.cli import main, run_chat, run_analyze
+import pytest
 
+from cortexflow.cli import main, run_analyze, run_chat
 
 # ---------------------------------------------------------------------------
 # Argument parsing tests
@@ -40,18 +40,18 @@ class TestArgumentParsing:
             "cortexflow", "chat",
             "--model", "gemma3",
             "--host", "http://myhost:11434",
-            "--db", "/tmp/test.db"
+            "--db", "/tmp/test.db"  # noqa: S108
         ]):
             main()
         args = mock_run_chat.call_args[0][0]
         assert args.model == "gemma3"
         assert args.host == "http://myhost:11434"
-        assert args.db == "/tmp/test.db"
+        assert args.db == "/tmp/test.db"  # noqa: S108
 
     @patch("cortexflow.cli.run_analyze")
     def test_analyze_requires_db(self, mock_run_analyze):
         """'analyze' subcommand requires --db argument."""
-        with patch("sys.argv", ["cortexflow", "analyze", "--db", "/data/store.db"]):
+        with patch("sys.argv", ["cortexflow", "analyze", "--db", "/data/store.db"]):  # noqa: S108
             main()
         args = mock_run_analyze.call_args[0][0]
         assert args.db == "/data/store.db"
@@ -192,7 +192,7 @@ class TestRunAnalyze:
         }
         mock_manager_cls.return_value = mock_manager
 
-        args = argparse.Namespace(db="/tmp/test.db")
+        args = argparse.Namespace(db="/tmp/test.db")  # noqa: S108
         result = run_analyze(args)
 
         assert result == 0

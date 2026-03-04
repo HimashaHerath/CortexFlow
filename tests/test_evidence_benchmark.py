@@ -16,7 +16,6 @@ import json
 import os
 import re
 import tempfile
-import time
 
 import pytest
 
@@ -541,7 +540,7 @@ class TestEvidenceBenchmark:
                 naive_compliance += 1
                 _ok(f"Naive: sentinel present (budget {tokens} tokens)")
             else:
-                _info(f"Naive: sentinel missing (expected — system msg truncated)")
+                _info("Naive: sentinel missing (expected — system msg truncated)")
 
         winner = "CortexFlow" if cf_compliance > naive_compliance else (
             "Tie" if cf_compliance == naive_compliance else "Naive"

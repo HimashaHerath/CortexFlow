@@ -1,9 +1,6 @@
 """Tests for cortexflow.temporal — TemporalManager and TemporalFact."""
-import pytest
-from datetime import datetime
 
 from cortexflow.temporal import TemporalFact, TemporalManager
-
 
 # ──────────────────────────────────────────────────────────────
 # TemporalManager

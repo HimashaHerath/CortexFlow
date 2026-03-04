@@ -9,6 +9,7 @@ import os
 from dataclasses import dataclass, field, fields
 from typing import Any
 
+
 @dataclass
 class MemoryConfig:
     """Memory configuration settings."""
@@ -308,7 +309,7 @@ class CortexFlowConfig:
         return {k: v for k, v in config_dict.items() if k in valid_fields}
 
     @classmethod
-    def from_dict(cls, config_dict: dict[str, Any]) -> 'CortexFlowConfig':
+    def from_dict(cls, config_dict: dict[str, Any]) -> CortexFlowConfig:
         """
         Create configuration from a dictionary.
 
@@ -430,55 +431,55 @@ class ConfigBuilder:
         self._debug_mode = False
         self._custom_config = {}
 
-    def _set_section(self, section_name: str, **kwargs) -> 'ConfigBuilder':
+    def _set_section(self, section_name: str, **kwargs) -> ConfigBuilder:
         """Apply keyword arguments to the named config section."""
         section = getattr(self, section_name)
         for key, value in kwargs.items():
             setattr(section, key, value)
         return self
 
-    def with_memory(self, **kwargs) -> 'ConfigBuilder':
+    def with_memory(self, **kwargs) -> ConfigBuilder:
         """Configure memory settings."""
         return self._set_section('_memory', **kwargs)
 
-    def with_knowledge_store(self, **kwargs) -> 'ConfigBuilder':
+    def with_knowledge_store(self, **kwargs) -> ConfigBuilder:
         """Configure knowledge store settings."""
         return self._set_section('_knowledge_store', **kwargs)
 
-    def with_graph_rag(self, **kwargs) -> 'ConfigBuilder':
+    def with_graph_rag(self, **kwargs) -> ConfigBuilder:
         """Configure graph RAG settings."""
         return self._set_section('_graph_rag', **kwargs)
 
-    def with_ontology(self, **kwargs) -> 'ConfigBuilder':
+    def with_ontology(self, **kwargs) -> ConfigBuilder:
         """Configure ontology settings."""
         return self._set_section('_ontology', **kwargs)
 
-    def with_metadata(self, **kwargs) -> 'ConfigBuilder':
+    def with_metadata(self, **kwargs) -> ConfigBuilder:
         """Configure metadata framework settings."""
         return self._set_section('_metadata', **kwargs)
 
-    def with_agents(self, **kwargs) -> 'ConfigBuilder':
+    def with_agents(self, **kwargs) -> ConfigBuilder:
         """Configure chain of agents settings."""
         return self._set_section('_agents', **kwargs)
 
-    def with_reflection(self, **kwargs) -> 'ConfigBuilder':
+    def with_reflection(self, **kwargs) -> ConfigBuilder:
         """Configure self-reflection settings."""
         return self._set_section('_reflection', **kwargs)
 
-    def with_uncertainty(self, **kwargs) -> 'ConfigBuilder':
+    def with_uncertainty(self, **kwargs) -> ConfigBuilder:
         """Configure uncertainty handling settings."""
         return self._set_section('_uncertainty', **kwargs)
 
-    def with_performance(self, **kwargs) -> 'ConfigBuilder':
+    def with_performance(self, **kwargs) -> ConfigBuilder:
         """Configure performance optimization settings."""
         return self._set_section('_performance', **kwargs)
 
-    def with_llm(self, **kwargs) -> 'ConfigBuilder':
+    def with_llm(self, **kwargs) -> ConfigBuilder:
         """Configure LLM integration settings."""
         return self._set_section('_llm', **kwargs)
 
     def with_vertex_ai(self, project_id=None, location=None, default_model="gemini-1.5-flash",
-                       api_key=None, credentials_path=None) -> 'ConfigBuilder':
+                       api_key=None, credentials_path=None) -> ConfigBuilder:
         """Configure Vertex AI as the LLM backend."""
         self._llm.backend = "vertex_ai"
         self._llm.default_model = default_model
@@ -493,64 +494,64 @@ class ConfigBuilder:
             self._llm.vertex_credentials_path = credentials_path
         return self
 
-    def with_classifier(self, **kwargs) -> 'ConfigBuilder':
+    def with_classifier(self, **kwargs) -> ConfigBuilder:
         """Configure classifier settings."""
         return self._set_section('_classifier', **kwargs)
 
-    def with_inference(self, **kwargs) -> 'ConfigBuilder':
+    def with_inference(self, **kwargs) -> ConfigBuilder:
         """Configure inference engine settings."""
         return self._set_section('_inference', **kwargs)
 
-    def with_sessions(self, **kwargs) -> 'ConfigBuilder':
+    def with_sessions(self, **kwargs) -> ConfigBuilder:
         """Enable and configure session management."""
         self._session.enable_sessions = True
         return self._set_section('_session', **kwargs)
 
-    def with_emotions(self, **kwargs) -> 'ConfigBuilder':
+    def with_emotions(self, **kwargs) -> ConfigBuilder:
         """Enable and configure emotion tracking."""
         self._emotion.use_emotion_tracking = True
         return self._set_section('_emotion', **kwargs)
 
-    def with_persona(self, **kwargs) -> 'ConfigBuilder':
+    def with_persona(self, **kwargs) -> ConfigBuilder:
         """Enable and configure persona management."""
         self._persona.use_personas = True
         return self._set_section('_persona', **kwargs)
 
-    def with_relationship(self, **kwargs) -> 'ConfigBuilder':
+    def with_relationship(self, **kwargs) -> ConfigBuilder:
         """Enable and configure relationship tracking."""
         self._relationship.use_relationship_tracking = True
         return self._set_section('_relationship', **kwargs)
 
-    def with_events(self, **kwargs) -> 'ConfigBuilder':
+    def with_events(self, **kwargs) -> ConfigBuilder:
         """Enable and configure event system."""
         self._events.use_events = True
         return self._set_section('_events', **kwargs)
 
-    def with_temporal(self, **kwargs) -> 'ConfigBuilder':
+    def with_temporal(self, **kwargs) -> ConfigBuilder:
         """Enable and configure temporal fact management."""
         self._temporal.use_temporal_facts = True
         return self._set_section('_temporal', **kwargs)
 
-    def with_episodic(self, **kwargs) -> 'ConfigBuilder':
+    def with_episodic(self, **kwargs) -> ConfigBuilder:
         """Enable and configure episodic memory."""
         self._episodic.use_episodic_memory = True
         return self._set_section('_episodic', **kwargs)
 
-    def with_safety(self, **kwargs) -> 'ConfigBuilder':
+    def with_safety(self, **kwargs) -> ConfigBuilder:
         """Enable and configure the safety pipeline."""
         self._safety.use_safety_pipeline = True
         return self._set_section('_safety', **kwargs)
 
-    def with_vector_store(self, **kwargs) -> 'ConfigBuilder':
+    def with_vector_store(self, **kwargs) -> ConfigBuilder:
         """Configure vector store backend."""
         return self._set_section('_vector_store', **kwargs)
 
-    def with_fact_extraction(self, enabled: bool = True) -> 'ConfigBuilder':
+    def with_fact_extraction(self, enabled: bool = True) -> ConfigBuilder:
         """Enable or disable personal fact extraction for deep memory recall."""
         self._memory.use_fact_extraction = enabled
         return self
 
-    def with_debug(self, verbose_logging: bool = None, debug_mode: bool = None) -> 'ConfigBuilder':
+    def with_debug(self, verbose_logging: bool = None, debug_mode: bool = None) -> ConfigBuilder:
         """Configure debug and logging settings."""
         if verbose_logging is not None:
             self._verbose_logging = verbose_logging
@@ -558,7 +559,7 @@ class ConfigBuilder:
             self._debug_mode = debug_mode
         return self
 
-    def with_custom_config(self, custom_config: dict[str, Any]) -> 'ConfigBuilder':
+    def with_custom_config(self, custom_config: dict[str, Any]) -> ConfigBuilder:
         """Configure custom settings."""
         self._custom_config = custom_config
         return self

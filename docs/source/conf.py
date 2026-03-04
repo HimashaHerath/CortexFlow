@@ -2,6 +2,7 @@
 
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath('../..'))
 
 # Project information
@@ -10,7 +11,8 @@ copyright = '2025-2026, CortexFlow Team'
 author = 'CortexFlow Team'
 
 # Import project version
-from cortexflow.version import __version__
+from cortexflow.version import __version__  # noqa: E402
+
 release = __version__
 
 # Extensions
@@ -54,4 +56,4 @@ html_sidebars = {
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
 napoleon_include_init_with_doc = True
-napoleon_include_private_with_doc = False 
+napoleon_include_private_with_doc = False

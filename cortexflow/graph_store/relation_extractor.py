@@ -12,7 +12,6 @@ from typing import Any
 
 from ._deps import SPACY_ENABLED, spacy
 
-
 # ---------------------------------------------------------------------------
 # Shared SVO extraction helpers (used by both RelationExtractor and GraphStore)
 # ---------------------------------------------------------------------------

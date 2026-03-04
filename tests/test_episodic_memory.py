@@ -1,8 +1,6 @@
 """Tests for cortexflow.episodic_memory — EpisodicMemoryStore and Episode."""
-import pytest
 
 from cortexflow.episodic_memory import Episode, EpisodicMemoryStore
-
 
 # ──────────────────────────────────────────────────────────────
 # EpisodicMemoryStore

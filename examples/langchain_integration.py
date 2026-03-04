@@ -2,18 +2,16 @@
 
 Requires: pip install cortexflow-llm[langchain]
 """
-from cortexflow import CortexFlowManager, ConfigBuilder
+from cortexflow import ConfigBuilder, CortexFlowManager
+from cortexflow.integrations.langchain import (
+    CortexFlowChatMessageHistory,
+    CortexFlowMemory,
+    CortexFlowRetriever,
+)
 
 # Build config with sessions enabled
 config = ConfigBuilder().with_sessions().build()
 manager = CortexFlowManager(config)
-
-# --- Chat Message History ---
-from cortexflow.integrations.langchain import (
-    CortexFlowChatMessageHistory,
-    CortexFlowRetriever,
-    CortexFlowMemory,
-)
 
 history = CortexFlowChatMessageHistory(manager)
 history.add_user_message("My name is Alice and I love hiking.")
