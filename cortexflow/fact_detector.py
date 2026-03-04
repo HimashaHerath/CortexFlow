@@ -67,6 +67,9 @@ class PersonalFactDetector:
         re.IGNORECASE,
     )
 
+    # Maximum input length to protect against regex DoS
+    MAX_INPUT_LENGTH = 10_000
+
     def __init__(self, use_spacy: bool = False):
         self._nlp = None
         if use_spacy:
@@ -74,7 +77,10 @@ class PersonalFactDetector:
                 import spacy
                 self._nlp = spacy.load("en_core_web_sm")
             except Exception:
-                pass  # Fall back to regex only
+                import logging
+                logging.getLogger("cortexflow").debug(
+                    "spaCy not available for fact detection, using regex only"
+                )
 
     def contains_personal_fact(self, text: str) -> bool:
         """Fast boolean check for personal facts.
@@ -88,6 +94,8 @@ class PersonalFactDetector:
         Returns:
             True if the text likely contains a personal fact.
         """
+        if len(text) > self.MAX_INPUT_LENGTH:
+            text = text[: self.MAX_INPUT_LENGTH]
         return bool(self._QUICK_HINTS.search(text))
 
     def detect_facts(self, text: str) -> list[dict]:
@@ -99,6 +107,8 @@ class PersonalFactDetector:
         Returns:
             List of dicts with keys: fact_text, fact_type, confidence, value.
         """
+        if len(text) > self.MAX_INPUT_LENGTH:
+            text = text[: self.MAX_INPUT_LENGTH]
         facts: list[dict] = []
         seen_values: set = set()
 

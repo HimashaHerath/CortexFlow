@@ -17,6 +17,14 @@ import requests
 
 from cortexflow.interfaces import LLMProviderInterface
 
+__all__ = [
+    "LLMClient",
+    "OllamaClient",
+    "VertexAIClient",
+    "LiteLLMClient",
+    "create_llm_client",
+]
+
 logger = logging.getLogger("cortexflow")
 
 
@@ -164,8 +172,16 @@ class VertexAIClient(LLMClient):
             or getattr(llm, "default_model", "gemini-2.0-flash")
         )
         # Remap legacy model names that aren't available
-        if self.default_model in ("gemini-1.5-flash", "gemini-1.5-pro"):
-            self.default_model = "gemini-2.0-flash"
+        _LEGACY_MODELS = {"gemini-1.5-flash", "gemini-1.5-pro"}
+        if self.default_model in _LEGACY_MODELS:
+            new_model = "gemini-2.0-flash"
+            logger.warning(
+                "VertexAIClient: model '%s' is no longer available, "
+                "remapping to '%s'. Update your config to silence this warning.",
+                self.default_model,
+                new_model,
+            )
+            self.default_model = new_model
 
         self._genai_client = self._build_client(credentials_path)
 
@@ -249,8 +265,8 @@ class VertexAIClient(LLMClient):
                     text = chunk.text
                     if text:
                         yield text
-                except Exception:
-                    pass
+                except Exception as chunk_exc:
+                    logger.warning("VertexAIClient: failed to read streaming chunk: %s", chunk_exc)
         except Exception as exc:
             logger.error(f"VertexAIClient.generate_stream error: {exc}")
             yield f"Error: {exc}"

@@ -163,17 +163,40 @@ class CortexFlowConfig:
                 os.getcwd(), self.knowledge_store.knowledge_store_path
             )
 
+    # Pre-computed mapping: flat field name -> (section_attr_name, field_name)
+    # Built once per class, not per instance.
+    _FIELD_MAP: dict[str, str] | None = None
+
+    @classmethod
+    def _build_field_map(cls) -> dict[str, str]:
+        """Build a mapping from flat field names to their section attribute names."""
+        if cls._FIELD_MAP is not None:
+            return cls._FIELD_MAP
+        mapping: dict[str, str] = {}
+        for section_name in (
+            'memory', 'knowledge_store', 'graph_rag', 'ontology', 'metadata',
+            'agents', 'reflection', 'uncertainty', 'performance', 'llm',
+            'classifier', 'inference',
+        ):
+            section_cls = {f.name: f for f in fields(cls)}[section_name].default_factory  # type: ignore[union-attr]
+            for f in fields(section_cls):
+                # First-write wins — earlier sections have priority (matches old behavior)
+                if f.name not in mapping:
+                    mapping[f.name] = section_name
+        cls._FIELD_MAP = mapping
+        return mapping
+
     def __getattr__(self, name: str):
-        """Proxy flat attribute access to nested config sections (backward compat)."""
-        for sub_name in ('memory', 'knowledge_store', 'graph_rag', 'ontology', 'metadata',
-                         'agents', 'reflection', 'uncertainty', 'performance', 'llm',
-                         'classifier', 'inference'):
-            try:
-                sub = object.__getattribute__(self, sub_name)
-                if name in {f.name for f in fields(type(sub))}:
-                    return getattr(sub, name)
-            except AttributeError:
-                continue
+        """Proxy flat attribute access to nested config sections (backward compat).
+
+        Uses a class-level cached field map so lookups are O(1) after the
+        first access instead of traversing all 12 sub-configs every time.
+        """
+        field_map = CortexFlowConfig._build_field_map()
+        section_name = field_map.get(name)
+        if section_name is not None:
+            sub = object.__getattribute__(self, section_name)
+            return getattr(sub, name)
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     @staticmethod
@@ -224,9 +247,18 @@ class CortexFlowConfig:
 
         return cls(**top_config_dict)
     
-    def to_dict(self) -> dict[str, Any]:
+    # Fields that must never appear in logs or serialized output
+    _SENSITIVE_FIELDS = frozenset({
+        "vertex_api_key",
+        "vertex_credentials_path",
+    })
+
+    def to_dict(self, *, redact: bool = False) -> dict[str, Any]:
         """
         Convert configuration to a flat dictionary.
+
+        Args:
+            redact: If True, replace sensitive values with ``"***"``.
 
         Returns:
             Dictionary representation of configuration
@@ -239,18 +271,23 @@ class CortexFlowConfig:
             if hasattr(value, '__dataclass_fields__'):
                 # It's a nested dataclass section -- flatten its fields
                 for f in fields(value):
-                    config_dict[f.name] = getattr(value, f.name)
+                    val = getattr(value, f.name)
+                    if redact and f.name in self._SENSITIVE_FIELDS and val:
+                        val = "***"
+                    config_dict[f.name] = val
             else:
                 # Top-level scalar field
                 config_dict[section_field.name] = value
 
         return config_dict
-    
+
     def log_config(self):
-        """Log the current configuration."""
-        print("CortexFlow Configuration:")
-        for key, value in self.to_dict().items():
-            print(f"  {key}: {value}") 
+        """Log the current configuration (sensitive fields are redacted)."""
+        import logging as _logging
+        _logger = _logging.getLogger("cortexflow")
+        _logger.info("CortexFlow Configuration:")
+        for key, value in self.to_dict(redact=True).items():
+            _logger.info("  %s: %s", key, value)
 
 class ConfigBuilder:
     """Builder class for CortexFlowConfig to allow fluent configuration."""

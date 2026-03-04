@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import time
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -269,6 +270,7 @@ class ConversationMemory:
             config: Configuration for the memory system
         """
         self.config = config
+        self._lock = threading.RLock()
         self.active_token_limit = config.active_token_limit if hasattr(config, 'active_token_limit') else 4096
         self.working_token_limit = config.working_token_limit if hasattr(config, 'working_token_limit') else 8192
         self.archive_token_limit = config.archive_token_limit if hasattr(config, 'archive_token_limit') else 16384
@@ -302,43 +304,44 @@ class ConversationMemory:
         self.next_message_id = 1
         
     def update_tier_limits(self, active_limit: int = None, working_limit: int = None, archive_limit: int = None) -> bool:
-        success = True
-        
-        # Update active tier if specified
-        if active_limit is not None:
-            # Ensure minimum size and check if we can accommodate current content
-            if active_limit >= max(self.active_tier.current_token_count, 1000):
-                self.active_token_limit = active_limit
-                self.active_tier.max_tokens = active_limit
-                self.tier_stats["active"]["current_limit"] = active_limit
-            else:
-                success = False
-                logger.warning(f"Cannot update active tier limit to {active_limit} (current usage: {self.active_tier.current_token_count})")
-                
-        # Update working tier if specified
-        if working_limit is not None:
-            if working_limit >= max(self.working_tier.current_token_count, 1000):
-                self.working_token_limit = working_limit
-                self.working_tier.max_tokens = working_limit
-                self.tier_stats["working"]["current_limit"] = working_limit
-            else:
-                success = False
-                logger.warning(f"Cannot update working tier limit to {working_limit} (current usage: {self.working_tier.current_token_count})")
-                
-        # Update archive tier if specified
-        if archive_limit is not None:
-            if archive_limit >= max(self.archive_tier.current_token_count, 1000):
-                self.archive_token_limit = archive_limit
-                self.archive_tier.max_tokens = archive_limit
-                self.tier_stats["archive"]["current_limit"] = archive_limit
-            else:
-                success = False
-                logger.warning(f"Cannot update archive tier limit to {archive_limit} (current usage: {self.archive_tier.current_token_count})")
-                
-        # Update tier usage history
-        self._update_tier_usage_stats()
-                
-        return success
+        with self._lock:
+            success = True
+
+            # Update active tier if specified
+            if active_limit is not None:
+                # Ensure minimum size and check if we can accommodate current content
+                if active_limit >= max(self.active_tier.current_token_count, 1000):
+                    self.active_token_limit = active_limit
+                    self.active_tier.max_tokens = active_limit
+                    self.tier_stats["active"]["current_limit"] = active_limit
+                else:
+                    success = False
+                    logger.warning(f"Cannot update active tier limit to {active_limit} (current usage: {self.active_tier.current_token_count})")
+
+            # Update working tier if specified
+            if working_limit is not None:
+                if working_limit >= max(self.working_tier.current_token_count, 1000):
+                    self.working_token_limit = working_limit
+                    self.working_tier.max_tokens = working_limit
+                    self.tier_stats["working"]["current_limit"] = working_limit
+                else:
+                    success = False
+                    logger.warning(f"Cannot update working tier limit to {working_limit} (current usage: {self.working_tier.current_token_count})")
+
+            # Update archive tier if specified
+            if archive_limit is not None:
+                if archive_limit >= max(self.archive_tier.current_token_count, 1000):
+                    self.archive_token_limit = archive_limit
+                    self.archive_tier.max_tokens = archive_limit
+                    self.tier_stats["archive"]["current_limit"] = archive_limit
+                else:
+                    success = False
+                    logger.warning(f"Cannot update archive tier limit to {archive_limit} (current usage: {self.archive_tier.current_token_count})")
+
+            # Update tier usage history
+            self._update_tier_usage_stats()
+
+            return success
     
     def add_message(self, role: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """
@@ -359,54 +362,56 @@ class ConversationMemory:
         msg_metadata = metadata or {}
         msg_timestamp = time.time()
 
-        # Create the message
-        message = {
-            "id": self.next_message_id,
-            "role": role,
-            "content": content,
-            "timestamp": msg_timestamp,
-            "metadata": msg_metadata
-        }
-
-        # Increment message ID
-        self.next_message_id += 1
-
-        # Add message to flat list (backward compatibility)
-        self.messages.append(message)
-        logger.debug(f"Added {role} message: {content[:50]}...")
-
-        # Create a ContextSegment and add to the active tier
+        # Compute importance and token count outside the lock (no shared state)
         importance = msg_metadata.get("importance", self._estimate_importance(role, content))
         token_count = self._estimate_tokens(content)
 
-        segment = ContextSegment(
-            content=content,
-            importance=importance,
-            timestamp=msg_timestamp,
-            token_count=token_count,
-            segment_type=role,
-            metadata={**msg_metadata, "message_id": message["id"]}
-        )
+        with self._lock:
+            # Create the message
+            message = {
+                "id": self.next_message_id,
+                "role": role,
+                "content": content,
+                "timestamp": msg_timestamp,
+                "metadata": msg_metadata
+            }
 
-        # Try to add to active tier; if it won't fit, free space first
-        if not self.active_tier.add_segment(segment):
-            self._manage_tiers(needed_tokens=segment.token_count)
-            # Retry after making room
+            # Increment message ID
+            self.next_message_id += 1
+
+            # Add message to flat list (backward compatibility)
+            self.messages.append(message)
+            logger.debug(f"Added {role} message: {content[:50]}...")
+
+            # Create a ContextSegment and add to the active tier
+            segment = ContextSegment(
+                content=content,
+                importance=importance,
+                timestamp=msg_timestamp,
+                token_count=token_count,
+                segment_type=role,
+                metadata={**msg_metadata, "message_id": message["id"]}
+            )
+
+            # Try to add to active tier; if it won't fit, free space first
             if not self.active_tier.add_segment(segment):
-                # If segment itself is larger than the entire active tier,
-                # compress it before adding
-                logger.warning(
-                    f"Segment too large for active tier ({token_count} tokens). "
-                    f"Compressing before adding."
-                )
-                compressor = self._get_compressor()
-                compressed = compressor.compress_segment(segment, 0.5)
-                self.active_tier.add_segment(compressed)
+                self._manage_tiers(needed_tokens=segment.token_count)
+                # Retry after making room
+                if not self.active_tier.add_segment(segment):
+                    # If segment itself is larger than the entire active tier,
+                    # compress it before adding
+                    logger.warning(
+                        f"Segment too large for active tier ({token_count} tokens). "
+                        f"Compressing before adding."
+                    )
+                    compressor = self._get_compressor()
+                    compressed = compressor.compress_segment(segment, 0.5)
+                    self.active_tier.add_segment(compressed)
 
-        # Manage tier overflow
-        self._manage_tiers()
+            # Manage tier overflow
+            self._manage_tiers()
 
-        return message
+            return message
     
     def _trim_old_messages(self):
         """Trim old messages based on tier management.
@@ -414,13 +419,31 @@ class ConversationMemory:
         This method is kept for backward compatibility but now delegates
         to the tier-based memory management system.
         """
-        self._manage_tiers()
+        with self._lock:
+            self._manage_tiers()
+
+    # Lazily-loaded tiktoken encoder (class-level, shared across instances)
+    _tiktoken_encoder = None
+    _tiktoken_checked = False
+
+    @classmethod
+    def _get_tiktoken_encoder(cls):
+        """Return a tiktoken encoder if available, else None."""
+        if not cls._tiktoken_checked:
+            cls._tiktoken_checked = True
+            try:
+                import tiktoken
+                cls._tiktoken_encoder = tiktoken.get_encoding("cl100k_base")
+            except Exception:
+                pass  # tiktoken not installed — fall back to heuristic
+        return cls._tiktoken_encoder
 
     @staticmethod
     def _estimate_tokens(content: str) -> int:
         """Estimate the token count for a piece of content.
 
-        Uses a rough word-to-token approximation: word_count * 1.3.
+        Uses tiktoken (cl100k_base encoding) when available for accurate
+        counts.  Falls back to a word-count * 1.3 heuristic otherwise.
 
         Args:
             content: The text content
@@ -428,6 +451,13 @@ class ConversationMemory:
         Returns:
             Estimated token count
         """
+        enc = ConversationMemory._get_tiktoken_encoder()
+        if enc is not None:
+            try:
+                return max(1, len(enc.encode(content)))
+            except Exception:
+                pass
+        # Heuristic fallback
         word_count = len(content.split())
         return max(1, int(word_count * 1.3))
 
@@ -661,104 +691,108 @@ class ConversationMemory:
         Returns:
             List of messages with role and content, ordered chronologically
         """
-        if token_budget is None:
-            token_budget = (
-                self.active_token_limit
-                + self.working_token_limit
-                + self.archive_token_limit
-            )
+        with self._lock:
+            if token_budget is None:
+                token_budget = (
+                    self.active_token_limit
+                    + self.working_token_limit
+                    + self.archive_token_limit
+                )
 
-        formatted_segments = []
-        tokens_used = 0
+            formatted_segments = []
+            tokens_used = 0
 
-        # Collect segments from all tiers with priority ordering:
-        # Active tier gets priority, then working, then archive
-        tier_sources = [
-            self.active_tier,
-            self.working_tier,
-            self.archive_tier,
-        ]
+            # Collect segments from all tiers with priority ordering:
+            # Active tier gets priority, then working, then archive
+            tier_sources = [
+                self.active_tier,
+                self.working_tier,
+                self.archive_tier,
+            ]
 
-        all_segments = []
-        for tier in tier_sources:
-            for segment in tier.segments:
-                all_segments.append(segment)
+            all_segments = []
+            for tier in tier_sources:
+                for segment in tier.segments:
+                    all_segments.append(segment)
 
-        # If tiers are empty, fall back to self.messages for backward compat
-        if not all_segments and self.messages:
-            formatted_messages = []
-            for message in self.messages:
-                formatted_messages.append({
-                    "role": message["role"],
-                    "content": message["content"]
+            # If tiers are empty, fall back to self.messages for backward compat
+            if not all_segments and self.messages:
+                formatted_messages = []
+                for message in self.messages:
+                    formatted_messages.append({
+                        "role": message["role"],
+                        "content": message["content"]
+                    })
+                return formatted_messages
+
+            # Sort all collected segments chronologically by timestamp
+            all_segments.sort(key=lambda s: s.timestamp)
+
+            # Build the output, respecting token budget
+            for segment in all_segments:
+                if tokens_used + segment.token_count > token_budget:
+                    # Budget exhausted - stop adding
+                    break
+                formatted_segments.append({
+                    "role": segment.segment_type,
+                    "content": segment.content
                 })
-            return formatted_messages
+                tokens_used += segment.token_count
 
-        # Sort all collected segments chronologically by timestamp
-        all_segments.sort(key=lambda s: s.timestamp)
-
-        # Build the output, respecting token budget
-        for segment in all_segments:
-            if tokens_used + segment.token_count > token_budget:
-                # Budget exhausted - stop adding
-                break
-            formatted_segments.append({
-                "role": segment.segment_type,
-                "content": segment.content
-            })
-            tokens_used += segment.token_count
-
-        return formatted_segments
+            return formatted_segments
     
     def get_messages_by_role(self, role: str) -> list[dict[str, Any]]:
         """
         Get messages with specified role.
-        
+
         Args:
             role: Role to filter by
-            
+
         Returns:
             List of messages with matching role
         """
-        return [m for m in self.messages if m["role"] == role]
+        with self._lock:
+            return [m for m in self.messages if m["role"] == role]
     
     def get_last_message(self) -> dict[str, Any] | None:
         """
         Get the most recent message.
-        
+
         Returns:
             Most recent message or None if no messages exist
         """
-        return self.messages[-1] if self.messages else None
+        with self._lock:
+            return self.messages[-1] if self.messages else None
     
     def get_conversation_summary(self) -> str:
         """
         Get a summary of the conversation.
-        
+
         Returns:
             String summary
         """
-        if not self.messages:
-            return "No conversation history."
-            
-        user_messages = self.get_messages_by_role("user")
-        assistant_messages = self.get_messages_by_role("assistant")
-        
-        summary_lines = [
-            f"Conversation with {len(self.messages)} messages",
-            f"- User messages: {len(user_messages)}",
-            f"- Assistant messages: {len(assistant_messages)}",
-        ]
-        
-        # Add first and last message summaries
-        if self.messages:
-            first_msg = self.messages[0]
-            summary_lines.append(f"- First message ({first_msg['role']}): {first_msg['content'][:50]}...")
-            
-            last_msg = self.messages[-1]
-            summary_lines.append(f"- Latest message ({last_msg['role']}): {last_msg['content'][:50]}...")
-            
-        return "\n".join(summary_lines)
+        with self._lock:
+            if not self.messages:
+                return "No conversation history."
+
+            user_messages = [m for m in self.messages if m["role"] == "user"]
+            assistant_messages = [m for m in self.messages if m["role"] == "assistant"]
+
+            summary_lines = [
+                f"Conversation with {len(self.messages)} messages",
+                f"- User messages: {len(user_messages)}",
+                f"- Assistant messages: {len(assistant_messages)}",
+            ]
+
+            # Add first and last message summaries
+            if self.messages:
+                first_msg = self.messages[0]
+                summary_lines.append(f"- First message ({first_msg['role']}): {first_msg['content'][:50]}...")
+
+                last_msg = self.messages[-1]
+                summary_lines.append(f"- Latest message ({last_msg['role']}): {last_msg['content'][:50]}...")
+
+            return "\n".join(summary_lines)
     
     def _update_tier_usage_stats(self):
         """Update tier usage statistics for tracking."""
@@ -793,71 +827,74 @@ class ConversationMemory:
     def get_stats(self) -> dict[str, Any]:
         """
         Get memory statistics.
-        
+
         Returns:
             Dictionary with memory usage statistics
         """
-        # Update stats before returning
-        self._update_tier_usage_stats()
-        
-        return {
-            "message_count": len(self.messages),
-            "tiers": {
-                "active": {
-                    "limit": self.active_token_limit,
-                    "used": self.active_tier.current_token_count,
-                    "fullness": self.active_tier.fullness_ratio,
-                    "segment_count": len(self.active_tier.segments)
+        with self._lock:
+            # Update stats before returning
+            self._update_tier_usage_stats()
+
+            return {
+                "message_count": len(self.messages),
+                "tiers": {
+                    "active": {
+                        "limit": self.active_token_limit,
+                        "used": self.active_tier.current_token_count,
+                        "fullness": self.active_tier.fullness_ratio,
+                        "segment_count": len(self.active_tier.segments)
+                    },
+                    "working": {
+                        "limit": self.working_token_limit,
+                        "used": self.working_tier.current_token_count,
+                        "fullness": self.working_tier.fullness_ratio,
+                        "segment_count": len(self.working_tier.segments)
+                    },
+                    "archive": {
+                        "limit": self.archive_token_limit,
+                        "used": self.archive_tier.current_token_count,
+                        "fullness": self.archive_tier.fullness_ratio,
+                        "segment_count": len(self.archive_tier.segments)
+                    }
                 },
-                "working": {
-                    "limit": self.working_token_limit,
-                    "used": self.working_tier.current_token_count,
-                    "fullness": self.working_tier.fullness_ratio,
-                    "segment_count": len(self.working_tier.segments)
-                },
-                "archive": {
-                    "limit": self.archive_token_limit,
-                    "used": self.archive_tier.current_token_count,
-                    "fullness": self.archive_tier.fullness_ratio,
-                    "segment_count": len(self.archive_tier.segments)
-                }
-            },
-            "tier_stats": self.tier_stats
-        }
+                "tier_stats": self.tier_stats
+            }
     
     def clear_memory(self):
         """Clear all conversation memory."""
-        self.messages = []
-        
-        # Clear memory tiers
-        self.active_tier = ActiveTier(self.active_token_limit)
-        self.working_tier = WorkingTier(self.working_token_limit) 
-        self.archive_tier = ArchiveTier(self.archive_token_limit)
-        
-        # Reset message ID counter
-        self.next_message_id = 1
-        
-        # Update stats
-        self._update_tier_usage_stats()
-        
-        logger.info("Conversation memory cleared")
+        with self._lock:
+            self.messages = []
+
+            # Clear memory tiers
+            self.active_tier = ActiveTier(self.active_token_limit)
+            self.working_tier = WorkingTier(self.working_token_limit)
+            self.archive_tier = ArchiveTier(self.archive_token_limit)
+
+            # Reset message ID counter
+            self.next_message_id = 1
+
+            # Update stats
+            self._update_tier_usage_stats()
+
+            logger.info("Conversation memory cleared")
     
     def to_dict(self) -> dict[str, Any]:
         """
         Convert memory to serializable dictionary.
-        
+
         Returns:
             Memory as dictionary
         """
-        return {
-            "messages": self.messages,
-            "tiers": {
-                "active_limit": self.active_token_limit,
-                "working_limit": self.working_token_limit,
-                "archive_limit": self.archive_token_limit
-            },
-            "next_message_id": self.next_message_id
-        }
+        with self._lock:
+            return {
+                "messages": list(self.messages),
+                "tiers": {
+                    "active_limit": self.active_token_limit,
+                    "working_limit": self.working_token_limit,
+                    "archive_limit": self.archive_token_limit
+                },
+                "next_message_id": self.next_message_id
+            }
     
     @classmethod
     def from_dict(cls, data: dict[str, Any], config: CortexFlowConfig) -> 'ConversationMemory':

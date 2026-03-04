@@ -60,6 +60,9 @@ vertex = [
 litellm = [
     "litellm>=1.0.0",
 ]
+tokenizer = [
+    "tiktoken>=0.5.0",
+]
 dev = [
     "pytest>=7.3.1",
     "pytest-cov>=4.1.0",
@@ -83,6 +86,7 @@ all = [
     "transformers>=4.35.0",
     "google-genai>=0.3.0",
     "litellm>=1.0.0",
+    "tiktoken>=0.5.0",
 ]
 
 [project.urls]

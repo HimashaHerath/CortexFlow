@@ -26,12 +26,13 @@ import os
 import time
 import json
 import sqlite3
+import threading
 import numpy as np
 from typing import Any, Protocol, runtime_checkable
 from sqlitedict import SqliteDict
 from datetime import datetime
 import logging
-import random
+from collections import OrderedDict
 from contextlib import contextmanager
 import warnings
 
@@ -98,6 +99,12 @@ class BM25SearchStrategy:
         if not BM25_ENABLED:
             logging.warning("BM25 search unavailable: rank_bm25 library is not installed")
             return []
+
+        # Rebuild BM25 index if it has been invalidated by writes
+        if knowledge_store._bm25_dirty:
+            knowledge_store._update_bm25_index()
+            knowledge_store._bm25_dirty = False
+
         if not knowledge_store.bm25_index:
             logging.warning("BM25 search unavailable: BM25 index has not been built yet (no documents indexed)")
             return []
@@ -168,74 +175,91 @@ class DenseVectorSearchStrategy:
         if query_embedding is None:
             logging.warning("Dense vector search unavailable: query embedding is None (embedding generation may have failed)")
             return []
-        
-        results = []
-        
+
+        dim = knowledge_store.embedding_dimension
+
+        # Normalize query embedding once
+        query_norm = np.linalg.norm(query_embedding)
+        if query_norm == 0:
+            return []
+        query_normalized = query_embedding / query_norm
+
+        # Collect metadata and raw embedding vectors in a single pass
+        metadata_entries: list[dict[str, Any]] = []
+        embedding_list: list[np.ndarray] = []
+
         with knowledge_store.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
-            # Get all facts with embeddings
-            cursor.execute('SELECT id, subject, predicate, object, confidence, embedding FROM fact_triples WHERE embedding IS NOT NULL')
-            facts = cursor.fetchall()
-            
-            # Get all knowledge items with embeddings
-            cursor.execute('SELECT id, text, confidence, embedding FROM knowledge_items WHERE embedding IS NOT NULL')
-            knowledge_items = cursor.fetchall()
-            
-            # Calculate similarity scores for facts
-            for fact in facts:
-                # Convert blob to numpy array
-                embedding_bytes = fact['embedding']
-                if embedding_bytes:
-                    fact_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
-                    
-                    # Skip if the embedding is the wrong shape
-                    if fact_embedding.shape[0] != knowledge_store.embedding_dimension:
-                        continue
-                    
-                    # Calculate cosine similarity
-                    similarity = knowledge_store._vector_similarity(query_embedding, fact_embedding)
-                    
-                    result = {
-                        'id': fact['id'],
-                        'text': f"{fact['subject']} {fact['predicate']} {fact['object']}",
-                        'score': float(similarity),
-                        'type': 'fact',
-                        'confidence': fact['confidence']
-                    }
-                    
-                    results.append(result)
-            
-            # Calculate similarity scores for knowledge items
-            for item in knowledge_items:
-                # Convert blob to numpy array
-                embedding_bytes = item['embedding']
-                if embedding_bytes:
-                    item_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
-                    
-                    # Skip if the embedding is the wrong shape
-                    if item_embedding.shape[0] != knowledge_store.embedding_dimension:
-                        continue
-                    
-                    # Calculate cosine similarity
-                    similarity = knowledge_store._vector_similarity(query_embedding, item_embedding)
-                    
-                    result = {
-                        'id': item['id'],
-                        'text': item['text'],
-                        'score': float(similarity),
-                        'type': 'knowledge',
-                        'confidence': item['confidence']
-                    }
-                    
-                    results.append(result)
-        
-        # Sort by similarity score
-        results.sort(key=lambda x: x['score'], reverse=True)
-        
-        # Return top results
-        return results[:max_results]
+
+            # Batch load fact_triples
+            cursor.execute(
+                'SELECT id, subject, predicate, object, confidence, embedding '
+                'FROM fact_triples WHERE embedding IS NOT NULL'
+            )
+            for row in cursor:
+                blob = row['embedding']
+                if not blob:
+                    continue
+                vec = np.frombuffer(blob, dtype=np.float32)
+                if vec.shape[0] != dim:
+                    continue
+                embedding_list.append(vec)
+                metadata_entries.append({
+                    'id': row['id'],
+                    'text': f"{row['subject']} {row['predicate']} {row['object']}",
+                    'type': 'fact',
+                    'confidence': row['confidence'],
+                })
+
+            # Batch load knowledge_items
+            cursor.execute(
+                'SELECT id, text, confidence, embedding '
+                'FROM knowledge_items WHERE embedding IS NOT NULL'
+            )
+            for row in cursor:
+                blob = row['embedding']
+                if not blob:
+                    continue
+                vec = np.frombuffer(blob, dtype=np.float32)
+                if vec.shape[0] != dim:
+                    continue
+                embedding_list.append(vec)
+                metadata_entries.append({
+                    'id': row['id'],
+                    'text': row['text'],
+                    'type': 'knowledge',
+                    'confidence': row['confidence'],
+                })
+
+        if not embedding_list:
+            return []
+
+        # Vectorised cosine similarity: stack into (N, dim) matrix
+        all_embeddings = np.vstack(embedding_list)
+        norms = np.linalg.norm(all_embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        all_embeddings_normalized = all_embeddings / norms
+
+        # (N,) similarity scores in one matrix multiply
+        similarities = all_embeddings_normalized @ query_normalized
+
+        # Efficient top-k selection
+        n_results = min(max_results, len(similarities))
+        if n_results >= len(similarities):
+            top_indices = np.argsort(similarities)[::-1][:n_results]
+        else:
+            partitioned = np.argpartition(similarities, -n_results)[-n_results:]
+            top_indices = partitioned[np.argsort(similarities[partitioned])[::-1]]
+
+        # Build result dicts only for top-k entries
+        results: list[dict[str, Any]] = []
+        for idx in top_indices:
+            entry = metadata_entries[idx].copy()
+            entry['score'] = float(similarities[idx])
+            results.append(entry)
+
+        return results
 
 
 class HybridSearchStrategy:
@@ -423,7 +447,10 @@ class KnowledgeStore(KnowledgeStoreInterface):
         """
         self.config = config
         self.db_path = config.knowledge_store_path
-        
+
+        # Reentrant lock for thread safety across shared mutable state
+        self._lock = threading.RLock()
+
         # Trust marker for high-confidence facts
         self.trust_marker = config.trust_marker if hasattr(config, 'trust_marker') else "📚"
         
@@ -530,13 +557,16 @@ class KnowledgeStore(KnowledgeStoreInterface):
             
         logging.info(f"Knowledge store initialized with vector retrieval: {VECTOR_ENABLED}, BM25: {BM25_ENABLED}")
         
-        # Add embedding cache
-        self.embedding_cache = {}
+        # Add embedding cache (OrderedDict for LRU eviction)
+        self.embedding_cache = OrderedDict()
         self.max_cache_size = 1000  # Limit cache size
 
         # Add tracking for index updates
         self.last_indexed_fact_id = 0
         self.last_indexed_knowledge_id = 0
+
+        # Dirty flag for deferred BM25 index rebuilds
+        self._bm25_dirty = False
 
         # Initialize summary and vector storage for conversation summaries
         self.summaries = {}
@@ -691,40 +721,40 @@ class KnowledgeStore(KnowledgeStoreInterface):
     def _generate_embedding(self, text: str) -> np.ndarray | None:
         """
         Generate embedding vector for text with caching.
-        
+
         Args:
             text: Input text
-            
+
         Returns:
             Embedding vector or None if embedding fails
         """
         if not VECTOR_ENABLED or self.model is None:
             return None
-            
+
         # Use hash of text as cache key (or another suitable unique identifier)
         cache_key = hash(text)
-        
-        # Check cache first
-        if cache_key in self.embedding_cache:
-            return self.embedding_cache[cache_key]
-            
-        try:
-            # Generate embedding
-            embedding = self.model.encode(text)
-            
-            # Manage cache size
-            if len(self.embedding_cache) >= self.max_cache_size:
-                # Remove a random item to prevent cache from growing too large
-                # A more sophisticated LRU implementation would be better
-                self.embedding_cache.pop(random.choice(list(self.embedding_cache.keys())))
-            
-            # Store in cache
-            self.embedding_cache[cache_key] = embedding
-            
-            return embedding
-        except Exception as e:
-            logging.error(f"Error generating embedding: {e}")
-            return None
+
+        with self._lock:
+            # Check cache first (move to end on hit for LRU ordering)
+            if cache_key in self.embedding_cache:
+                self.embedding_cache.move_to_end(cache_key)
+                return self.embedding_cache[cache_key]
+
+            try:
+                # Generate embedding
+                embedding = self.model.encode(text)
+
+                # Manage cache size — evict least recently used entry
+                if len(self.embedding_cache) >= self.max_cache_size:
+                    self.embedding_cache.popitem(last=False)
+
+                # Store in cache
+                self.embedding_cache[cache_key] = embedding
+
+                return embedding
+            except Exception as e:
+                logging.error(f"Error generating embedding: {e}")
+                return None
     
     def _vector_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """
@@ -766,16 +796,18 @@ class KnowledgeStore(KnowledgeStoreInterface):
         except ImportError:
             logging.error("BM25 indexing requires rank_bm25 and nltk")
             return
-        
-        # Check if we need to rebuild based on elapsed time or new entries
-        current_time = time.time()
-        needs_rebuild = (
-            force_rebuild or
-            not hasattr(self, 'bm25_last_update') or
-            current_time - getattr(self, 'bm25_last_update', 0) > 600  # 10 minutes
-        )
-        
-        if needs_rebuild:
+
+        with self._lock:
+            # Check if we need to rebuild based on elapsed time or new entries
+            current_time = time.time()
+            needs_rebuild = (
+                force_rebuild or
+                not hasattr(self, 'bm25_last_update') or
+                current_time - getattr(self, 'bm25_last_update', 0) > 600  # 10 minutes
+            )
+
+            if not needs_rebuild:
+                return
             # Get latest document IDs from the database
             max_fact_id = 0
             max_knowledge_id = 0
@@ -892,40 +924,41 @@ class KnowledgeStore(KnowledgeStoreInterface):
         Returns:
             ID of the stored fact
         """
-        # Generate embedding for the fact if possible
-        fact_text = f"{subject} {predicate} {obj}"
-        embedding = self._generate_embedding(fact_text)
-        embedding_blob = None
-        
-        if embedding is not None:
-            # Convert embedding to binary blob
-            embedding_blob = embedding.tobytes()
-        
-        fact_id = None
-        
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            if embedding_blob is not None:
-                # Store with embedding
-                cursor.execute(
-                    'INSERT INTO fact_triples (subject, predicate, object, confidence, timestamp, source, embedding) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    (subject, predicate, obj, confidence, time.time(), source, embedding_blob)
-                )
-            else:
-                # Store without embedding
-                cursor.execute(
-                    'INSERT INTO fact_triples (subject, predicate, object, confidence, timestamp, source) VALUES (?, ?, ?, ?, ?, ?)',
-                    (subject, predicate, obj, confidence, time.time(), source)
-                )
-            
-            fact_id = cursor.lastrowid
-            conn.commit()
-        
-        # Update BM25 index after adding a new fact
-        self._update_bm25_index()
-        
-        return fact_id
+        with self._lock:
+            # Generate embedding for the fact if possible
+            fact_text = f"{subject} {predicate} {obj}"
+            embedding = self._generate_embedding(fact_text)
+            embedding_blob = None
+
+            if embedding is not None:
+                # Convert embedding to binary blob
+                embedding_blob = embedding.tobytes()
+
+            fact_id = None
+
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                if embedding_blob is not None:
+                    # Store with embedding
+                    cursor.execute(
+                        'INSERT INTO fact_triples (subject, predicate, object, confidence, timestamp, source, embedding) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        (subject, predicate, obj, confidence, time.time(), source, embedding_blob)
+                    )
+                else:
+                    # Store without embedding
+                    cursor.execute(
+                        'INSERT INTO fact_triples (subject, predicate, object, confidence, timestamp, source) VALUES (?, ?, ?, ?, ?, ?)',
+                        (subject, predicate, obj, confidence, time.time(), source)
+                    )
+
+                fact_id = cursor.lastrowid
+                conn.commit()
+
+            # Update BM25 index after adding a new fact
+            self._update_bm25_index()
+
+            return fact_id
     
     def get_facts_about(self, subject: str) -> list[dict[str, Any]]:
         """
@@ -980,98 +1013,101 @@ class KnowledgeStore(KnowledgeStoreInterface):
     def update_fact_confidence(self, fact_id: int, new_confidence: float) -> bool:
         """
         Update the confidence of a fact.
-        
+
         Args:
             fact_id: ID of the fact
             new_confidence: New confidence score
-            
+
         Returns:
             True if update was successful
         """
-        success = False
-        
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                'UPDATE fact_triples SET confidence = ? WHERE id = ?',
-                (new_confidence, fact_id)
-            )
-            
-            success = cursor.rowcount > 0
-            conn.commit()
-        
-        return success
+        with self._lock:
+            success = False
+
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    'UPDATE fact_triples SET confidence = ? WHERE id = ?',
+                    (new_confidence, fact_id)
+                )
+
+                success = cursor.rowcount > 0
+                conn.commit()
+
+            return success
     
     def forget_old_facts(self, threshold_days: int = 30, max_confidence: float = 0.7) -> int:
         """
         Remove facts older than threshold with confidence below max_confidence.
-        
+
         Args:
             threshold_days: Age threshold in days
             max_confidence: Maximum confidence threshold for removal
-            
+
         Returns:
             Number of facts removed
         """
-        threshold_time = time.time() - (threshold_days * 86400)
-        count = 0
-        
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                'DELETE FROM fact_triples WHERE timestamp < ? AND confidence < ?',
-                (threshold_time, max_confidence)
-            )
-            
-            count = cursor.rowcount
-            conn.commit()
-        
-        return count
+        with self._lock:
+            threshold_time = time.time() - (threshold_days * 86400)
+            count = 0
+
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    'DELETE FROM fact_triples WHERE timestamp < ? AND confidence < ?',
+                    (threshold_time, max_confidence)
+                )
+
+                count = cursor.rowcount
+                conn.commit()
+
+            return count
     
-    def store_conversation_summary(self, summary: str, keywords: list[str], 
+    def store_conversation_summary(self, summary: str, keywords: list[str],
                                  timestamp: float = None) -> str:
         """
         Store a conversation summary with keywords.
-        
+
         Args:
             summary: Conversation summary text
             keywords: List of keywords
             timestamp: Optional timestamp (defaults to current time)
-            
+
         Returns:
             ID of the stored summary
         """
-        if timestamp is None:
-            timestamp = time.time()
-            
-        # Generate a unique ID based on timestamp
-        summary_id = f"summary_{int(timestamp)}"
-        
-        # Generate embedding for the summary
-        embedding = self._generate_embedding(summary)
-        
-        # Store the summary with metadata
-        self.summaries[summary_id] = {
-            'text': summary,
-            'keywords': keywords,
-            'timestamp': timestamp,
-            'datetime': datetime.fromtimestamp(timestamp).isoformat(),
-            'embedding': embedding.tolist() if embedding is not None else None
-        }
-        
-        # Add to vector store for retrieval
-        if embedding is not None:
-            self.vector_store[summary_id] = embedding
-        else:
-            # Fall back to keyword storage if embedding fails
-            self.vector_store[summary_id] = ' '.join(keywords)
-            
-        # Update BM25 index
-        self._update_bm25_index()
-        
-        return summary_id
+        with self._lock:
+            if timestamp is None:
+                timestamp = time.time()
+
+            # Generate a unique ID based on timestamp
+            summary_id = f"summary_{int(timestamp)}"
+
+            # Generate embedding for the summary
+            embedding = self._generate_embedding(summary)
+
+            # Store the summary with metadata
+            self.summaries[summary_id] = {
+                'text': summary,
+                'keywords': keywords,
+                'timestamp': timestamp,
+                'datetime': datetime.fromtimestamp(timestamp).isoformat(),
+                'embedding': embedding.tolist() if embedding is not None else None
+            }
+
+            # Add to vector store for retrieval
+            if embedding is not None:
+                self.vector_store[summary_id] = embedding
+            else:
+                # Fall back to keyword storage if embedding fails
+                self.vector_store[summary_id] = ' '.join(keywords)
+
+            # Update BM25 index
+            self._update_bm25_index()
+
+            return summary_id
     
     def _bm25_search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
@@ -1220,9 +1256,11 @@ class KnowledgeStore(KnowledgeStoreInterface):
         Returns:
             List of relevant knowledge items
         """
-        # Update the BM25 index to ensure it's fresh
-        self._update_bm25_index()
-        
+        # Rebuild BM25 index only if it has been invalidated
+        if self._bm25_dirty:
+            self._update_bm25_index()
+            self._bm25_dirty = False
+
         results = []
         
         # Use vector search if available
@@ -1590,124 +1628,126 @@ class KnowledgeStore(KnowledgeStoreInterface):
         Returns:
             IDs of the facts added
         """
-        fact_ids = []
-        
-        # Parse for facts prefixed with trust marker
-        lines = text.strip().split('\n')
-        for line in lines:
-            if line.startswith(self.trust_marker):
-                fact = line[len(self.trust_marker):].strip()
-                if fact:
-                    try:
-                        fact_id = self.store_fact_triple(
-                            subject=fact.split()[0],
-                            predicate=fact.split()[1],
-                            obj=fact.split()[2],
-                            confidence=confidence,
-                            source=source
-                        )
-                        if fact_id:
-                            fact_ids.append(fact_id)
-                    except Exception as e:
-                        logging.error(f"Error storing fact: {e}")
-        
-        # Process text to build knowledge graph with enhanced metadata
-        if hasattr(self, 'graph_store') and self.graph_store is not None:
-            try:
-                # Add temporal information if available
-                current_time = datetime.now().isoformat()
-                
-                # Process text to extract entities and relations with metadata
-                relations_added = self.graph_store.process_text_to_graph(
-                    text=text, 
-                    source=source
-                )
-                logging.debug(f"Added {relations_added} relations to knowledge graph")
-                
-                # Manually add the text as a single fact if no relations were extracted
-                if not relations_added and not fact_ids:
-                    # Try to extract simple subject-verb-object
-                    words = text.split()
-                    if len(words) >= 3:
-                        subject = words[0]
-                        predicate = "states"
-                        obj = " ".join(words[1:])
-                        
-                        # Add to graph with metadata
-                        success = self.graph_store.add_relation(
-                            source_entity=subject,
-                            relation_type=predicate,
-                            target_entity=obj,
-                            provenance=source if self.track_provenance else None,
-                            confidence=confidence if self.track_confidence else 0.5,
-                            temporal_start=current_time if self.track_temporal else None
-                        )
-                        
-                        if success:
-                            logging.debug(f"Added backup relation: {subject} {predicate} {obj}")
-            except Exception as e:
-                logging.error(f"Error processing text for knowledge graph: {e}")
-        else:
-            logging.debug("No graph_store available for graph-based storage")
-        
-        # If no triples were extracted, store the text as a regular knowledge item
-        if not fact_ids:
-            # Store the text directly
-            try:
-                # Store as a direct knowledge item
-                result = self.store_knowledge_item(text, confidence, source)
-                if result:
-                    fact_ids.append(result)
-            except Exception as e:
-                logging.error(f"Error storing direct knowledge: {e}")
-                
-        return fact_ids
+        with self._lock:
+            fact_ids = []
+
+            # Parse for facts prefixed with trust marker
+            lines = text.strip().split('\n')
+            for line in lines:
+                if line.startswith(self.trust_marker):
+                    fact = line[len(self.trust_marker):].strip()
+                    if fact:
+                        try:
+                            fact_id = self.store_fact_triple(
+                                subject=fact.split()[0],
+                                predicate=fact.split()[1],
+                                obj=fact.split()[2],
+                                confidence=confidence,
+                                source=source
+                            )
+                            if fact_id:
+                                fact_ids.append(fact_id)
+                        except Exception as e:
+                            logging.error(f"Error storing fact: {e}")
+
+            # Process text to build knowledge graph with enhanced metadata
+            if hasattr(self, 'graph_store') and self.graph_store is not None:
+                try:
+                    # Add temporal information if available
+                    current_time = datetime.now().isoformat()
+
+                    # Process text to extract entities and relations with metadata
+                    relations_added = self.graph_store.process_text_to_graph(
+                        text=text,
+                        source=source
+                    )
+                    logging.debug(f"Added {relations_added} relations to knowledge graph")
+
+                    # Manually add the text as a single fact if no relations were extracted
+                    if not relations_added and not fact_ids:
+                        # Try to extract simple subject-verb-object
+                        words = text.split()
+                        if len(words) >= 3:
+                            subject = words[0]
+                            predicate = "states"
+                            obj = " ".join(words[1:])
+
+                            # Add to graph with metadata
+                            success = self.graph_store.add_relation(
+                                source_entity=subject,
+                                relation_type=predicate,
+                                target_entity=obj,
+                                provenance=source if self.track_provenance else None,
+                                confidence=confidence if self.track_confidence else 0.5,
+                                temporal_start=current_time if self.track_temporal else None
+                            )
+
+                            if success:
+                                logging.debug(f"Added backup relation: {subject} {predicate} {obj}")
+                except Exception as e:
+                    logging.error(f"Error processing text for knowledge graph: {e}")
+            else:
+                logging.debug("No graph_store available for graph-based storage")
+
+            # If no triples were extracted, store the text as a regular knowledge item
+            if not fact_ids:
+                # Store the text directly
+                try:
+                    # Store as a direct knowledge item
+                    result = self.store_knowledge_item(text, confidence, source)
+                    if result:
+                        fact_ids.append(result)
+                except Exception as e:
+                    logging.error(f"Error storing direct knowledge: {e}")
+
+            return fact_ids
     
     def store_knowledge_item(self, text: str, confidence: float = 0.9, source: str = None) -> int:
         """
         Store a knowledge item in the database.
-        
+
         Args:
             text: Text of the knowledge item
             confidence: Confidence score (0.0-1.0)
             source: Source of the knowledge item
-        
+
         Returns:
             ID of the stored knowledge item
         """
-        # Generate embedding for the knowledge item if possible
-        embedding = self._generate_embedding(text)
-        embedding_blob = None
-        
-        if embedding is not None:
-            # Convert embedding to binary blob
-            embedding_blob = embedding.tobytes()
-        
-        item_id = None
-        
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            if embedding_blob is not None:
-                # Store with embedding
-                cursor.execute(
-                    'INSERT INTO knowledge_items (text, confidence, timestamp, source, embedding) VALUES (?, ?, ?, ?, ?)',
-                    (text, confidence, time.time(), source, embedding_blob)
-                )
-            else:
-                # Store without embedding
-                cursor.execute(
-                    'INSERT INTO knowledge_items (text, confidence, timestamp, source) VALUES (?, ?, ?, ?)',
-                    (text, confidence, time.time(), source)
-                )
-            
-            item_id = cursor.lastrowid
-            conn.commit()
-        
-        # Update BM25 index after adding a new knowledge item
-        self._update_bm25_index()
-        
-        return item_id
+        with self._lock:
+            # Generate embedding for the knowledge item if possible
+            embedding = self._generate_embedding(text)
+            embedding_blob = None
+
+            if embedding is not None:
+                # Convert embedding to binary blob
+                embedding_blob = embedding.tobytes()
+
+            item_id = None
+
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                if embedding_blob is not None:
+                    # Store with embedding
+                    cursor.execute(
+                        'INSERT INTO knowledge_items (text, confidence, timestamp, source, embedding) VALUES (?, ?, ?, ?, ?)',
+                        (text, confidence, time.time(), source, embedding_blob)
+                    )
+                else:
+                    # Store without embedding
+                    cursor.execute(
+                        'INSERT INTO knowledge_items (text, confidence, timestamp, source) VALUES (?, ?, ?, ?)',
+                        (text, confidence, time.time(), source)
+                    )
+
+                item_id = cursor.lastrowid
+                conn.commit()
+
+            # Update BM25 index after adding a new knowledge item
+            self._update_bm25_index()
+
+            return item_id
     
     def add_knowledge(self, text: str, source: str = None, confidence: float = 0.95) -> list[int]:
         """
@@ -1779,32 +1819,33 @@ class KnowledgeStore(KnowledgeStoreInterface):
     
     def close(self):
         """Clean up resources. Safe to call multiple times."""
-        if getattr(self, '_closed', False):
-            return
+        with self._lock:
+            if getattr(self, '_closed', False):
+                return
 
-        try:
-            if hasattr(self, 'graph_store') and self.graph_store is not None:
-                self.graph_store.close()
-                self.graph_store = None
-        except Exception as e:
-            logging.error(f"Error closing graph store: {e}")
+            try:
+                if hasattr(self, 'graph_store') and self.graph_store is not None:
+                    self.graph_store.close()
+                    self.graph_store = None
+            except Exception as e:
+                logging.error(f"Error closing graph store: {e}")
 
-        try:
-            if hasattr(self, 'conn') and self.conn is not None:
-                self.conn.close()
-                self.conn = None
-        except Exception as e:
-            logging.error(f"Error closing database connection: {e}")
+            try:
+                if hasattr(self, 'conn') and self.conn is not None:
+                    self.conn.close()
+                    self.conn = None
+            except Exception as e:
+                logging.error(f"Error closing database connection: {e}")
 
-        # Clear in-memory caches
-        if hasattr(self, 'embedding_cache'):
-            self.embedding_cache.clear()
-        if hasattr(self, 'summaries'):
-            self.summaries.clear()
-        if hasattr(self, 'vector_store'):
-            self.vector_store.clear()
+            # Clear in-memory caches
+            if hasattr(self, 'embedding_cache'):
+                self.embedding_cache.clear()
+            if hasattr(self, 'summaries'):
+                self.summaries.clear()
+            if hasattr(self, 'vector_store'):
+                self.vector_store.clear()
 
-        self._closed = True
+            self._closed = True
 
     def __del__(self):
         """Destructor to clean up resources. Safe to call multiple times."""
@@ -1879,62 +1920,63 @@ class KnowledgeStore(KnowledgeStoreInterface):
     def take_snapshot(self) -> dict[str, Any]:
         """
         Take a snapshot of the current knowledge state.
-        
+
         Returns:
             Dictionary representing the current knowledge state
         """
-        snapshot = {
-            "timestamp": datetime.now().timestamp(),
-            "entities": [],
-            "relations": []
-        }
-        
-        try:
-            with self.get_connection() as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                
-                # Ensure snapshot table exists
-                cursor.execute('''
-                CREATE TABLE IF NOT EXISTS knowledge_snapshots (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    snapshot_data TEXT NOT NULL,
-                    timestamp REAL NOT NULL
-                )
-                ''')
-                
-                # Get entities
-                cursor.execute("SELECT * FROM graph_entities")
-                entities = [dict(row) for row in cursor.fetchall()]
-                snapshot["entities"] = entities
-                
-                # Get relations
-                cursor.execute('''
-                SELECT r.*, e1.entity as source_entity, e2.entity as target_entity, 
-                       r.relation_type as relation
-                FROM graph_relationships r
-                JOIN graph_entities e1 ON r.source_id = e1.id
-                JOIN graph_entities e2 ON r.target_id = e2.id
-                ''')
-                relations = []
-                for row in cursor.fetchall():
-                    relation = dict(row)
-                    # Add formatted relation for easier analysis
-                    relation["formatted"] = f"{relation['source_entity']} {relation['relation']} {relation['target_entity']}"
-                    relations.append(relation)
-                
-                snapshot["relations"] = relations
-                
-                # Store snapshot in database
-                cursor.execute(
-                    'INSERT INTO knowledge_snapshots (snapshot_data, timestamp) VALUES (?, ?)',
-                    (json.dumps(snapshot), snapshot["timestamp"])
-                )
-                
-                conn.commit()
-                
-        except Exception as e:
-            logging.error(f"Error taking knowledge snapshot: {e}")
+        with self._lock:
+            snapshot = {
+                "timestamp": datetime.now().timestamp(),
+                "entities": [],
+                "relations": []
+            }
+
+            try:
+                with self.get_connection() as conn:
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+
+                    # Ensure snapshot table exists
+                    cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS knowledge_snapshots (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        snapshot_data TEXT NOT NULL,
+                        timestamp REAL NOT NULL
+                    )
+                    ''')
+
+                    # Get entities
+                    cursor.execute("SELECT * FROM graph_entities")
+                    entities = [dict(row) for row in cursor.fetchall()]
+                    snapshot["entities"] = entities
+
+                    # Get relations
+                    cursor.execute('''
+                    SELECT r.*, e1.entity as source_entity, e2.entity as target_entity,
+                           r.relation_type as relation
+                    FROM graph_relationships r
+                    JOIN graph_entities e1 ON r.source_id = e1.id
+                    JOIN graph_entities e2 ON r.target_id = e2.id
+                    ''')
+                    relations = []
+                    for row in cursor.fetchall():
+                        relation = dict(row)
+                        # Add formatted relation for easier analysis
+                        relation["formatted"] = f"{relation['source_entity']} {relation['relation']} {relation['target_entity']}"
+                        relations.append(relation)
+
+                    snapshot["relations"] = relations
+
+                    # Store snapshot in database
+                    cursor.execute(
+                        'INSERT INTO knowledge_snapshots (snapshot_data, timestamp) VALUES (?, ?)',
+                        (json.dumps(snapshot), snapshot["timestamp"])
+                    )
+
+                    conn.commit()
+
+            except Exception as e:
+                logging.error(f"Error taking knowledge snapshot: {e}")
             
         return snapshot
 
@@ -1967,39 +2009,40 @@ class KnowledgeStore(KnowledgeStoreInterface):
     
     def clear(self) -> None:
         """Clear all stored knowledge."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Delete all fact triples
-            cursor.execute('DELETE FROM fact_triples')
-            
-            # Delete all knowledge items
-            cursor.execute('DELETE FROM knowledge_items')
-            
-            # Delete all graph entities and relationships
-            cursor.execute('DELETE FROM graph_entities')
-            cursor.execute('DELETE FROM graph_relationships')
-            
-            # Delete all snapshots
-            try:
-                cursor.execute('DELETE FROM knowledge_snapshots')
-            except sqlite3.OperationalError:
-                # Table might not exist
-                pass
-            
-            conn.commit()
-        
-        # Reset BM25 index
-        if BM25_ENABLED:
-            self.bm25_corpus = []
-            self.id_to_doc_mapping = {}
-            self.doc_to_id_mapping = {}
-            self.bm25_index = None
-            self.last_indexed_fact_id = 0
-            self.last_indexed_knowledge_id = 0
-        
-        # Clear embedding cache
-        self.embedding_cache = {}
+        with self._lock:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                # Delete all fact triples
+                cursor.execute('DELETE FROM fact_triples')
+
+                # Delete all knowledge items
+                cursor.execute('DELETE FROM knowledge_items')
+
+                # Delete all graph entities and relationships
+                cursor.execute('DELETE FROM graph_entities')
+                cursor.execute('DELETE FROM graph_relationships')
+
+                # Delete all snapshots
+                try:
+                    cursor.execute('DELETE FROM knowledge_snapshots')
+                except sqlite3.OperationalError:
+                    # Table might not exist
+                    pass
+
+                conn.commit()
+
+            # Reset BM25 index
+            if BM25_ENABLED:
+                self.bm25_corpus = []
+                self.id_to_doc_mapping = {}
+                self.doc_to_id_mapping = {}
+                self.bm25_index = None
+                self.last_indexed_fact_id = 0
+                self.last_indexed_knowledge_id = 0
+
+            # Clear embedding cache
+            self.embedding_cache = OrderedDict()
     
     def retrieve_context(self, query: str, max_results: int = 5, min_score: float = 0.0) -> list[dict[str, Any]]:
         """
