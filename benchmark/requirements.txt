@@ -1,5 +1,5 @@
 numpy>=1.19.0
-matplotlib>=3.3.0
+matplotlib>=3.10.9
 networkx>=2.5
 plotly>=4.14.0  # For interactive visualizations
 python-dateutil>=2.8.1
